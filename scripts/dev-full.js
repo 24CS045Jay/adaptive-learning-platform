@@ -6,8 +6,8 @@ const isWindows = process.platform === "win32";
 const npmCmd = isWindows ? "npm.cmd" : "npm";
 const npxCmd = isWindows ? "npx.cmd" : "npx";
 
-// Launch Express Backend Server (server.js)
-const serverProcess = spawn("node", ["server.js"], {
+// Launch Express Backend Server (server.express.js)
+const serverProcess = spawn("node", ["server.express.js"], {
   stdio: "inherit",
   shell: true,
 });

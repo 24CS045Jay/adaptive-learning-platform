@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev-full.js",
     "dev:vite": "vite dev",
-    "server": "node server.js",
+    "server": "node server.express.js",
     "sync": "node scripts/sync-complete-database.js",
     "seed": "node scripts/seed.js",
     "build": "cross-env NITRO_PRESET=vercel vite build",
