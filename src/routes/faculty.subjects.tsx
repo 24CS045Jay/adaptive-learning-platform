@@ -37,17 +37,16 @@ function FacultySubjectsPage() {
   } = useAppData();
   const { user } = useAuth();
 
-  const myEmail = user?.email?.toLowerCase() ?? "faculty@charusat.edu.in";
-  const myName  = user?.name ?? "Dr. Nisha Shah";
+  const myEmail = user?.email?.toLowerCase() ?? "";
+  const myName = user?.name ?? "";
 
-  // Filter subjects assigned to this faculty (or show all if default demo faculty)
+  // Filter subjects assigned to this faculty or uploaded by them
   const mySubjects = subjects.filter((s) => {
-    if (myEmail === "faculty@charusat.edu.in") return s.faculty === "Dr. Nisha Shah";
+    if (!myName && !myEmail) return true;
     return (
-      s.faculty.toLowerCase().includes(myName.toLowerCase()) ||
-      myName.toLowerCase().includes(s.faculty.toLowerCase()) ||
-      s.faculty === "Dr. Nisha Shah" ||
-      documents.some((d) => d.subjectId === s.id && d.uploadedBy.toLowerCase() === myEmail)
+      (myName && s.faculty?.toLowerCase().includes(myName.toLowerCase())) ||
+      (myName && myName.toLowerCase().includes(s.faculty?.toLowerCase())) ||
+      (myEmail && documents.some((d) => d.subjectId === s.id && d.uploadedBy?.toLowerCase() === myEmail))
     );
   });
 

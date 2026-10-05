@@ -1,45 +1,42 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, CheckCircle2, UserPlus } from "lucide-react";
+import { ArrowLeft, CheckCircle2, UserPlus, ArrowRight, ShieldCheck, Building2 } from "lucide-react";
 import { useState } from "react";
 import { PageHeader, Card, PrimaryButton } from "@/components/app-shell";
+import { useAppData } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import { createUserWithDefaultPassword } from "@/lib/auth-store";
+import { DEPARTMENTS, getDepartmentLabel, getDepartmentCode } from "@/lib/department-utils";
 
 export const Route = createFileRoute("/admin/users/add")({
   component: AddUserPage,
 });
 
-const DEPARTMENTS = [
-  { code: "CE", label: "Computer Engineering" },
-  { code: "CSE", label: "Computer Science & Engineering" },
-  { code: "IT", label: "Information Technology" },
-  { code: "EC", label: "Electronics & Communication" },
-  { code: "AIML", label: "AI & Machine Learning" },
-];
-
 type AccountRole = "Student" | "Faculty" | "Admin";
 
 function AddUserPage() {
+  const { refreshUsers } = useAppData();
   const { user: adminUser } = useAuth();
-  const adminDepartment = adminUser?.departmentId?.toUpperCase();
+  const adminDeptRaw = adminUser?.departmentId;
   const isSuperAdmin = String(adminUser?.role ?? "").toLowerCase() === "super_admin";
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<AccountRole>("Student");
-  const [department, setDepartment] = useState(adminDepartment ?? "CSE");
+  const [departmentCode, setDepartmentCode] = useState<string>(
+    getDepartmentCode(adminDeptRaw) || "CSE",
+  );
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [successEmail, setSuccessEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    setSuccess(null);
+    setSuccessEmail(null);
     setLoading(true);
 
-    const departmentForStore = isSuperAdmin ? department : adminDepartment;
-    if (!departmentForStore) {
+    const departmentTarget = isSuperAdmin ? departmentCode : adminDeptRaw;
+    if (!departmentTarget) {
       setError(
         "Your admin account is not assigned to a department. Ask a super admin to assign one.",
       );
@@ -54,7 +51,7 @@ function AddUserPage() {
       roleForStore,
       adminUser?.email ?? "admin@charusat.edu.in",
       adminUser?.token,
-      departmentForStore,
+      departmentTarget,
     );
 
     if (!result.ok) {
@@ -63,7 +60,9 @@ function AddUserPage() {
       return;
     }
 
-    setSuccess(email.trim().toLowerCase());
+    // Refetch reactive users list immediately
+    await refreshUsers();
+    setSuccessEmail(email.trim().toLowerCase());
     setName("");
     setEmail("");
     setLoading(false);
@@ -76,28 +75,43 @@ function AddUserPage() {
         subtitle="Create a department-scoped student, faculty member, or admin account."
         action={
           <Link
-            to="/admin"
+            to="/admin/users"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-muted-foreground transition hover:border-violet/40 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to dashboard
+            Back to Users Directory
           </Link>
         }
       />
 
-      <div className="mx-auto max-w-3xl">
-        {success && (
-          <div className="mb-5 flex items-start gap-3 rounded-2xl border border-success/30 bg-success/8 p-4 text-sm">
-            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-            <div>
-              <div className="font-semibold text-foreground">Account created successfully</div>
-              <p className="mt-1 text-muted-foreground">
-                {success} can sign in with the default password{" "}
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-foreground">
-                  password1234
-                </code>{" "}
-                and must change it on first login.
-              </p>
+      <div className="mx-auto max-w-2xl">
+        {successEmail && (
+          <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-emerald-500" />
+                <div>
+                  <div className="font-serif text-base font-bold text-foreground">
+                    Account Created Successfully!
+                  </div>
+                  <p className="mt-1 text-muted-foreground">
+                    <strong className="text-foreground">{successEmail}</strong> has been enrolled and assigned default password{" "}
+                    <code className="rounded bg-background px-1.5 py-0.5 font-mono text-foreground font-semibold">
+                      password1234
+                    </code>. They will be prompted to set a custom password on first sign-in.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end border-t border-emerald-500/20 pt-3">
+              <Link
+                to="/admin/users"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
+              >
+                View in Users Directory
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
             </div>
           </div>
         )}
@@ -108,22 +122,22 @@ function AddUserPage() {
               <UserPlus className="h-6 w-6" />
             </div>
             <div>
-              <h2 className="font-serif text-xl font-bold text-foreground">Account details</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                The account will be created inside the selected department scope.
+              <h2 className="font-serif text-xl font-bold text-foreground">New Account Form</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Enter account details below to generate a department-scoped account.
               </p>
             </div>
           </div>
 
           {error && (
-            <div className="mb-5 rounded-xl border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger">
+            <div className="mb-5 rounded-xl border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger font-medium">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="grid gap-5 md:grid-cols-2">
+          <form onSubmit={handleSubmit} className="grid gap-5">
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
-              Full name
+              Full Name
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -132,58 +146,63 @@ function AddUserPage() {
                 className="rounded-xl border border-border bg-background px-3.5 py-3 font-normal outline-none transition hover:border-violet/40 focus:border-violet focus:ring-2 focus:ring-violet/15"
               />
             </label>
+
             <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
-              Email address
+              Email Address
               <input
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@charusat.edu.in"
+                placeholder="e.g. priya@charusat.edu.in"
                 required
                 className="rounded-xl border border-border bg-background px-3.5 py-3 font-normal outline-none transition hover:border-violet/40 focus:border-violet focus:ring-2 focus:ring-violet/15"
               />
             </label>
-            <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
-              Account type
-              <select
-                value={role}
-                onChange={(event) => setRole(event.target.value as AccountRole)}
-                className="rounded-xl border border-border bg-background px-3.5 py-3 font-normal outline-none transition hover:border-violet/40 focus:border-violet"
-              >
-                <option>Student</option>
-                <option>Faculty</option>
-                <option>Admin</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
-              Department
-              {isSuperAdmin ? (
+
+            <div className="grid gap-5 md:grid-cols-2">
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
+                Account Role
                 <select
-                  value={department}
-                  onChange={(event) => setDepartment(event.target.value)}
+                  value={role}
+                  onChange={(event) => setRole(event.target.value as AccountRole)}
                   className="rounded-xl border border-border bg-background px-3.5 py-3 font-normal outline-none transition hover:border-violet/40 focus:border-violet"
                 >
-                  {DEPARTMENTS.map((item) => (
-                    <option key={item.code} value={item.code}>
-                      {item.code} · {item.label}
-                    </option>
-                  ))}
+                  <option value="Student">Student (Learner)</option>
+                  <option value="Faculty">Faculty (Instructor)</option>
+                  <option value="Admin">Admin (HOD / Dept Admin)</option>
                 </select>
-              ) : (
-                <div className="rounded-xl border border-border bg-muted px-3.5 py-3 font-normal text-muted-foreground">
-                  {adminDepartment ?? "Not assigned"}
-                </div>
-              )}
-            </label>
-            <div className="md:col-span-2 flex items-center justify-between gap-4 border-t border-border pt-5">
-              <p className="text-xs text-muted-foreground">
-                Default password:{" "}
-                <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">
-                  password1234
-                </code>
-              </p>
+              </label>
+
+              <label className="flex flex-col gap-1.5 text-sm font-semibold text-foreground">
+                Department Scope
+                {isSuperAdmin ? (
+                  <select
+                    value={departmentCode}
+                    onChange={(event) => setDepartmentCode(event.target.value)}
+                    className="rounded-xl border border-border bg-background px-3.5 py-3 font-normal outline-none transition hover:border-violet/40 focus:border-violet"
+                  >
+                    {DEPARTMENTS.map((item) => (
+                      <option key={item.code} value={item.code}>
+                        {item.code} · {item.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/60 px-3.5 py-3 font-medium text-foreground">
+                    <Building2 className="h-4 w-4 text-violet" />
+                    <span>{getDepartmentLabel(adminDeptRaw)}</span>
+                  </div>
+                )}
+              </label>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-4 border-t border-border pt-5">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="h-4 w-4 text-violet" />
+                <span>Default Password: <code className="font-mono text-foreground font-bold">password1234</code></span>
+              </div>
               <PrimaryButton type="submit" icon={UserPlus} disabled={loading}>
-                {loading ? "Creating…" : "Create account"}
+                {loading ? "Creating Account…" : "Create Account"}
               </PrimaryButton>
             </div>
           </form>

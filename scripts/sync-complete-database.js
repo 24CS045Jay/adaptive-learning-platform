@@ -1,33 +1,41 @@
 import "dotenv/config";
-import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { User, Subject } from "../models/index.js";
+import { User, Subject, Department } from "../models/index.js";
+import { connectSupabase } from "../db/supabase.js";
 
 async function syncCompleteDatabase() {
-  const uri = process.env.MONGO_URI;
-  console.log("[SyncCompleteDB] Connecting to MongoDB Atlas...");
-  await mongoose.connect(uri);
-  console.log("[SyncCompleteDB] Connected to MongoDB Atlas!");
+  console.log("[SyncCompleteDB] Connecting to Supabase...");
+  await connectSupabase();
 
-  // 1. Sync Admin User
+  // 1. Ensure Department exists
+  let dept = await Department.findOne({ code: "CSE" });
+  if (!dept) {
+    dept = await Department.create({
+      name: "Computer Science & Engineering",
+      code: "CSE",
+      institute: "CSPIT",
+      active: true,
+    });
+  }
+
+  // 2. Sync Admin User
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash("12345678", salt);
-
   const adminEmail = "hod@charusat.ac.in";
-  const adminUser = await User.findOneAndUpdate(
-    { email: adminEmail },
-    {
+
+  let adminUser = await User.findOne({ email: adminEmail });
+  if (!adminUser) {
+    adminUser = await User.create({
       name: "Amit Thakkar",
       email: adminEmail,
       passwordHash,
       role: "admin",
-      departmentId: "CSE",
-    },
-    { upsert: true, returnDocument: "after" },
-  );
+      departmentId: dept.id,
+    });
+  }
   console.log(`[SyncCompleteDB] ✅ Admin User synced: ${adminUser.name} (${adminUser.email})`);
 
-  // 2. Sync Seed Subjects into MongoDB Atlas
+  // 3. Sync Seed Subjects
   const seedSubjectsData = [
     {
       name: "Big Data Analytics",
@@ -56,30 +64,27 @@ async function syncCompleteDatabase() {
   ];
 
   for (const s of seedSubjectsData) {
-    const updatedSubject = await Subject.findOneAndUpdate(
-      { code: s.code },
-      {
+    let existingSubj = await Subject.findOne({ code: s.code });
+    if (!existingSubj) {
+      existingSubj = await Subject.create({
         name: s.name,
         code: s.code,
         semester: s.semester,
         syllabus: s.syllabus,
-        departmentId: "CSE",
-        facultyId: adminUser._id,
-      },
-      { upsert: true, returnDocument: "after" },
-    );
+        departmentId: dept.id,
+        facultyId: adminUser.id,
+      });
+    }
     console.log(
-      `[SyncCompleteDB] ✅ Subject synced: ${updatedSubject.code} - ${updatedSubject.name}`,
+      `[SyncCompleteDB] ✅ Subject synced: ${existingSubj.code} - ${existingSubj.name}`,
     );
   }
 
   const userCount = await User.countDocuments();
   const subjectCount = await Subject.countDocuments();
-  console.log(`\n[SyncCompleteDB] Final MongoDB Atlas Counts:`);
-  console.log(`  - Users Collection Count: ${userCount}`);
-  console.log(`  - Subjects Collection Count: ${subjectCount}`);
-
-  await mongoose.disconnect();
+  console.log(`\n[SyncCompleteDB] Final Supabase Counts:`);
+  console.log(`  - Users Table Count: ${userCount}`);
+  console.log(`  - Subjects Table Count: ${subjectCount}`);
   console.log("[SyncCompleteDB] Sync completed successfully!");
 }
 

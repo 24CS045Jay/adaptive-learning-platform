@@ -1,11 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { GraduationCap, Plus, Search, ShieldCheck, Users, UserRound } from "lucide-react";
+import {
+  GraduationCap,
+  Plus,
+  Search,
+  ShieldCheck,
+  Users,
+  UserRound,
+  KeyRound,
+  CheckCircle2,
+  Building2,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { PageHeader, Card, EmptyState, Pill } from "@/components/app-shell";
 import { useAppData, type AppUser } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { getDepartmentCode, getDepartmentLabel } from "@/lib/department-utils";
 
 export const Route = createFileRoute("/admin/users")({
   component: UsersDirectoryPage,
@@ -18,30 +29,34 @@ const ROLE_SECTIONS: Array<{
   icon: typeof GraduationCap;
   tone: string;
   iconTone: string;
+  badgeTone: "violet" | "gold" | "teal";
 }> = [
   {
     role: "Student",
     label: "Students",
-    description: "Learners enrolled in your department",
+    description: "Learners enrolled in department courses",
     icon: GraduationCap,
     tone: "border-violet/20 bg-violet/5",
     iconTone: "bg-violet/10 text-violet",
+    badgeTone: "violet",
   },
   {
     role: "Faculty",
     label: "Faculty",
-    description: "Teaching and academic support staff",
+    description: "Teaching staff & academic instructors",
     icon: UserRound,
     tone: "border-gold/25 bg-gold/5",
     iconTone: "bg-gold/10 text-gold",
+    badgeTone: "gold",
   },
   {
     role: "Admin",
     label: "Admins",
-    description: "Department administrators and HODs",
+    description: "Department administrators & HODs",
     icon: ShieldCheck,
     tone: "border-teal-brand/20 bg-teal-brand/5",
     iconTone: "bg-teal-brand/10 text-teal-brand",
+    badgeTone: "teal",
   },
 ];
 
@@ -49,32 +64,44 @@ function UsersDirectoryPage() {
   const { users } = useAppData();
   const { user: adminUser } = useAuth();
   const [search, setSearch] = useState("");
-  const adminDepartment = adminUser?.departmentId?.toUpperCase();
+
+  const adminDeptRaw = adminUser?.departmentId;
   const isSuperAdmin = String(adminUser?.role ?? "").toLowerCase() === "super_admin";
+  const deptScopeLabel = isSuperAdmin
+    ? "All Departments"
+    : getDepartmentLabel(adminDeptRaw);
 
   const visibleUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return users.filter((user) => {
+    return users.filter((u) => {
+      const userDept = u.departmentId ? String(u.departmentId).toLowerCase() : "";
+      const adminDept = adminDeptRaw ? String(adminDeptRaw).toLowerCase() : "";
+
       const sameDepartment =
-        isSuperAdmin || !adminDepartment || user.departmentId === adminDepartment;
+        isSuperAdmin ||
+        !adminDept ||
+        !userDept ||
+        userDept === adminDept;
+
       const matchesSearch =
         !query ||
-        user.name.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query);
+        u.name.toLowerCase().includes(query) ||
+        u.email.toLowerCase().includes(query);
+
       return sameDepartment && matchesSearch;
     });
-  }, [adminDepartment, isSuperAdmin, search, users]);
+  }, [adminDeptRaw, isSuperAdmin, search, users]);
 
   const counts = ROLE_SECTIONS.map(({ role }) => ({
     role,
-    count: visibleUsers.filter((user) => user.role === role).length,
+    count: visibleUsers.filter((u) => u.role === role).length,
   }));
 
   return (
     <div>
       <PageHeader
         title="Users Directory"
-        subtitle={`${visibleUsers.length} visible users · ${adminDepartment ?? "All departments"} scope`}
+        subtitle={`${visibleUsers.length} visible accounts · ${deptScopeLabel}`}
         action={
           <Link
             to="/admin/users/add"
@@ -93,9 +120,11 @@ function UsersDirectoryPage() {
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="font-serif text-lg font-bold text-foreground">Department directory</h2>
+              <h2 className="font-serif text-lg font-bold text-foreground">
+                {isSuperAdmin ? "System User Directory" : `${getDepartmentCode(adminDeptRaw)} Department Directory`}
+              </h2>
               <p className="text-sm text-muted-foreground">
-                View-only directory. Account creation is handled on the Add User page.
+                Structured view of all accounts scoped to your department. Use Add User page to enroll new members.
               </p>
             </div>
           </div>
@@ -104,49 +133,51 @@ function UsersDirectoryPage() {
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search name or email"
+              placeholder="Search by name or email"
               aria-label="Search users by name or email"
               className="w-full rounded-xl border border-border bg-background py-2.5 pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-violet focus:ring-2 focus:ring-violet/15"
             />
           </label>
         </div>
+
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           {counts.map(({ role, count }) => {
             const section = ROLE_SECTIONS.find((item) => item.role === role)!;
             return (
               <div
                 key={role}
-                className="rounded-2xl border border-border bg-background/60 px-4 py-3"
+                className="flex items-center justify-between rounded-2xl border border-border/80 bg-background/60 px-4 py-3"
               >
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  {section.label}
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {section.label}
+                  </div>
+                  <div className="mt-0.5 text-2xl font-bold text-foreground">{count}</div>
                 </div>
-                <div className="mt-1 text-2xl font-bold text-foreground">{count}</div>
+                <div className={cn("flex h-9 w-9 items-center justify-center rounded-xl", section.iconTone)}>
+                  <section.icon className="h-4 w-4" />
+                </div>
               </div>
             );
           })}
         </div>
       </Card>
 
+      {/* Structured 3-column layout by Role */}
       <div className="grid gap-6 xl:grid-cols-3">
-        {ROLE_SECTIONS.map(({ role, label, description, icon: Icon, tone, iconTone }) => {
-          const sectionUsers = visibleUsers.filter((user) => user.role === role);
+        {ROLE_SECTIONS.map(({ role, label, description, icon: Icon, tone, iconTone, badgeTone }) => {
+          const sectionUsers = visibleUsers.filter((u) => u.role === role);
           return (
             <motion.section
               key={role}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className={cn("rounded-3xl border p-4", tone)}
+              className={cn("flex flex-col rounded-3xl border p-4 shadow-sm", tone)}
             >
-              <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="mb-4 flex items-start justify-between gap-3 border-b border-border/40 pb-3">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-2xl",
-                      iconTone,
-                    )}
-                  >
+                  <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl", iconTone)}>
                     <Icon className="h-5 w-5" />
                   </div>
                   <div>
@@ -154,9 +185,7 @@ function UsersDirectoryPage() {
                     <p className="text-xs text-muted-foreground">{description}</p>
                   </div>
                 </div>
-                <Pill tone={role === "Student" ? "violet" : role === "Faculty" ? "gold" : "teal"}>
-                  {sectionUsers.length}
-                </Pill>
+                <Pill tone={badgeTone}>{sectionUsers.length}</Pill>
               </div>
 
               {sectionUsers.length === 0 ? (
@@ -165,38 +194,61 @@ function UsersDirectoryPage() {
                   title={`No ${label.toLowerCase()} found`}
                   description={
                     search
-                      ? "Try a different search term."
-                      : "No accounts are available in this scope."
+                      ? "Try adjusting your search query."
+                      : "No user accounts in this category yet."
                   }
                 />
               ) : (
-                <div className="space-y-2">
-                  {sectionUsers.map((user) => (
+                <div className="space-y-3">
+                  {sectionUsers.map((u) => (
                     <div
-                      key={user.id}
-                      className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card/80 px-3 py-3"
+                      key={u.id}
+                      className="rounded-2xl border border-border/80 bg-card p-3.5 shadow-sm transition hover:border-violet/30"
                     >
-                      <div
-                        className={cn(
-                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
-                          iconTone,
-                        )}
-                      >
-                        {user.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-foreground">
-                          {user.name}
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={cn(
+                            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
+                            iconTone,
+                          )}
+                        >
+                          {u.name.charAt(0).toUpperCase()}
                         </div>
-                        <div className="truncate text-xs text-muted-foreground">{user.email}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-sm font-bold text-foreground">
+                              {u.name}
+                            </span>
+                            <span
+                              className={cn(
+                                "h-2 w-2 shrink-0 rounded-full",
+                                u.status === "active" ? "bg-success" : "bg-muted-foreground/40",
+                              )}
+                              title={u.status === "active" ? "Active Account" : "Inactive Account"}
+                            />
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">{u.email}</div>
+
+                          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/60 px-2 py-0.5 font-medium text-foreground">
+                              <Building2 className="h-3 w-3 text-muted-foreground" />
+                              {getDepartmentCode(u.departmentId)}
+                            </span>
+
+                            {u.passwordStatus === "default" ? (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-600 dark:text-amber-400">
+                                <KeyRound className="h-3 w-3" />
+                                Default Password
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-600 dark:text-emerald-400">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Verified Password
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <span
-                        className={cn(
-                          "h-2.5 w-2.5 shrink-0 rounded-full",
-                          user.status === "active" ? "bg-success" : "bg-muted-foreground/40",
-                        )}
-                        title={user.status === "active" ? "Active" : "Inactive"}
-                      />
                     </div>
                   ))}
                 </div>
