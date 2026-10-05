@@ -31,6 +31,54 @@ function generateDummyPassword(name) {
   return `${cleanFirst || "user"}password123`;
 }
 
+// GET /api/users/logs - List user registration logs scoped by department
+router.get("/logs", authenticate, requireRole("admin", "faculty"), async (req, res) => {
+  try {
+    const isSuper = isSuperAdmin(req.user);
+    const callerDept = getDepartmentId(req.user);
+    const reqDept = req.query.departmentId ? String(req.query.departmentId).trim() : null;
+    const targetDept = isSuper && reqDept ? reqDept : (!isSuper && callerDept ? String(callerDept) : null);
+
+    const filter = targetDept ? { departmentId: targetDept } : {};
+    const users = await User.find(filter).sort({ createdAt: -1 });
+
+    // Fetch audit logs for registration/creation events if any
+    let auditLogs = [];
+    try {
+      auditLogs = await AuditLog.find({
+        action: { $in: ["USER_REGISTER", "CREATE_USER", "ADMIN_CREATE_USER"] },
+      }).sort({ createdAt: -1 });
+    } catch (auditErr) {
+      console.warn("[Users Logs] AuditLog fetch notice:", auditErr.message);
+    }
+
+    const auditMap = new Map();
+    auditLogs.forEach((a) => {
+      const email = a.details?.email || a.details?.targetEmail;
+      if (email) auditMap.set(String(email).toLowerCase(), a);
+    });
+
+    const logs = users.map((u) => {
+      const sanitized = publicUser(u);
+      const audit = auditMap.get(String(u.email).toLowerCase());
+      const isSelfRegistered = u.mustChangePassword === false && (!audit || audit.action === "USER_REGISTER");
+      return {
+        ...sanitized,
+        registrationMethod: isSelfRegistered ? "Self-Registered (OTP)" : "Admin Enrolled",
+        registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
+        actorId: audit?.actorId || (isSelfRegistered ? (u.id || u._id) : "Admin"),
+        batch: u.batch || audit?.details?.batch,
+        semester: u.semester || audit?.details?.semester,
+      };
+    });
+
+    return res.json(logs);
+  } catch (error) {
+    console.error("[Get User Logs Error]:", error);
+    return res.status(500).json({ error: error.message || "Failed to fetch user logs." });
+  }
+});
+
 // GET /api/users - List users from Supabase / DB
 router.get("/", authenticate, requireRole("admin", "faculty"), async (req, res) => {
   try {
@@ -55,6 +103,34 @@ router.get("/:id", authenticate, async (req, res) => {
     return res.json(publicUser(user));
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch user." });
+  }
+});
+
+// POST /api/users/send-welcome-email - Send welcome email with credentials
+router.post("/send-welcome-email", async (req, res) => {
+  try {
+    const { toEmail, userName, role, rawPassword, department } = req.body;
+    if (!toEmail || !rawPassword) {
+      return res.status(400).json({ error: "toEmail and rawPassword are required." });
+    }
+
+    const cleanEmail = toEmail.trim().toLowerCase();
+    const mailResult = await sendAdminWelcomeEmail({
+      toEmail: cleanEmail,
+      userName: (userName || "User").trim(),
+      role: (role || "student").toLowerCase(),
+      rawPassword: String(rawPassword).trim(),
+      department: department || "CSE",
+    });
+
+    return res.json({
+      success: mailResult.success,
+      messageId: mailResult.messageId,
+      error: mailResult.error,
+    });
+  } catch (error) {
+    console.error("[Mailer] Send welcome email endpoint error:", error);
+    return res.status(500).json({ error: error.message || "Failed to send welcome email." });
   }
 });
 
@@ -89,10 +165,7 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
       passwordHash,
       role: roleLower,
       departmentId: targetDeptRaw,
-      batch: batch ? String(batch).trim() : undefined,
-      semester: semester ? Number(semester) : undefined,
       mustChangePassword: true,
-      status: "active",
     });
 
     try {

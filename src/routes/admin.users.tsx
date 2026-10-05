@@ -195,16 +195,7 @@ function UserManagementPage() {
     <div>
       <PageHeader
         title="User Management"
-        subtitle="Add new students and faculty members or remove accounts. (To view directory, see Users Record)."
-        action={
-          <Link
-            to="/admin/users/records"
-            className="inline-flex items-center gap-2 rounded-xl border border-violet/30 bg-violet/10 px-3.5 py-2 text-xs font-semibold text-violet transition hover:bg-violet/20"
-          >
-            <span>View Users Record</span>
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        }
+        subtitle="Add new students and faculty members or remove accounts."
       />
 
       {/* Tabs for Add vs Remove */}
@@ -291,16 +282,10 @@ function UserManagementPage() {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    <Link
-                      to="/admin/users/records"
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
-                    >
-                      View in Users Record →
-                    </Link>
                     <button
                       type="button"
                       onClick={() => setCreatedSuccess(null)}
-                      className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+                      className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
                     >
                       Add Another User
                     </button>
@@ -459,11 +444,7 @@ function UserManagementPage() {
 
               {/* Notice */}
               <p className="text-[11px] text-muted-foreground">
-                ℹ When added, this account will immediately appear in the{" "}
-                <Link to="/admin/users/records" className="text-violet underline">
-                  Users Record
-                </Link>{" "}
-                section and receive a welcome email with their password.
+                ℹ When added, this account will be created, verified, and receive a welcome email with their password.
               </p>
 
               <PrimaryButton type="submit" disabled={addLoading} className="w-full">
