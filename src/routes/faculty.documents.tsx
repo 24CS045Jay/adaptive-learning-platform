@@ -42,13 +42,23 @@ function MyDocuments() {
   const [rerankDoc, setRerankDoc]       = useState<{ id: string; name: string } | null>(null);
   const [viewPdfDoc, setViewPdfDoc]     = useState<{ name: string; fileType: FileType; subjectId: string; uploadedBy: string; date: string } | null>(null);
 
-  const myEmail = user?.email?.toLowerCase() ?? "faculty@charusat.edu.in";
-  const myName  = user?.name ?? "Dr. Nisha Shah";
+  const myEmail = (user?.email || "faculty@charusat.edu.in").toLowerCase();
+  const myName = (user?.name || "Dr. Nisha Shah").toLowerCase();
+  const myId = user?.id || "";
 
   // Show docs uploaded by the logged-in faculty (or all seeded docs if demo faculty)
   const mine = documents.filter((d) => {
-    const isOwner = d.uploadedBy.toLowerCase() === myEmail || d.uploadedByName.toLowerCase() === myName.toLowerCase();
-    if (myEmail === "faculty@charusat.edu.in") return isOwner || d.uploadedBy === "faculty@charusat.edu.in";
+    const docUploader = String(d.uploadedBy || "").toLowerCase();
+    const docUploaderName = String(d.uploadedByName || "").toLowerCase();
+    const isOwner =
+      docUploader === myEmail ||
+      docUploaderName === myName ||
+      docUploader === myId ||
+      (d as any).uploaderId === myId;
+
+    if (myEmail === "faculty@charusat.edu.in" || user?.role === "admin") {
+      return true;
+    }
     return isOwner;
   });
 

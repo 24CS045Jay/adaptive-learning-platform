@@ -513,16 +513,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const uploadDocument = useCallback(
     async (formData: FormData) => {
-      if (!user?.token) return false;
       try {
+        const headers: Record<string, string> = {};
+        if (user?.token) headers["Authorization"] = `Bearer ${user.token}`;
+        if (user?.role) headers["x-user-role"] = user.role.toLowerCase();
+        if (user?.id) headers["x-user-id"] = user.id;
+        if (user?.departmentId) headers["x-department-id"] = user.departmentId;
+
         const res = await fetch(`${API_BASE}/api/documents/upload`, {
           method: "POST",
-          headers: authHeaders(user.token),
+          headers,
           body: formData,
         });
 
         if (!res.ok) {
-          console.warn("[AppData] uploadDocument failed:", await res.text());
+          const errText = await res.text();
+          console.warn("[AppData] uploadDocument failed:", errText);
           return false;
         }
 
@@ -533,7 +539,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [refreshDocuments, user?.token],
+    [refreshDocuments, user],
   );
 
   const approveDocument = useCallback(

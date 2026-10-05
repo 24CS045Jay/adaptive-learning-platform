@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
-  Upload, FileText, Presentation, FileType2, X, CheckCircle2, AlertCircle,
+  Upload, FileText, Presentation, FileType2, X, CheckCircle2, AlertCircle, RefreshCw,
 } from "lucide-react";
 import { PageHeader, Card, PrimaryButton } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
@@ -57,21 +57,37 @@ function UploadContent() {
   const [dragging, setDragging] = useState(false);
 
   // Metadata form
-  const [subjectId, setSubjectId] = useState(subjects[0].id);
+  const [subjectId, setSubjectId] = useState(subjects[0]?.id || "");
   const [moduleId, setModuleId]   = useState("");
   const [topicTag, setTopicTag]   = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [semester, setSemester]   = useState(String(subjects[0].semester));
+  const [semester, setSemester]   = useState(String(subjects[0]?.semester || "1"));
 
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading]     = useState(false);
+
+  useEffect(() => {
+    if (!subjectId && subjects.length > 0) {
+      setSubjectId(subjects[0].id);
+      setSemester(String(subjects[0].semester || "1"));
+    }
+  }, [subjects, subjectId]);
 
   const availableModules = learningModules.filter((m) => m.subjectId === subjectId);
 
   const handleFile = (file: File) => {
     setFileError(null);
     setSubmitted(false);
-    const ft = ALLOWED_TYPES[file.type];
+    
+    // Check file extension if type is generic
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    let ft: FileType | undefined = ALLOWED_TYPES[file.type];
+    if (!ft) {
+      if (ext === "pdf") ft = "pdf";
+      else if (ext === "pptx") ft = "pptx";
+      else if (ext === "docx") ft = "docx";
+    }
+
     if (!ft) {
       setFileError("Only PDF, PPTX, and DOCX files are accepted.");
       setSelected(null);
@@ -85,7 +101,7 @@ function UploadContent() {
     setSelected({ file, fileType: ft });
     // Auto-fill semester from selected subject
     const subj = subjects.find((s) => s.id === subjectId);
-    if (subj) setSemester(String(subj.semester));
+    if (subj) setSemester(String(subj.semester || "1"));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -107,7 +123,7 @@ function UploadContent() {
 
     const formData = new FormData();
     formData.append("file", selected.file);
-    formData.append("subjectId", subjectId);
+    formData.append("subjectId", subjectId || subjects[0]?.id || "");
     if (moduleId) formData.append("unit", moduleId);
     if (topicTag) formData.append("topicTag", topicTag);
 
@@ -115,7 +131,7 @@ function UploadContent() {
     setLoading(false);
 
     if (!success) {
-      setFileError("Upload failed. Please try again or contact the administrator.");
+      setFileError("Upload failed. Please try again.");
       return;
     }
 
@@ -312,9 +328,23 @@ function UploadContent() {
               </div>
             </div>
 
-            <PrimaryButton type="submit" icon={Upload}>
-              {loading ? "Submitting…" : "Submit for review"}
-            </PrimaryButton>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-hover transition active:scale-[0.99] disabled:opacity-50"
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Uploading & Queuing Document...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  <span>Submit Document for Review</span>
+                </>
+              )}
+            </button>
           </form>
         </Card>
 
