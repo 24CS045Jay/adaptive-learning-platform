@@ -7,6 +7,7 @@ import {
   loginOrCreateGoogleUser,
   loginUser,
   registerUser,
+  directSupabaseLogin,
   MOCK_USERS,
 } from "./auth-store";
 
@@ -179,21 +180,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         saveActiveUser(authUser);
         return { ok: true, mustChangePassword: false };
       } catch (error) {
-        console.warn("[Auth] Server fetch failed. Using local offline auth fallback:", error);
-        const localResult = loginUser(role, email, password);
-        if (localResult.ok && localResult.user) {
+        console.warn("[Auth] Backend fetch failed. Attempting direct Supabase database login:", error);
+        const directResult = await directSupabaseLogin(role, email, password);
+        if (directResult.ok && directResult.user) {
           const authUser: AuthUser = {
-            id: localResult.user.id,
-            name: localResult.user.name,
-            email: localResult.user.email,
-            role: localResult.user.role,
-            token: `local_fallback_token_${Date.now()}_${localResult.user.id}`,
-            mustChangePassword: localResult.user.mustChangePassword,
+            id: directResult.user.id,
+            name: directResult.user.name,
+            email: directResult.user.email,
+            role: directResult.user.role,
+            departmentId: directResult.user.departmentId,
+            token: `supabase_direct_token_${Date.now()}_${directResult.user.id}`,
+            mustChangePassword: directResult.user.mustChangePassword,
           };
           saveActiveUser(authUser);
-          return { ok: true, mustChangePassword: localResult.user.mustChangePassword };
+          return { ok: true, mustChangePassword: directResult.user.mustChangePassword };
         }
-        return { ok: false, error: localResult.error || "Invalid email or password." };
+        return { ok: false, error: directResult.error || "Invalid email or password." };
       }
     },
     [],
@@ -311,20 +313,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: true, mustChangePassword: false };
       } catch (error) {
         console.warn(
-          "[Auth] Backend unreachable, using local store fallback for registration:",
+          "[Auth] Backend unreachable, using direct Supabase registration:",
           error,
         );
-        const localResult = await registerUser(name, email, password, role, departmentId);
-        if (localResult.ok) {
-          const cleanEmail = email.trim().toLowerCase();
-          const found = MOCK_USERS.find((u) => u.email.toLowerCase() === cleanEmail);
+        const directResult = await registerUser(name, email, password, role, departmentId);
+        if (directResult.ok && directResult.user) {
           const authUser: AuthUser = {
-            id: found?.id || `u_${Date.now()}`,
-            name: name.trim() || cleanEmail.split("@")[0],
-            email: cleanEmail,
-            role,
-            departmentId,
-            token: `local_fallback_token_${Date.now()}`,
+            id: directResult.user.id,
+            name: directResult.user.name,
+            email: directResult.user.email,
+            role: directResult.user.role,
+            departmentId: directResult.user.departmentId,
+            token: `supabase_direct_token_${Date.now()}_${directResult.user.id}`,
             mustChangePassword: false,
           };
           saveActiveUser(authUser);
@@ -335,7 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           return { ok: true, mustChangePassword: false };
         }
-        return { ok: false, error: localResult.error || "Registration failed." };
+        return { ok: false, error: directResult.error || "Registration failed." };
       }
     },
     [],
