@@ -38,6 +38,8 @@ export interface UserLogItem {
   id: string;
   name: string;
   email: string;
+  studentId?: string;
+  facultyId?: string;
   role: "Student" | "Faculty" | "Admin";
   departmentId: string;
   batch?: string;
@@ -59,26 +61,33 @@ export function determineAcademicYear(email: string, role: string, explicitBatch
     return { yearLabel: "Administrator", batch: "Admin" };
   }
 
-  // Check explicit batch if provided
-  if (explicitBatch) {
-    const clean = explicitBatch.trim();
-    if (clean.includes("2025")) return { yearLabel: "1st Year (2025-2029)", batch: "2025-2029" };
-    if (clean.includes("2024")) return { yearLabel: "2nd Year (2024-2028)", batch: "2024-2028" };
-    if (clean.includes("2023")) return { yearLabel: "3rd Year (2023-2027)", batch: "2023-2027" };
-    if (clean.includes("2022")) return { yearLabel: "4th Year (2022-2026)", batch: "2022-2026" };
-    if (clean.includes("2021")) return { yearLabel: "4th Year (2021-2025)", batch: "2021-2025" };
-    return { yearLabel: clean, batch: clean };
+  // Check explicit batch if provided (e.g. "2024-2028")
+  if (explicitBatch && explicitBatch.includes("-")) {
+    const parts = explicitBatch.trim().split("-");
+    const startYr = parseInt(parts[0], 10);
+    if (!isNaN(startYr)) {
+      const yearDiff = 2026 - startYr;
+      let yrName = "1st Year";
+      if (yearDiff === 1) yrName = "2nd Year";
+      else if (yearDiff === 2) yrName = "3rd Year";
+      else if (yearDiff >= 3) yrName = "4th Year";
+      return { yearLabel: `${yrName} (${explicitBatch.trim()})`, batch: explicitBatch.trim() };
+    }
   }
 
   // Parse student roll code from email (e.g. 25cs045@charusat.edu.in, 24ce012, 23it089, 22ec010)
   const prefixMatch = email.toLowerCase().match(/^([0-9]{2})/);
   if (prefixMatch) {
     const prefixYear = prefixMatch[1];
-    if (prefixYear === "25") return { yearLabel: "1st Year (2025-2029)", batch: "2025-2029" };
-    if (prefixYear === "24") return { yearLabel: "2nd Year (2024-2028)", batch: "2024-2028" };
-    if (prefixYear === "23") return { yearLabel: "3rd Year (2023-2027)", batch: "2023-2027" };
-    if (prefixYear === "22") return { yearLabel: "4th Year (2022-2026)", batch: "2022-2026" };
-    if (prefixYear === "21") return { yearLabel: "4th Year (2021-2025)", batch: "2021-2025" };
+    const fullStart = 2000 + parseInt(prefixYear, 10);
+    const fullEnd = fullStart + 4;
+    const batchFormatted = `${fullStart}-${fullEnd}`;
+    if (prefixYear === "25") return { yearLabel: `1st Year (${batchFormatted})`, batch: batchFormatted };
+    if (prefixYear === "24") return { yearLabel: `2nd Year (${batchFormatted})`, batch: batchFormatted };
+    if (prefixYear === "23") return { yearLabel: `3rd Year (${batchFormatted})`, batch: batchFormatted };
+    if (prefixYear === "22") return { yearLabel: `4th Year (${batchFormatted})`, batch: batchFormatted };
+    if (prefixYear === "21") return { yearLabel: `4th Year (${batchFormatted})`, batch: batchFormatted };
+    return { yearLabel: `Batch ${batchFormatted}`, batch: batchFormatted };
   }
 
   // Default fallback for student
@@ -129,11 +138,15 @@ function UserLogsPage() {
             const role: "Student" | "Faculty" | "Admin" =
               rawRole === "faculty" ? "Faculty" : rawRole === "admin" ? "Admin" : "Student";
             const yearInfo = determineAcademicYear(u.email, role, u.batch);
+            const deducedStudentId = u.studentId || u.student_id || (role === "Student" ? u.email?.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1]?.toUpperCase() : undefined);
+            const deducedFacultyId = u.facultyId || u.faculty_id || undefined;
 
             return {
               id: String(u.id || u._id || Math.random()),
               name: u.name || "User",
               email: u.email,
+              studentId: deducedStudentId,
+              facultyId: deducedFacultyId,
               role,
               departmentId: (u.departmentId || u.department_id || adminDeptCode || "CSE").toUpperCase(),
               batch: yearInfo.batch,
@@ -167,12 +180,16 @@ function UserLogsPage() {
           const rawRole = String(u.role || "student").toLowerCase();
           const role: "Student" | "Faculty" | "Admin" =
             rawRole === "faculty" ? "Faculty" : rawRole === "admin" ? "Admin" : "Student";
-          const yearInfo = determineAcademicYear(u.email, role);
+          const yearInfo = determineAcademicYear(u.email, role, u.batch);
+          const deducedStudentId = u.student_id || (role === "Student" ? u.email?.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1]?.toUpperCase() : undefined);
+          const deducedFacultyId = u.faculty_id || undefined;
 
           return {
             id: String(u.id),
             name: u.name || "User",
             email: u.email,
+            studentId: deducedStudentId,
+            facultyId: deducedFacultyId,
             role,
             departmentId: (u.department_id || adminDeptCode || "CSE").toUpperCase(),
             batch: yearInfo.batch,
@@ -279,10 +296,11 @@ function UserLogsPage() {
 
   // CSV Export
   const handleExportCSV = () => {
-    const headers = ["User Name", "Email", "Role", "Department", "Academic Year", "Batch", "Registration Method", "Registered Date & Time", "Account Status"];
+    const headers = ["User Name", "Email", "ID / Roll No", "Role", "Department", "Academic Year", "Batch", "Registration Method", "Registered Date & Time", "Account Status"];
     const rows = filteredLogs.map((l) => [
       `"${l.name.replace(/"/g, '""')}"`,
       `"${l.email}"`,
+      `"${l.studentId || l.facultyId || ""}"`,
       `"${l.role}"`,
       `"${l.departmentId}"`,
       `"${l.yearLabel}"`,
@@ -442,7 +460,7 @@ function UserLogsPage() {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by student name, email, roll number, or batch..."
+              placeholder="Search by student name, email, student ID, roll number, or batch..."
               className="w-full text-sm outline-none bg-transparent placeholder:text-muted-foreground"
             />
           </div>
@@ -509,6 +527,7 @@ function UserLogsPage() {
             <thead>
               <tr className="border-b border-border bg-muted/30 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 <th className="py-3 px-4">User Details</th>
+                <th className="py-3 px-4">ID / Roll No</th>
                 <th className="py-3 px-4">Role</th>
                 <th className="py-3 px-4">Department</th>
                 <th className="py-3 px-4">Academic Year / Batch</th>
@@ -520,7 +539,7 @@ function UserLogsPage() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="h-5 w-5 animate-spin text-violet" />
                       <span>Loading user registration logs...</span>
@@ -529,7 +548,7 @@ function UserLogsPage() {
                 </tr>
               ) : filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-sm text-muted-foreground">
+                  <td colSpan={8} className="py-12 text-center text-sm text-muted-foreground">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <History className="h-8 w-8 text-muted-foreground/50" />
                       <div className="font-semibold text-foreground">No user logs found</div>
@@ -577,6 +596,17 @@ function UserLogsPage() {
                             </div>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Student / Faculty ID */}
+                      <td className="py-3.5 px-4">
+                        {l.studentId || l.facultyId ? (
+                          <span className="font-mono text-xs font-bold text-violet bg-violet/10 px-2 py-0.5 rounded-md border border-violet/20">
+                            {l.studentId || l.facultyId}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">-</span>
+                        )}
                       </td>
 
                       {/* Role */}
