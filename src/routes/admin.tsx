@@ -18,8 +18,8 @@ import { AppShell, type NavItem } from "@/components/app-shell";
 
 const nav: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/users", label: "Users Directory", icon: Users },
-  { to: "/admin/users/add", label: "Add User", icon: UserPlus },
+  { to: "/admin/users", label: "Users", icon: UserPlus },
+  { to: "/admin/users/records", label: "Users Record", icon: Users },
   { to: "/admin/subjects", label: "Courses & Subjects", icon: BookOpen },
   { to: "/admin/approvals", label: "Content Approvals", icon: CheckSquare },
   { to: "/admin/knowledge", label: "Knowledge Base", icon: Database },

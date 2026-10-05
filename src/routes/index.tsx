@@ -92,22 +92,24 @@ const NUM_PARTICLES = 14;
 const CONNECTION_DIST = 180;
 
 function useParticles(count: number) {
-  const [nodes, setNodes] = useState<ParticleNode[]>(() =>
-    Array.from({ length: count }, (_, i) => ({
-      id: i,
-      x: Math.random() * (typeof window !== "undefined" ? window.innerWidth : 1200),
-      y: Math.random() * (typeof window !== "undefined" ? window.innerHeight : 800),
-      vx: (Math.random() - 0.5) * 0.35,
-      vy: (Math.random() - 0.5) * 0.35,
-      size: 2 + Math.random() * 2.5,
-    })),
-  );
-
+  const [nodes, setNodes] = useState<ParticleNode[]>([]);
   const rafRef = useRef<number>(0);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const W = window.innerWidth;
     const H = window.innerHeight;
+
+    setNodes(
+      Array.from({ length: count }, (_, i) => ({
+        id: i,
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        size: 2 + Math.random() * 2.5,
+      })),
+    );
 
     const tick = () => {
       setNodes((prev) =>
@@ -128,7 +130,7 @@ function useParticles(count: number) {
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, []);
+  }, [count]);
 
   return nodes;
 }
@@ -1045,42 +1047,100 @@ function RegisterForm({
   onBack: () => void;
   onRegisterSuccess: (role: Role) => void;
 }) {
-  const { register } = useAuth();
+  const { register, sendOtp } = useAuth();
   const id = useId();
   const { isDark } = useTheme();
 
+  const [step, setStep] = useState<"form" | "otp">("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState<string>(roleConfig.placeholder.email);
   const [password, setPassword] = useState("");
   const [departmentId, setDepartmentId] = useState("CSE");
   const [showPw, setShowPw] = useState(false);
+  const [otp, setOtp] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     setName("");
     setEmail(roleConfig.placeholder.email);
     setPassword("");
     setDepartmentId("CSE");
+    setOtp("");
+    setStep("form");
     setError(null);
   }, [roleConfig.key]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError("Please fill out all required fields.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setError(null);
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 300));
+
+    const otpRes = await sendOtp(email.trim(), name.trim());
+    setLoading(false);
+
+    if (!otpRes.ok) {
+      setError(otpRes.error || "Failed to send verification email. Please try again.");
+      return;
+    }
+
+    setResendCooldown(60);
+    setStep("otp");
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    setError(null);
+    setLoading(true);
+    const otpRes = await sendOtp(email.trim(), name.trim());
+    setLoading(false);
+    if (!otpRes.ok) {
+      setError(otpRes.error || "Failed to resend verification code.");
+      return;
+    }
+    setResendCooldown(60);
+  };
+
+  const handleVerifyOtpAndRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otp.trim().length !== 6) {
+      setError("Please enter the 6-digit verification code sent to your email.");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
     const result = await register(
       name.trim(),
       email.trim(),
       password,
       roleConfig.key,
       departmentId,
+      otp.trim(),
     );
     setLoading(false);
 
     if (!result.ok) {
-      setError(result.error ?? "Registration failed.");
+      setError(result.error ?? "Invalid or expired verification code.");
       return;
     }
 
@@ -1092,151 +1152,252 @@ function RegisterForm({
       <div className="mb-6 flex items-center gap-3">
         <button
           type="button"
-          onClick={onBack}
+          onClick={() => {
+            if (step === "otp") {
+              setStep("form");
+              setError(null);
+            } else {
+              onBack();
+            }
+          }}
           className="text-muted-foreground hover:text-foreground transition"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h2 className="font-serif text-xl font-bold text-foreground">Create your account</h2>
+          <h2 className="font-serif text-xl font-bold text-foreground">
+            {step === "form" ? "Create your account" : "Verify your email"}
+          </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Register as a {roleConfig.label.toLowerCase()} to access AI Tutor.
+            {step === "form"
+              ? `Register as a ${roleConfig.label.toLowerCase()} to access AI Tutor.`
+              : `Enter the 6-digit code sent to ${email}`}
           </p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            id={`${id}-register-error`}
-            role="alert"
-            className="mb-5 flex items-start gap-2 rounded-full border border-danger/30 bg-danger/8 px-5 py-3 text-sm text-danger"
-          >
-            <span className="mt-0.5">⚠</span>
-            <span>{error}</span>
-          </motion.div>
-        )}
+      {step === "form" ? (
+        <form onSubmit={handleSendOtp} noValidate>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              id={`${id}-register-error`}
+              role="alert"
+              className="mb-5 flex items-start gap-2 rounded-full border border-danger/30 bg-danger/8 px-5 py-3 text-sm text-danger"
+            >
+              <span className="mt-0.5">⚠</span>
+              <span>{error}</span>
+            </motion.div>
+          )}
 
-        <div className="mb-4">
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              id={`${id}-name`}
-              type="text"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Full name"
+          <div className="mb-4">
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                id={`${id}-name`}
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Full name"
+                required
+                className={cn(
+                  "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
+                  isDark ? "border-border" : "border-border",
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                id={`${id}-email`}
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email address (e.g. 24cs045@charusat.edu.in)"
+                required
+                className={cn(
+                  "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
+                  isDark ? "border-border" : "border-border",
+                )}
+              />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label
+              htmlFor={`${id}-department`}
+              className="mb-1.5 ml-4 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            >
+              Department
+            </label>
+            <select
+              id={`${id}-department`}
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
               required
               className={cn(
-                "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
+                "w-full rounded-full border bg-background/60 px-4 py-3 text-sm text-foreground outline-none transition",
                 "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
                 isDark ? "border-border" : "border-border",
               )}
-            />
+            >
+              {DEPARTMENT_OPTIONS.map((department) => (
+                <option key={department.code} value={department.code}>
+                  {department.code} · {department.label}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
 
-        <div className="mb-4">
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              id={`${id}-email`}
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Email address"
-              required
-              className={cn(
-                "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                isDark ? "border-border" : "border-border",
-              )}
-            />
+          <div className="mb-5">
+            <div className="relative">
+              <Shield className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                id={`${id}-register-password`}
+                type={showPw ? "text" : "password"}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password (min. 6 characters)"
+                required
+                className={cn(
+                  "w-full rounded-full border bg-background/60 pl-11 pr-11 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
+                  isDark ? "border-border" : "border-border",
+                )}
+              />
+              <button
+                type="button"
+                aria-label={showPw ? "Hide password" : "Show password"}
+                onClick={() => setShowPw((v) => !v)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+              >
+                {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="mb-4">
-          <label
-            htmlFor={`${id}-department`}
-            className="mb-1.5 ml-4 block text-xs font-semibold uppercase tracking-wide text-muted-foreground"
-          >
-            Department
-          </label>
-          <select
-            id={`${id}-department`}
-            value={departmentId}
-            onChange={(e) => setDepartmentId(e.target.value)}
-            required
+          <motion.button
+            type="submit"
+            disabled={loading}
+            whileTap={{ scale: 0.97 }}
+            whileHover={{ boxShadow: "0 0 24px -4px oklch(0.62 0.22 293 / 60%)" }}
             className={cn(
-              "w-full rounded-full border bg-background/60 px-4 py-3 text-sm text-foreground outline-none transition",
-              "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-              isDark ? "border-border" : "border-border",
+              "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold text-white shadow-md transition disabled:opacity-60",
+              "bg-gradient-to-r from-[#9d72f7] via-[#8b5cf6] to-[#6d28d9]",
             )}
           >
-            {DEPARTMENT_OPTIONS.map((department) => (
-              <option key={department.code} value={department.code}>
-                {department.code} · {department.label}
-              </option>
-            ))}
-          </select>
-        </div>
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Sending Verification Code…
+              </span>
+            ) : (
+              `Send Verification Code`
+            )}
+          </motion.button>
 
-        <div className="mb-4">
-          <div className="relative">
-            <Shield className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={onBack}
+              className="font-medium text-violet hover:underline"
+            >
+              Sign in
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={handleVerifyOtpAndRegister} noValidate>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              role="alert"
+              className="mb-5 flex items-start gap-2 rounded-xl border border-danger/30 bg-danger/8 px-4 py-3 text-sm text-danger"
+            >
+              <span className="mt-0.5">⚠</span>
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          <div className="mb-6 rounded-2xl border border-violet/20 bg-violet/5 p-4 text-center">
+            <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-violet/10 text-violet">
+              ✉
+            </div>
+            <p className="text-xs text-muted-foreground">
+              We sent a 6-digit verification code directly to:
+            </p>
+            <p className="mt-0.5 font-semibold text-foreground text-sm">{email}</p>
+          </div>
+
+          <div className="mb-6">
+            <label className="mb-2 block text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Enter 6-Digit Code
+            </label>
             <input
-              id={`${id}-register-password`}
-              type={showPw ? "text" : "password"}
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              required
+              id={`${id}-otp-input`}
+              type="text"
+              maxLength={6}
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="123456"
+              autoFocus
               className={cn(
-                "w-full rounded-full border bg-background/60 pl-11 pr-11 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
+                "w-full rounded-2xl border bg-background/60 py-3.5 text-center font-mono text-2xl tracking-[0.5em] font-bold text-foreground outline-none transition",
+                "focus:border-violet focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_15%)]",
                 isDark ? "border-border" : "border-border",
               )}
             />
+          </div>
+
+          <motion.button
+            type="submit"
+            disabled={loading || otp.length !== 6}
+            whileTap={{ scale: 0.97 }}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold text-white shadow-md transition disabled:opacity-50",
+              "bg-gradient-to-r from-[#9d72f7] via-[#8b5cf6] to-[#6d28d9]",
+            )}
+          >
+            {loading ? "Verifying & Signing in…" : "Verify & Complete Registration"}
+          </motion.button>
+
+          <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground px-2">
             <button
               type="button"
-              aria-label={showPw ? "Hide password" : "Show password"}
-              onClick={() => setShowPw((v) => !v)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition"
+              onClick={() => {
+                setStep("form");
+                setError(null);
+              }}
+              className="text-muted-foreground hover:text-foreground transition underline"
             >
-              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              Change Email
+            </button>
+
+            <button
+              type="button"
+              disabled={resendCooldown > 0 || loading}
+              onClick={handleResendOtp}
+              className="font-medium text-violet hover:underline disabled:opacity-50 disabled:no-underline"
+            >
+              {resendCooldown > 0 ? `Resend Code in ${resendCooldown}s` : "Resend Code"}
             </button>
           </div>
-        </div>
-
-        <motion.button
-          type="submit"
-          disabled={loading}
-          whileTap={{ scale: 0.97 }}
-          whileHover={{ boxShadow: "0 0 24px -4px oklch(0.62 0.22 293 / 60%)" }}
-          className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-full py-3 text-sm font-semibold text-white shadow-md transition disabled:opacity-60",
-            "bg-gradient-to-r from-[#9d72f7] via-[#8b5cf6] to-[#6d28d9]",
-          )}
-        >
-          {loading ? "Creating account…" : `Sign up as ${roleConfig.label}`}
-        </motion.button>
-
-        <div className="mt-4 text-center text-sm text-muted-foreground">
-          Already have an account?{" "}
-          <button
-            type="button"
-            onClick={onBack}
-            className="font-medium text-violet hover:underline"
-          >
-            Sign in
-          </button>
-        </div>
-      </form>
+        </form>
+      )}
     </div>
   );
 }

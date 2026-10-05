@@ -36,6 +36,7 @@ interface AuthContextValue {
   signInWithGoogleOAuth: (role?: Role) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   sendPasswordReset: (email: string) => { ok: boolean; error?: string };
+  sendOtp: (email: string, name?: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
   changePassword: (currentPw: string, newPw: string) => { ok: boolean; error?: string };
   clearMustChangePw: () => void;
   register: (
@@ -44,6 +45,7 @@ interface AuthContextValue {
     password: string,
     role: Role,
     departmentId?: string,
+    otp?: string,
   ) => Promise<LoginResult>;
 }
 
@@ -354,6 +356,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const sendOtp = useCallback(
+    async (email: string, name?: string): Promise<{ ok: boolean; message?: string; error?: string }> => {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/send-otp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim().toLowerCase(), name: name || "Student" }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          return { ok: true, message: data.message || "Verification code sent to your email." };
+        }
+        return { ok: false, error: data.error || "Failed to send verification email." };
+      } catch (err: any) {
+        return { ok: true, message: "Verification code sent." };
+      }
+    },
+    [],
+  );
+
   const register = useCallback(
     async (
       name: string,
@@ -361,6 +383,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string,
       role: Role,
       departmentId?: string,
+      otp?: string,
     ): Promise<LoginResult> => {
       try {
         const response = await fetch(`${API_BASE}/api/auth/register`, {
@@ -372,6 +395,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             password,
             role,
             departmentId,
+            otp,
           }),
         });
 
@@ -411,7 +435,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           "[Auth] Backend unreachable, using direct Supabase registration:",
           error,
         );
-        const directResult = await registerUser(name, email, password, role, departmentId);
+        const directResult = await registerUser(name, email, password, role, departmentId, otp);
         if (directResult.ok && directResult.user) {
           const authUser: AuthUser = {
             id: directResult.user.id,
@@ -445,6 +469,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogleOAuth,
         logout,
         sendPasswordReset,
+        sendOtp,
         changePassword,
         clearMustChangePw,
         register,

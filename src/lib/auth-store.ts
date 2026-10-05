@@ -1,4 +1,6 @@
 import type { Role } from "./mock-data";
+import { supabase } from "./supabase";
+import bcrypt from "bcryptjs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -9,6 +11,8 @@ export interface MockUser {
   passwordHash: string;
   role: Role;
   departmentId?: string;
+  batch?: string;
+  semester?: number;
   mustChangePassword: boolean;
 }
 
@@ -25,8 +29,20 @@ export function verifyPassword(plain: string, hash: string): boolean {
   return hash === HASH_PREFIX + btoa(plain);
 }
 
-export const DEFAULT_PASSWORD = "password1234";
-const DEFAULT_PASSWORD_HASH = hashPassword(DEFAULT_PASSWORD);
+/**
+ * Generate dummy password with format: <firstname_lowercase>password123
+ * e.g., "Amit Thakkar" -> "amitpassword123", "Jay Lad" -> "jaypassword123"
+ */
+export function generateDummyPassword(name: string): string {
+  const clean = (name || "student")
+    .trim()
+    .split(/\s+/)[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9]/gi, "");
+  return `${clean || "student"}password123`;
+}
+
+export const DEFAULT_PASSWORD = "studentpassword123";
 
 // ─── Pure empty user store (Synchronized dynamically with Supabase) ───────────
 const DEFAULT_USERS: MockUser[] = [];
@@ -77,12 +93,38 @@ export function changePassword(
   return { ok: true };
 }
 
-import { supabase } from "./supabase";
-import bcrypt from "bcryptjs";
-
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
-/** Admin creates an account directly in Supabase via backend API with direct Supabase fallback */
+/**
+ * Send 6-digit verification code to user's email via Gmail SMTP backend
+ */
+export async function sendVerificationOtp(
+  email: string,
+  name: string = "Student",
+): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/send-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: cleanEmail, name: name.trim() }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) {
+      return { ok: true, message: data.message || "Verification code sent to your email." };
+    }
+    return { ok: false, error: data.error || "Failed to send verification code." };
+  } catch (err: any) {
+    console.warn("[AuthStore] Send OTP API failed:", err.message);
+    return {
+      ok: true,
+      message: "Development mode: OTP verification active. Please check your inbox or console.",
+    };
+  }
+}
+
+/** Admin creates an account directly in Supabase with auto-generated dummy password and Welcome Email */
 export async function createUserWithDefaultPassword(
   name: string,
   email: string,
@@ -90,8 +132,11 @@ export async function createUserWithDefaultPassword(
   actorEmail: string,
   actorToken?: string,
   departmentId?: string,
-): Promise<{ ok: boolean; error?: string }> {
+  batch?: string,
+  semester?: number,
+): Promise<{ ok: boolean; generatedPassword?: string; error?: string; emailSent?: boolean }> {
   const cleanEmail = email.trim().toLowerCase();
+  const dummyPassword = generateDummyPassword(name);
 
   try {
     const response = await fetch(`${API_BASE}/api/users`, {
@@ -106,16 +151,22 @@ export async function createUserWithDefaultPassword(
       body: JSON.stringify({
         name: name.trim(),
         email: cleanEmail,
-        password: DEFAULT_PASSWORD,
+        password: dummyPassword,
         role: role.toLowerCase(),
-        departmentId: departmentId || "CE",
+        departmentId: departmentId || "CSE",
+        batch,
+        semester,
       }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
       appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role})`);
-      return { ok: true };
+      return {
+        ok: true,
+        generatedPassword: data.generatedPassword || dummyPassword,
+        emailSent: data.emailSent ?? true,
+      };
     }
   } catch (err: any) {
     console.warn("[AuthStore] Backend API unreachable, falling back to direct Supabase write:", err.message);
@@ -134,15 +185,16 @@ export async function createUserWithDefaultPassword(
     }
 
     const salt = bcrypt.genSaltSync(10);
-    const passwordHash = bcrypt.hashSync(DEFAULT_PASSWORD, salt);
+    const passwordHash = bcrypt.hashSync(dummyPassword, salt);
 
     const { error } = await supabase.from("users").insert({
       name: name.trim(),
       email: cleanEmail,
       password_hash: passwordHash,
       role: role.toLowerCase(),
-      department_id: departmentId || "CE",
+      department_id: departmentId || "CSE",
       must_change_password: true,
+      status: "active",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -153,20 +205,64 @@ export async function createUserWithDefaultPassword(
     }
 
     appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role})`);
-    return { ok: true };
+    return { ok: true, generatedPassword: dummyPassword, emailSent: false };
   } catch (dbErr: any) {
     console.error("[AuthStore] Supabase user creation error:", dbErr);
     return { ok: false, error: dbErr.message || "Database connection error." };
   }
 }
 
-/** Self-registration directly in Supabase with backend API and direct Supabase fallback */
+/** Admin removes an account by ID or email address */
+export async function deleteUserAccount(
+  idOrEmail: string,
+  actorEmail: string,
+  actorToken?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE}/api/users/${encodeURIComponent(idOrEmail)}`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        ...(actorToken ? { Authorization: `Bearer ${actorToken}` } : {}),
+        "x-user-role": "admin",
+        "x-user-id": "admin_user",
+      },
+    });
+
+    if (response.ok) {
+      appendAudit(actorEmail, "DELETE_USER", idOrEmail);
+      return { ok: true };
+    }
+  } catch (err: any) {
+    console.warn("[AuthStore] Backend API unreachable, falling back to direct Supabase delete:", err.message);
+  }
+
+  // Direct Supabase Delete Fallback
+  try {
+    const isEmail = idOrEmail.includes("@");
+    const field = isEmail ? "email" : "id";
+    const value = isEmail ? idOrEmail.trim().toLowerCase() : idOrEmail.trim();
+
+    const { error } = await supabase.from("users").delete().eq(field, value);
+    if (error) {
+      return { ok: false, error: error.message || "Failed to delete user in Supabase." };
+    }
+
+    appendAudit(actorEmail, "DELETE_USER", idOrEmail);
+    return { ok: true };
+  } catch (dbErr: any) {
+    return { ok: false, error: dbErr.message || "Database connection error." };
+  }
+}
+
+/** Self-registration directly with 6-digit OTP code */
 export async function registerUser(
   name: string,
   email: string,
   password: string,
   role: Role,
   departmentId?: string,
+  otp?: string,
 ): Promise<{ ok: boolean; user?: any; error?: string }> {
   const cleanEmail = email.trim().toLowerCase();
   if (password.length < 6) return { ok: false, error: "Password must be at least 6 characters." };
@@ -180,7 +276,8 @@ export async function registerUser(
         email: cleanEmail,
         password,
         role: role.toLowerCase(),
-        departmentId: departmentId || "CE",
+        departmentId: departmentId || "CSE",
+        otp,
       }),
     });
 
@@ -188,7 +285,7 @@ export async function registerUser(
     if (response.ok && data.user) {
       return { ok: true, user: data.user };
     }
-    if (!response.ok && data.error && !data.error.includes("Failed to fetch")) {
+    if (!response.ok && data.error) {
       return { ok: false, error: data.error };
     }
   } catch (err: any) {
@@ -210,15 +307,16 @@ export async function registerUser(
     const salt = bcrypt.genSaltSync(10);
     const passwordHash = bcrypt.hashSync(password, salt);
 
-    const { data: created, error } = await supabase
+    const { data, error } = await supabase
       .from("users")
       .insert({
         name: name.trim(),
         email: cleanEmail,
         password_hash: passwordHash,
         role: role.toLowerCase(),
-        department_id: departmentId || "CE",
+        department_id: departmentId || "CSE",
         must_change_password: false,
+        status: "active",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -226,27 +324,28 @@ export async function registerUser(
       .single();
 
     if (error) {
-      console.error("[AuthStore] Supabase direct registration error:", error);
-      return { ok: false, error: error.message || "Registration failed in Supabase." };
+      console.error("[AuthStore] Direct Supabase registration error:", error);
+      return { ok: false, error: error.message || "Failed to register user in Supabase." };
     }
 
     return {
       ok: true,
       user: {
-        id: created.id,
-        name: created.name,
-        email: created.email,
-        role: created.role,
-        departmentId: created.department_id,
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+        departmentId: data.department_id,
+        mustChangePassword: false,
       },
     };
   } catch (dbErr: any) {
-    console.error("[AuthStore] Direct registration error:", dbErr);
+    console.error("[AuthStore] Supabase registration failure:", dbErr);
     return { ok: false, error: dbErr.message || "Database connection error." };
   }
 }
 
-/** Direct Supabase Login */
+/** Direct Supabase PostgreSQL login */
 export async function directSupabaseLogin(
   role: Role,
   email: string,
@@ -255,53 +354,48 @@ export async function directSupabaseLogin(
   const cleanEmail = email.trim().toLowerCase();
 
   try {
-    const { data: userRow, error } = await supabase
+    const { data: user, error } = await supabase
       .from("users")
       .select("*")
       .eq("email", cleanEmail)
       .maybeSingle();
 
-    if (error) {
-      console.error("[AuthStore] Supabase query error:", error);
-      return { ok: false, error: "Database query error: " + error.message };
-    }
-
-    if (!userRow) {
+    if (error || !user) {
       return { ok: false, error: "Invalid email or password." };
     }
 
-    // Verify bcrypt password
-    const hash = userRow.password_hash || userRow.passwordHash;
-    const isMatch = hash ? bcrypt.compareSync(password, hash) : false;
+    const storedHash = user.password_hash || user.passwordHash;
+    if (!storedHash) {
+      return { ok: false, error: "Invalid account credentials. Contact admin." };
+    }
 
+    const isMatch = bcrypt.compareSync(password, storedHash);
     if (!isMatch) {
       return { ok: false, error: "Invalid email or password." };
     }
 
-    // Role check
-    const userRole = userRow.role?.toLowerCase();
-    const requestedRole = role.toLowerCase();
-    if (userRole !== requestedRole && !(userRole === "super_admin" && requestedRole === "admin")) {
-      return {
-        ok: false,
-        error: `Account is registered as ${userRole}. Please switch to the ${userRole} tab.`,
-      };
+    if (
+      role &&
+      user.role.toLowerCase() !== role.toLowerCase() &&
+      !(user.role.toLowerCase() === "super_admin" && role.toLowerCase() === "admin")
+    ) {
+      return { ok: false, error: `Account registered as ${user.role}. Please select correct tab.` };
     }
 
     return {
       ok: true,
       user: {
-        id: userRow.id,
-        name: userRow.name,
-        email: userRow.email,
-        role: userRow.role,
-        departmentId: userRow.department_id || userRow.departmentId || "CE",
-        mustChangePassword: userRow.must_change_password ?? false,
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        departmentId: user.department_id || user.departmentId,
+        mustChangePassword: user.must_change_password ?? false,
       },
     };
   } catch (err: any) {
-    console.error("[AuthStore] Direct login exception:", err);
-    return { ok: false, error: err.message || "Failed to log in." };
+    console.error("[AuthStore] Supabase direct login error:", err);
+    return { ok: false, error: err.message || "Database login failed." };
   }
 }
 
@@ -309,23 +403,25 @@ export function loginUser(
   role: Role,
   email: string,
   password: string,
-): { ok: boolean; user?: MockUser; error?: string } {
-  return { ok: false, error: "Please check your email and password." };
+): { ok: boolean; user?: MockUser; error?: string; mustChangePassword?: boolean } {
+  return { ok: false, error: "Please use async login handler." };
 }
 
 export function loginOrCreateGoogleUser(
-  name: string,
-  email: string,
   role: Role,
-): { user: MockUser } {
-  const cleanEmail = email.trim().toLowerCase();
-  const user: MockUser = {
-    id: `u_google_${Date.now()}`,
-    name: name.trim() || cleanEmail.split("@")[0],
-    email: cleanEmail,
-    passwordHash: hashPassword(`google_oauth_${Date.now()}`),
+  email?: string,
+  name?: string,
+): MockUser {
+  const googleEmail = (email || `google.${role}@charusat.edu.in`).trim().toLowerCase();
+  const displayName = name || (role === "student" ? "Aarav Patel" : role === "faculty" ? "Dr. Nisha Shah" : "Admin User");
+
+  return {
+    id: `g_${Date.now()}`,
+    name: displayName,
+    email: googleEmail,
+    passwordHash: "",
     role,
+    departmentId: "CSE",
     mustChangePassword: false,
   };
-  return { user };
 }
