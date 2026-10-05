@@ -46,7 +46,7 @@ router.get("/logs", authenticate, requireRole("admin", "faculty"), async (req, r
     let auditLogs = [];
     try {
       auditLogs = await AuditLog.find({
-        action: { $in: ["USER_REGISTER", "CREATE_USER", "ADMIN_CREATE_USER"] },
+        action: { $in: ["USER_REGISTER", "CREATE_USER", "ADMIN_CREATE_USER", "BULK_REGISTER"] },
       }).sort({ createdAt: -1 });
     } catch (auditErr) {
       console.warn("[Users Logs] AuditLog fetch notice:", auditErr.message);
@@ -62,8 +62,15 @@ router.get("/logs", authenticate, requireRole("admin", "faculty"), async (req, r
       const sanitized = publicUser(u);
       const audit = auditMap.get(String(u.email).toLowerCase());
       const isSelfRegistered = u.mustChangePassword === false && (!audit || audit.action === "USER_REGISTER");
+      
+      // Auto deduce studentId or facultyId
+      const deducedStudentId = u.studentId || u.student_id || (u.role === "student" ? (u.email?.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1]?.toUpperCase()) : undefined);
+      const deducedFacultyId = u.facultyId || u.faculty_id || undefined;
+
       return {
         ...sanitized,
+        studentId: deducedStudentId,
+        facultyId: deducedFacultyId,
         registrationMethod: isSelfRegistered ? "Self-Registered (OTP)" : "Admin Enrolled",
         registeredAt: u.createdAt || u.created_at || new Date().toISOString(),
         actorId: audit?.actorId || (isSelfRegistered ? (u.id || u._id) : "Admin"),
@@ -134,10 +141,127 @@ router.post("/send-welcome-email", async (req, res) => {
   }
 });
 
+// POST /api/users/bulk-enroll - Bulk enroll students via spreadsheet list
+router.post("/bulk-enroll", authenticate, requireRole("admin"), async (req, res) => {
+  try {
+    const { students, departmentId } = req.body;
+    if (!Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ error: "List of students is required." });
+    }
+
+    const callerDeptRaw = getDepartmentId(req.user);
+    const targetDeptRaw = departmentId ? String(departmentId).trim() : callerDeptRaw || "CSE";
+
+    const results = [];
+
+    for (const s of students) {
+      const name = (s.name || s.fullName || "").trim();
+      const email = (s.email || "").trim().toLowerCase();
+      const studentId = (s.studentId || s.enrollmentNo || s.rollNo || s.id || (role === "student" ? email.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1] : "") || "").trim().toUpperCase();
+      const facultyId = (s.facultyId || s.employeeId || s.empId || (role === "faculty" ? s.id : "") || "").trim().toUpperCase();
+      const batch = s.batch || (s.startYear && s.endYear ? `${s.startYear}-${s.endYear}` : "2024-2028");
+      const semester = s.semester ? Number(s.semester) : undefined;
+      const role = (s.role || "student").toLowerCase();
+
+      if (!name || !email) {
+        results.push({ email, name, success: false, error: "Name and email are required." });
+        continue;
+      }
+
+      try {
+        const existing = await User.findOne({ email });
+        if (existing) {
+          results.push({
+            email,
+            name,
+            studentId,
+            facultyId,
+            success: false,
+            error: "User already exists.",
+            userId: existing.id || existing._id,
+          });
+          continue;
+        }
+
+        const dummyPassword = generateDummyPassword(name);
+        const passwordHash = await bcrypt.hash(dummyPassword, await bcrypt.genSalt(10));
+
+        const userDoc = {
+          name,
+          email,
+          passwordHash,
+          role,
+          departmentId: targetDeptRaw,
+          mustChangePassword: true,
+        };
+        if (studentId) userDoc.studentId = studentId;
+        if (facultyId) userDoc.facultyId = facultyId;
+
+        const createdUser = await User.create(userDoc);
+
+        try {
+          await AuditLog.create({
+            actorId: req.user.id || req.user._id,
+            action: "CREATE_USER",
+            details: {
+              createdUserId: createdUser.id || createdUser._id,
+              name,
+              email,
+              role,
+              studentId,
+              facultyId,
+              batch,
+              semester,
+              departmentId: targetDeptRaw,
+              method: "bulk_admin_enrolled",
+            },
+          });
+        } catch {}
+
+        // Send Welcome email with auto-generated credentials
+        const mailResult = await sendAdminWelcomeEmail({
+          toEmail: email,
+          userName: name,
+          role,
+          rawPassword: dummyPassword,
+          department: targetDeptRaw,
+        });
+
+        results.push({
+          email,
+          name,
+          studentId,
+          facultyId,
+          role,
+          batch,
+          semester,
+          success: true,
+          userId: createdUser.id || createdUser._id,
+          generatedPassword: dummyPassword,
+          emailSent: mailResult.success,
+        });
+      } catch (userErr) {
+        results.push({ email, name, studentId, success: false, error: userErr.message });
+      }
+    }
+
+    const successfulCount = results.filter((r) => r.success).length;
+    return res.status(201).json({
+      message: `Bulk enrollment completed. ${successfulCount} of ${students.length} accounts created.`,
+      successfulCount,
+      totalCount: students.length,
+      results,
+    });
+  } catch (err) {
+    console.error("[Bulk Enroll Error]:", err);
+    return res.status(500).json({ error: err.message || "Failed to process bulk enrollment." });
+  }
+});
+
 // POST /api/users - Admin adds student/faculty (Auto dummy password + Welcome Email)
 router.post("/", authenticate, requireRole("admin"), async (req, res) => {
   try {
-    const { name, email, role, departmentId, batch, semester } = req.body;
+    const { name, email, role, departmentId, studentId, facultyId, batch, semester } = req.body;
     if (!name || !email || !role)
       return res.status(400).json({ error: "Name, email, and role are required." });
 
@@ -159,14 +283,22 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
     const dummyPassword = generateDummyPassword(name);
     const passwordHash = await bcrypt.hash(dummyPassword, await bcrypt.genSalt(10));
 
-    const user = await User.create({
+    // Auto-extract studentId / facultyId
+    const cleanStudentId = (studentId || (roleLower === "student" ? cleanEmail.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1] : undefined) || "").trim().toUpperCase() || undefined;
+    const cleanFacultyId = (facultyId || "").trim().toUpperCase() || undefined;
+
+    const userDoc = {
       name: name.trim(),
       email: cleanEmail,
       passwordHash,
       role: roleLower,
       departmentId: targetDeptRaw,
       mustChangePassword: true,
-    });
+    };
+    if (cleanStudentId) userDoc.studentId = cleanStudentId;
+    if (cleanFacultyId) userDoc.facultyId = cleanFacultyId;
+
+    const user = await User.create(userDoc);
 
     try {
       await AuditLog.create({
@@ -174,8 +306,13 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
         action: "CREATE_USER",
         details: {
           createdUserId: user.id || user._id,
+          name: user.name,
           email: user.email,
           role: user.role,
+          studentId: cleanStudentId,
+          facultyId: cleanFacultyId,
+          batch,
+          semester,
           departmentId: targetDeptRaw,
         },
       });
@@ -192,6 +329,8 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
 
     return res.status(201).json({
       ...publicUser(user),
+      studentId: cleanStudentId,
+      facultyId: cleanFacultyId,
       generatedPassword: dummyPassword,
       emailSent: mailResult.success,
       message: `Account created successfully. Welcome email sent with password: ${dummyPassword}`,

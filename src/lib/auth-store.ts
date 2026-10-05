@@ -8,6 +8,8 @@ export interface MockUser {
   id: string;
   name: string;
   email: string;
+  studentId?: string;
+  facultyId?: string;
   passwordHash: string;
   role: Role;
   departmentId?: string;
@@ -134,9 +136,20 @@ export async function createUserWithDefaultPassword(
   departmentId?: string,
   batch?: string,
   semester?: number,
-): Promise<{ ok: boolean; generatedPassword?: string; error?: string; emailSent?: boolean }> {
+  studentId?: string,
+  facultyId?: string,
+): Promise<{
+  ok: boolean;
+  generatedPassword?: string;
+  error?: string;
+  emailSent?: boolean;
+  studentId?: string;
+  facultyId?: string;
+}> {
   const cleanEmail = email.trim().toLowerCase();
   const dummyPassword = generateDummyPassword(name);
+  const cleanStudentId = (studentId || (role === "student" ? cleanEmail.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1] : undefined) || "").trim().toUpperCase() || undefined;
+  const cleanFacultyId = (facultyId || "").trim().toUpperCase() || undefined;
 
   try {
     const response = await fetch(`${API_BASE}/api/users`, {
@@ -154,6 +167,8 @@ export async function createUserWithDefaultPassword(
         password: dummyPassword,
         role: role.toLowerCase(),
         departmentId: departmentId || "CSE",
+        studentId: cleanStudentId,
+        facultyId: cleanFacultyId,
         batch,
         semester,
       }),
@@ -161,11 +176,14 @@ export async function createUserWithDefaultPassword(
 
     const data = await response.json().catch(() => ({}));
     if (response.ok) {
-      appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role})`);
+      const idLabel = cleanStudentId ? ` - Student ID: ${cleanStudentId}` : cleanFacultyId ? ` - Faculty ID: ${cleanFacultyId}` : "";
+      appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role}${idLabel})`);
       return {
         ok: true,
         generatedPassword: data.generatedPassword || dummyPassword,
         emailSent: data.emailSent ?? true,
+        studentId: cleanStudentId,
+        facultyId: cleanFacultyId,
       };
     } else if (response.status === 400 && data.error) {
       return { ok: false, error: data.error };
@@ -189,7 +207,7 @@ export async function createUserWithDefaultPassword(
     const salt = bcrypt.genSaltSync(10);
     const passwordHash = bcrypt.hashSync(dummyPassword, salt);
 
-    const { error } = await supabase.from("users").insert({
+    const insertDoc: any = {
       name: name.trim(),
       email: cleanEmail,
       password_hash: passwordHash,
@@ -198,14 +216,29 @@ export async function createUserWithDefaultPassword(
       must_change_password: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    });
+    };
+    if (cleanStudentId) insertDoc.student_id = cleanStudentId;
+    if (cleanFacultyId) insertDoc.faculty_id = cleanFacultyId;
+
+    const { error } = await supabase.from("users").insert(insertDoc);
 
     if (error) {
-      console.error("[AuthStore] Supabase insert error:", error);
-      return { ok: false, error: error.message || "Failed to create user in database." };
+      // If student_id / faculty_id column doesn't exist yet in Supabase, retry without them
+      if (error.message?.includes("student_id") || error.message?.includes("faculty_id") || error.message?.includes("schema cache")) {
+        delete insertDoc.student_id;
+        delete insertDoc.faculty_id;
+        const retry = await supabase.from("users").insert(insertDoc);
+        if (retry.error) {
+          return { ok: false, error: retry.error.message || "Failed to create user in database." };
+        }
+      } else {
+        console.error("[AuthStore] Supabase insert error:", error);
+        return { ok: false, error: error.message || "Failed to create user in database." };
+      }
     }
 
-    appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role})`);
+    const idLabel = cleanStudentId ? ` - Student ID: ${cleanStudentId}` : cleanFacultyId ? ` - Faculty ID: ${cleanFacultyId}` : "";
+    appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role}${idLabel})`);
 
     // Dispatch welcome email via backend mailer service
     let emailSent = false;
@@ -227,10 +260,84 @@ export async function createUserWithDefaultPassword(
       console.warn("[AuthStore] Direct welcome email send error:", mailErr);
     }
 
-    return { ok: true, generatedPassword: dummyPassword, emailSent };
+    return {
+      ok: true,
+      generatedPassword: dummyPassword,
+      emailSent,
+      studentId: cleanStudentId,
+      facultyId: cleanFacultyId,
+    };
   } catch (dbErr: any) {
     console.error("[AuthStore] Supabase user creation error:", dbErr);
     return { ok: false, error: dbErr.message || "Database connection error." };
+  }
+}
+
+/** Bulk enrollment helper for Excel / CSV batch list */
+export async function bulkCreateUsersWithDefaultPassword(
+  students: Array<{
+    name: string;
+    email: string;
+    studentId?: string;
+    facultyId?: string;
+    batch?: string;
+    startYear?: number | string;
+    endYear?: number | string;
+    semester?: number | string;
+    role?: Role;
+  }>,
+  actorEmail: string,
+  actorToken?: string,
+  departmentId?: string,
+): Promise<{ ok: boolean; successfulCount: number; totalCount: number; results: any[]; error?: string }> {
+  try {
+    const response = await fetch(`${API_BASE}/api/users/bulk-enroll`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(actorToken ? { Authorization: `Bearer ${actorToken}` } : {}),
+        "x-user-role": "admin",
+        "x-user-id": "admin_user",
+        ...(departmentId ? { "x-department-id": departmentId } : {}),
+      },
+      body: JSON.stringify({
+        students,
+        departmentId: departmentId || "CSE",
+      }),
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      appendAudit(actorEmail, "BULK_REGISTER", `Enrolled ${data.successfulCount} students`);
+      return {
+        ok: true,
+        successfulCount: data.successfulCount || 0,
+        totalCount: students.length,
+        results: data.results || [],
+      };
+    }
+    return { ok: false, successfulCount: 0, totalCount: students.length, results: [], error: data.error };
+  } catch (err: any) {
+    // Fallback row-by-row
+    const results = [];
+    let successfulCount = 0;
+    for (const s of students) {
+      const res = await createUserWithDefaultPassword(
+        s.name,
+        s.email,
+        (s.role || "student") as Role,
+        actorEmail,
+        actorToken,
+        departmentId,
+        s.batch || (s.startYear && s.endYear ? `${s.startYear}-${s.endYear}` : "2024-2028"),
+        s.semester ? Number(s.semester) : 1,
+        s.studentId,
+        s.facultyId,
+      );
+      if (res.ok) successfulCount++;
+      results.push({ email: s.email, name: s.name, success: res.ok, error: res.error, generatedPassword: res.generatedPassword });
+    }
+    return { ok: true, successfulCount, totalCount: students.length, results };
   }
 }
 
