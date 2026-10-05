@@ -46,6 +46,8 @@ export interface AppUser {
   email: string;
   role: "Student" | "Faculty" | "Admin";
   departmentId?: string;
+  studentId?: string;
+  facultyId?: string;
   status: "active" | "inactive";
   joinedAt: string;
   /** Tracks whether user is still on the admin-created default password */
@@ -214,6 +216,7 @@ interface AppDataContextValue {
   addSubject: (subject: Omit<AppSubject, "id" | "enrolledStudentIds">) => void;
   deleteSubject: (id: string) => void;
   updateSyllabus: (subjectId: string, syllabus: string) => void;
+  updateSubjectFaculty: (subjectId: string, facultyName: string, facultyId?: string) => Promise<boolean>;
 
   // Module / Resource CRUD
   addModule: (mod: Omit<LearningModule, "id">) => void;
@@ -257,7 +260,7 @@ function mapBackendUser(u: any): AppUser {
     admin: "Admin",
   };
   const roleLabel = roleMap[String(u.role).toLowerCase()] ?? "Student";
-  const rawDept = u.departmentId;
+  const rawDept = u.departmentId || u.department_id;
   const deptId =
     typeof rawDept === "object" && rawDept
       ? String(rawDept._id || rawDept.id || rawDept.code || "")
@@ -267,9 +270,11 @@ function mapBackendUser(u: any): AppUser {
 
   return {
     id: String(u._id || u.id),
-    departmentId: deptId ? String(deptId).toLowerCase() : undefined,
+    departmentId: deptId ? String(deptId).toUpperCase() : undefined,
     name: u.name,
     email: u.email,
+    studentId: u.studentId || u.student_id,
+    facultyId: u.facultyId || u.faculty_id,
     role: roleLabel,
     status: "active",
     passwordStatus: u.mustChangePassword ? "default" : "changed",
@@ -849,6 +854,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [refreshSubjects, user?.token],
   );
 
+  const updateSubjectFaculty = useCallback(
+    async (subjectId: string, facultyName: string, facultyId?: string) => {
+      // Optimistically update subject list
+      setSubjects((prev) =>
+        prev.map((s) => (s.id === subjectId ? { ...s, faculty: facultyName } : s)),
+      );
+
+      if (!user?.token) return true;
+      try {
+        await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          body: JSON.stringify({ faculty: facultyName, facultyId }),
+        });
+        await refreshSubjects();
+        return true;
+      } catch (err) {
+        console.warn("[AppData] updateSubjectFaculty failed:", err);
+        return false;
+      }
+    },
+    [refreshSubjects, user?.token],
+  );
+
   // ── Module & Resource Operations ──────────────────────────────────────────
 
   const addModule = useCallback(
@@ -1084,6 +1113,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         addSubject,
         deleteSubject,
         updateSyllabus,
+        updateSubjectFaculty,
         addModule,
         removeModule,
         addResource,
