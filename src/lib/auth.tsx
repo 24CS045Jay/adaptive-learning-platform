@@ -33,6 +33,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (role: Role, email: string, password: string) => Promise<LoginResult>;
   loginWithGoogle: (role: Role, email?: string, name?: string) => LoginResult;
+  signInWithGoogleOAuth: (role?: Role) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   sendPasswordReset: (email: string) => { ok: boolean; error?: string };
   changePassword: (currentPw: string, newPw: string) => { ok: boolean; error?: string };
@@ -232,7 +233,101 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const logout = useCallback(() => {
+  // Listen for Supabase Google OAuth callback
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && (event === "SIGNED_IN" || event === "INITIAL_SESSION")) {
+        const email = session.user.email?.toLowerCase();
+        if (!email) return;
+
+        const name =
+          session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name ||
+          email.split("@")[0];
+        const selectedRole = ((typeof window !== "undefined" ? localStorage.getItem("oauth_selected_role") : null) as Role) || "student";
+
+        try {
+          // Check if user already exists in Supabase users table
+          const { data: existingUser } = await supabase
+            .from("users")
+            .select("*")
+            .eq("email", email)
+            .maybeSingle();
+
+          let finalUser = existingUser;
+          if (!existingUser) {
+            const { data: created, error } = await supabase
+              .from("users")
+              .insert({
+                name,
+                email,
+                password_hash: "google_oauth_authenticated",
+                role: selectedRole,
+                department_id: "CE",
+                must_change_password: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .select()
+              .single();
+
+            if (!error && created) {
+              finalUser = created;
+            }
+          }
+
+          if (finalUser) {
+            const authUser: AuthUser = {
+              id: finalUser.id,
+              name: finalUser.name,
+              email: finalUser.email,
+              role: finalUser.role,
+              departmentId: finalUser.department_id || "CE",
+              token: session.access_token,
+              mustChangePassword: false,
+            };
+            saveActiveUser(authUser);
+            if (_onRegisterCallback) {
+              _onRegisterCallback(authUser.name, authUser.email, authUser.role);
+            }
+          }
+        } catch (oauthErr) {
+          console.error("[OAuth Callback Sync Error]:", oauthErr);
+        }
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  const signInWithGoogleOAuth = useCallback(
+    async (role: Role = "student"): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("oauth_selected_role", role);
+        }
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+          },
+        });
+        if (error) throw error;
+        return { ok: true };
+      } catch (err: any) {
+        console.error("[Google OAuth Error]:", err);
+        return { ok: false, error: err.message || "Failed to start Google sign in." };
+      }
+    },
+    [],
+  );
+
+  const logout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {}
     saveActiveUser(null);
   }, []);
 
@@ -347,6 +442,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         login,
         loginWithGoogle,
+        signInWithGoogleOAuth,
         logout,
         sendPasswordReset,
         changePassword,
