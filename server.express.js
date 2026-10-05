@@ -44,6 +44,14 @@ const customOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "
 
 const allowedOrigins = Array.from(new Set([...defaultOrigins, ...customOrigins]));
 
+import path from "path";
+import fs from "fs";
+
+const uploadsDir = path.join(process.cwd(), "public", "uploads", "documents");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Middlewares
 app.use(
   cors({
@@ -58,6 +66,9 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploaded documents statically
+app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
 // Healthcheck
 app.get("/api/health", (req, res) => {
