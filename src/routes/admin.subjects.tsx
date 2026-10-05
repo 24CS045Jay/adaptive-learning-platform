@@ -79,7 +79,7 @@ function SubjectsPage() {
   const [newSubjName, setNewSubjName] = useState("");
   const [newSubjCode, setNewSubjCode] = useState("");
   const [newSubjSem, setNewSubjSem] = useState("5");
-  const [newSubjFaculty, setNewSubjFaculty] = useState(facultyUsers[0]?.name ?? "Dr. Nisha Shah");
+  const [newSubjFaculty, setNewSubjFaculty] = useState(facultyUsers[0]?.name ?? "");
   const [newSubjSyllabus, setNewSubjSyllabus] = useState("");
   const [subjAddedBanner, setSubjAddedBanner] = useState(false);
 

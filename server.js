@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { connectMongo } from "./db/mongo.js";
+import { connectSupabase } from "./db/supabase.js";
 
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
@@ -54,7 +54,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Healthcheck
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "AI Tutor API Backend", timestamp: new Date().toISOString() });
+  res.json({ status: "ok", service: "AI Tutor API Backend (Supabase)", timestamp: new Date().toISOString() });
 });
 
 // REST API Routes
@@ -106,9 +106,9 @@ async function checkRagServiceHealth() {
   }
 }
 
-// Start Express server after connecting to MongoDB Atlas
+// Start Express server after connecting to Supabase
 async function startServer() {
-  await connectMongo();
+  await connectSupabase();
 
   // Non-blocking health check — a warning, never a crash
   checkRagServiceHealth();

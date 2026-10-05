@@ -204,6 +204,7 @@ interface AppDataContextValue {
   removeUser: (id: string) => void;
   toggleUserStatus: (id: string) => void;
   markPasswordChanged: (email: string) => void;
+  refreshUsers: () => Promise<boolean>;
 
   // Audit Log
   auditLog: AuditEntry[];
@@ -256,14 +257,22 @@ function mapBackendUser(u: any): AppUser {
     admin: "Admin",
   };
   const roleLabel = roleMap[String(u.role).toLowerCase()] ?? "Student";
+  const rawDept = u.departmentId;
+  const deptId =
+    typeof rawDept === "object" && rawDept
+      ? String(rawDept._id || rawDept.id || rawDept.code || "")
+      : rawDept
+        ? String(rawDept)
+        : undefined;
+
   return {
     id: String(u._id || u.id),
-    departmentId: u.departmentId ? String(u.departmentId).toUpperCase() : undefined,
+    departmentId: deptId ? String(deptId).toLowerCase() : undefined,
     name: u.name,
     email: u.email,
     role: roleLabel,
     status: "active",
-    passwordStatus: "changed",
+    passwordStatus: u.mustChangePassword ? "default" : "changed",
     joinedAt: u.createdAt
       ? new Date(u.createdAt).toISOString().split("T")[0]
       : new Date().toISOString().split("T")[0],
@@ -1071,6 +1080,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         addUser,
         removeUser,
         toggleUserStatus,
+        refreshUsers,
         addSubject,
         deleteSubject,
         updateSyllabus,

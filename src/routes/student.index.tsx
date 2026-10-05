@@ -173,51 +173,57 @@ function UpcomingQuizzes({ subjects }: { subjects: any[] }) {
 
   return (
     <Card title="Upcoming Quizzes">
-      <ul className="space-y-2">
-        {upcoming.map((q, i) => (
-          <motion.li
-            key={q.id}
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.07, duration: 0.2 }}
-            className={cn(
-              "flex items-center gap-3 rounded-xl border p-3 transition",
-              q.urgency === "urgent"
-                ? "quiz-urgent"
-                : q.urgency === "soon"
-                  ? "quiz-soon"
-                  : "border-border bg-background hover:bg-accent/30",
-            )}
-          >
-            <span className="text-xl">{q.icon}</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">{q.title}</div>
-              <div
-                className={cn(
-                  "text-[11px] font-semibold",
-                  q.urgency === "urgent"
-                    ? "text-danger"
-                    : q.urgency === "soon"
-                      ? "text-gold"
-                      : "text-muted-foreground",
-                )}
-              >
-                {q.due}
+      {upcoming.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">
+          No upcoming quizzes yet. Quizzes created by faculty will appear here.
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {upcoming.map((q, i) => (
+            <motion.li
+              key={q.id}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.07, duration: 0.2 }}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border p-3 transition",
+                q.urgency === "urgent"
+                  ? "quiz-urgent"
+                  : q.urgency === "soon"
+                    ? "quiz-soon"
+                    : "border-border bg-background hover:bg-accent/30",
+              )}
+            >
+              <span className="text-xl">{q.icon}</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-foreground">{q.title}</div>
+                <div
+                  className={cn(
+                    "text-[11px] font-semibold",
+                    q.urgency === "urgent"
+                      ? "text-danger"
+                      : q.urgency === "soon"
+                        ? "text-gold"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {q.due}
+                </div>
               </div>
-            </div>
-            <Link to="/student/quizzes">
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                type="button"
-                className="flex items-center gap-1 rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet transition hover:bg-violet/20"
-              >
-                <Play className="h-3 w-3" /> Start
-              </motion.button>
-            </Link>
-          </motion.li>
-        ))}
-      </ul>
+              <Link to="/student/quizzes">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  type="button"
+                  className="flex items-center gap-1 rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet transition hover:bg-violet/20"
+                >
+                  <Play className="h-3 w-3" /> Start
+                </motion.button>
+              </Link>
+            </motion.li>
+          ))}
+        </ul>
+      )}
     </Card>
   );
 }

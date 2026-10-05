@@ -1,7 +1,12 @@
 import express from "express";
 import { Subject, User, AuditLog } from "../models/index.js";
 import { authenticate, requireRole } from "../middleware/auth.js";
-import { isSuperAdmin, getDepartmentId, scopedResourceFilter } from "../middleware/department.js";
+import {
+  isSuperAdmin,
+  getDepartmentId,
+  scopedResourceFilter,
+  resolveDepartmentId,
+} from "../middleware/department.js";
 
 const router = express.Router();
 
@@ -51,14 +56,17 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
     const { name, code, semester, facultyId, syllabus } = req.body;
     if (!name || !code || !semester)
       return res.status(400).json({ error: "Name, code, and semester are required." });
-    const requestedDepartment = req.body.departmentId
-      ? String(req.body.departmentId).trim().toUpperCase()
-      : null;
-    const departmentId = isSuperAdmin(req.user) ? requestedDepartment : getDepartmentId(req.user);
+
+    const requestedDeptRaw = req.body.departmentId ? String(req.body.departmentId).trim() : null;
+    const callerDeptRaw = getDepartmentId(req.user);
+    const targetDeptRaw = isSuperAdmin(req.user) ? requestedDeptRaw || callerDeptRaw : callerDeptRaw;
+
+    const departmentId = await resolveDepartmentId(targetDeptRaw);
     if (!departmentId)
       return res
         .status(400)
         .json({ error: "departmentId is required for department-scoped subjects." });
+
     if (facultyId && !(await validateFaculty(facultyId, departmentId)))
       return res
         .status(403)
@@ -69,6 +77,7 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
       return res
         .status(400)
         .json({ error: `Subject with code '${normalizedCode}' already exists.` });
+
     const subject = await Subject.create({
       name: name.trim(),
       code: normalizedCode,
@@ -77,6 +86,7 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
       facultyId: facultyId || null,
       syllabus: syllabus || "",
     });
+
     await AuditLog.create({
       actorId: req.user.id || req.user._id,
       action: "CREATE_SUBJECT",
@@ -95,6 +105,7 @@ router.put("/:id", authenticate, requireRole("admin", "faculty"), async (req, re
     if (!filter) return;
     const target = await Subject.findOne(filter);
     if (!target) return res.status(404).json({ error: "Subject not found." });
+
     const { name, code, semester, facultyId, syllabus } = req.body;
     const updates = {};
     if (name) updates.name = name.trim();
@@ -108,6 +119,7 @@ router.put("/:id", authenticate, requireRole("admin", "faculty"), async (req, re
       updates.facultyId = facultyId || null;
     }
     if (syllabus !== undefined) updates.syllabus = syllabus;
+
     const updated = await Subject.findOneAndUpdate(filter, updates, { new: true }).populate(
       "facultyId",
       "name email role departmentId",
@@ -130,6 +142,7 @@ async function updateEnrollment(req, res, operation) {
   const studentId = userId || req.user._id || req.user.id;
   const subject = await Subject.findOne(filter);
   if (!subject) return res.status(404).json({ error: "Subject not found." });
+
   const student = await User.findOne({
     _id: studentId,
     role: "student",
@@ -137,17 +150,20 @@ async function updateEnrollment(req, res, operation) {
   }).select("_id");
   if (!student)
     return res.status(403).json({ error: "Student must belong to the subject's department." });
+
   const update =
     operation === "enroll"
       ? { $addToSet: { enrolledStudentIds: studentId } }
       : { $pull: { enrolledStudentIds: studentId } };
   return res.json(await Subject.findOneAndUpdate(filter, update, { new: true }));
 }
+
 router.post("/:id/enroll", authenticate, (req, res) =>
   updateEnrollment(req, res, "enroll").catch(() =>
     res.status(500).json({ error: "Failed to enroll student." }),
   ),
 );
+
 router.post("/:id/unenroll", authenticate, (req, res) =>
   updateEnrollment(req, res, "unenroll").catch(() =>
     res.status(500).json({ error: "Failed to unenroll student." }),

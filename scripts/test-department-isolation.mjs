@@ -2,7 +2,7 @@ import "dotenv/config";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
-import { User } from "../models/index.js";
+import { User, Department } from "../models/index.js";
 import { JWT_SECRET } from "../middleware/auth.js";
 
 const API = process.env.API_BASE || "http://127.0.0.1:5000";
@@ -50,10 +50,18 @@ function assert(condition, message) {
 
 await mongoose.connect(process.env.MONGO_URI);
 try {
-  let [cseHod, itHod] = await Promise.all([
-    User.findOne({ role: "admin", departmentId: "CSE" }).select("_id name email role departmentId"),
-    User.findOne({ role: "admin", departmentId: "IT" }).select("_id name email role departmentId"),
+  const [cseDept, itDept] = await Promise.all([
+    Department.findOne({ code: "CSE" }),
+    Department.findOne({ code: "IT" }),
   ]);
+  assert(cseDept, "CSE Department not found in database.");
+  assert(itDept, "IT Department not found in database.");
+
+  let [cseHod, itHod] = await Promise.all([
+    User.findOne({ role: "admin", departmentId: cseDept._id }).select("_id name email role departmentId"),
+    User.findOne({ role: "admin", departmentId: itDept._id }).select("_id name email role departmentId"),
+  ]);
+
   const fixtureIds = [];
   if (!cseHod || !itHod) {
     const passwordHash = await bcrypt.hash(`Isolation-${runId}-temporary`, 10);
@@ -63,21 +71,24 @@ try {
         email: fixtureEmails[0],
         passwordHash,
         role: "admin",
-        departmentId: "CSE",
+        departmentId: cseDept._id,
       },
       {
         name: "IT HOD Isolation Fixture",
         email: fixtureEmails[1],
         passwordHash,
         role: "admin",
-        departmentId: "IT",
+        departmentId: itDept._id,
       },
     ]);
     fixtureIds.push(...fixtures.map((user) => user._id));
-    [cseHod, itHod] = fixtures;
+    if (!cseHod) cseHod = fixtures[0];
+    if (!itHod) itHod = fixtures[1];
   }
   assert(cseHod, "Unable to provision a CSE department-scoped admin/HOD fixture.");
   assert(itHod, "Unable to provision an IT department-scoped admin/HOD fixture.");
+
+  const cseDeptIdStr = String(cseDept._id);
 
   console.log(
     `Using ${cseHod.departmentId} scoped admin and ${itHod.departmentId} scoped admin fixtures.`,
@@ -88,7 +99,7 @@ try {
   assert(usersBefore.status === 200, `CSE Users request failed: ${usersBefore.status}`);
   assert(Array.isArray(usersBefore.body), "CSE Users response is not an array.");
   assert(
-    usersBefore.body.every((user) => user.departmentId === "CSE"),
+    usersBefore.body.every((user) => String(user.departmentId).toLowerCase() === cseDeptIdStr.toLowerCase()),
     "CSE Users response contains a non-CSE account.",
   );
   assert(
@@ -111,12 +122,12 @@ try {
   const subjects = await request("/api/subjects", cseToken);
   assert(subjects.status === 200, `CSE Subjects request failed: ${subjects.status}`);
   assert(
-    subjects.body.every((subject) => subject.departmentId === "CSE"),
+    subjects.body.every((subject) => String(subject.departmentId).toLowerCase() === cseDeptIdStr.toLowerCase()),
     "CSE Subjects response contains a non-CSE subject.",
   );
   assert(
     subjects.body.every(
-      (subject) => !subject.facultyId || subject.facultyId.departmentId === "CSE",
+      (subject) => !subject.facultyId || String(subject.facultyId.departmentId).toLowerCase() === cseDeptIdStr.toLowerCase(),
     ),
     "CSE Subjects response populated a non-CSE faculty member.",
   );
@@ -131,11 +142,16 @@ try {
       password: "Temp-password-123",
     }),
   });
+  console.log("Created user response body:", created.body);
   assert(
     created.status === 201,
     `CSE user creation failed: ${created.status} ${JSON.stringify(created.body)}`,
   );
-  assert(created.body.departmentId === "CSE", "Created CSE user was not assigned to CSE.");
+  assert(
+    String(created.body.departmentId).toLowerCase() === cseDeptIdStr.toLowerCase(),
+    "Created CSE user was not assigned to CSE.",
+  );
+
   const loginResponse = await fetch(`${API}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -145,7 +161,7 @@ try {
   const loginBody = await loginResponse.json();
   assert(loginResponse.status === 200, `Created user login failed: ${loginResponse.status}`);
   assert(
-    loginBody.user?.departmentId === "CSE",
+    String(loginBody.user?.departmentId).toLowerCase() === cseDeptIdStr.toLowerCase(),
     "Login response did not carry the CSE departmentId.",
   );
 

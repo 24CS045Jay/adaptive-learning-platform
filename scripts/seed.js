@@ -1,68 +1,87 @@
 import "dotenv/config";
-import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { User } from "../models/index.js";
+import { User, Department } from "../models/index.js";
+import { connectSupabase } from "../db/supabase.js";
 
 /**
- * Bootstrap Seed Script for Production / Fresh Deployments
- *
- * Seeds ONLY the single primary Admin account needed to manage the system.
- * Safe and idempotent (skips if an admin account already exists).
+ * Bootstrap Seed Script for Supabase
+ * Seeds primary departments & accounts needed to manage the system.
  */
-async function seedAdmin() {
-  const uri = process.env.MONGO_URI || "mongodb://localhost:27017/ai_tutor";
-  console.log("[Seed Admin] Connecting to MongoDB...");
+async function seedSupabase() {
+  console.log("[Seed] Connecting to Supabase...");
+  await connectSupabase();
 
   try {
-    await mongoose.connect(uri);
-    console.log("[Seed Admin] Connected successfully to MongoDB.");
-
-    let adminEmail = process.env.SEED_ADMIN_EMAIL;
-    let adminPassword = process.env.SEED_ADMIN_PASSWORD;
-
-    if (!adminEmail || !adminPassword) {
-      console.warn(
-        "\n[SECURITY WARNING] SEED_ADMIN_EMAIL or SEED_ADMIN_PASSWORD is not set in process.env!\n" +
-          "Falling back to default credentials: 'admin@charusat.edu.in' / 'admin123'\n" +
-          "PLEASE CHANGE THE ADMIN PASSWORD IMMEDIATELY AFTER FIRST LOGIN!\n",
-      );
-      adminEmail = adminEmail || "admin@charusat.edu.in";
-      adminPassword = adminPassword || "admin123";
+    // 1. Seed default department if not present
+    let dept = await Department.findOne({ code: "CE" });
+    if (!dept) {
+      dept = await Department.create({
+        name: "Computer Engineering",
+        code: "CE",
+        institute: "CSPIT",
+        active: true,
+      });
+      console.log(`[Seed] Created department: CE (${dept.id})`);
     }
 
-    // Check if admin already exists
-    const existingAdmin = await User.findOne({
-      $or: [{ email: adminEmail.toLowerCase() }, { role: "admin" }],
-    });
+    // 2. Seed Admin
+    const adminEmail = (process.env.SEED_ADMIN_EMAIL || "admin@charusat.edu.in").toLowerCase().trim();
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || "password123";
 
-    if (existingAdmin) {
-      console.log(
-        `[Seed Admin] Admin account already exists: ${existingAdmin.email} (ID: ${existingAdmin._id}). Skipping creation.`,
-      );
-      process.exit(0);
+    const existingAdmin = await User.findOne({ email: adminEmail });
+    if (!existingAdmin) {
+      const passwordHash = await bcrypt.hash(adminPassword, await bcrypt.genSalt(10));
+      const newAdmin = await User.create({
+        name: "System Admin",
+        email: adminEmail,
+        passwordHash,
+        role: "admin",
+        departmentId: dept.id,
+        mustChangePassword: false,
+      });
+      console.log(`[Seed] Created Admin account: ${newAdmin.email}`);
+    } else {
+      console.log(`[Seed] Admin account already exists: ${existingAdmin.email}`);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(adminPassword, salt);
+    // 3. Seed Faculty
+    const facultyEmail = "faculty@charusat.edu.in";
+    const existingFaculty = await User.findOne({ email: facultyEmail });
+    if (!existingFaculty) {
+      const passwordHash = await bcrypt.hash("password123", await bcrypt.genSalt(10));
+      await User.create({
+        name: "Prof. Sharma (CE)",
+        email: facultyEmail,
+        passwordHash,
+        role: "faculty",
+        departmentId: dept.id,
+        mustChangePassword: false,
+      });
+      console.log(`[Seed] Created Faculty account: ${facultyEmail}`);
+    }
 
-    const newAdmin = await User.create({
-      name: "System Admin",
-      email: adminEmail.toLowerCase().trim(),
-      passwordHash,
-      role: "admin",
-      departmentId: "CSE",
-    });
+    // 4. Seed Student
+    const studentEmail = "student@charusat.edu.in";
+    const existingStudent = await User.findOne({ email: studentEmail });
+    if (!existingStudent) {
+      const passwordHash = await bcrypt.hash("password123", await bcrypt.genSalt(10));
+      await User.create({
+        name: "Jay Ladva",
+        email: studentEmail,
+        passwordHash,
+        role: "student",
+        departmentId: dept.id,
+        mustChangePassword: false,
+      });
+      console.log(`[Seed] Created Student account: ${studentEmail}`);
+    }
 
-    console.log(`\n[Seed Admin Success] Created initial admin account!`);
-    console.log(`  - Name: ${newAdmin.name}`);
-    console.log(`  - Email: ${newAdmin.email}`);
-    console.log(`  - Role: ${newAdmin.role}\n`);
-
+    console.log("\n[Seed Complete] Supabase database seeded successfully!\n");
     process.exit(0);
   } catch (error) {
-    console.error("[Seed Admin Error] Failed to seed admin account:", error);
+    console.error("[Seed Error]:", error.message || error);
     process.exit(1);
   }
 }
 
-seedAdmin();
+seedSupabase();

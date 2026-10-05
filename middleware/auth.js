@@ -18,7 +18,7 @@ export async function authenticate(req, res, next) {
           id: headerUserId || "dev_user",
           email: "admin@charusat.edu.in",
           role: String(headerUserRole).toLowerCase(),
-          departmentId: headerDepartmentId ? String(headerDepartmentId).toUpperCase() : undefined,
+          departmentId: headerDepartmentId ? String(headerDepartmentId).trim() : undefined,
           name: "Admin User",
         };
         return next();
@@ -32,7 +32,7 @@ export async function authenticate(req, res, next) {
         id: headerUserId || "local_admin",
         email: "admin@charusat.edu.in",
         role: (headerUserRole || "admin").toLowerCase(),
-        departmentId: headerDepartmentId ? String(headerDepartmentId).toUpperCase() : undefined,
+        departmentId: headerDepartmentId ? String(headerDepartmentId).trim() : undefined,
         name: "Admin User",
       };
       return next();
@@ -50,7 +50,7 @@ export async function authenticate(req, res, next) {
         email: "admin@charusat.edu.in",
         role: String(req.headers["x-user-role"]).toLowerCase(),
         departmentId: req.headers["x-department-id"]
-          ? String(req.headers["x-department-id"]).toUpperCase()
+          ? String(req.headers["x-department-id"]).trim()
           : undefined,
         name: "Admin User",
       };
