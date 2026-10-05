@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
+  History,
   UserPlus,
   BookOpen,
   CheckSquare,
@@ -18,8 +19,8 @@ import { AppShell, type NavItem } from "@/components/app-shell";
 
 const nav: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/users", label: "Users", icon: UserPlus },
-  { to: "/admin/users/records", label: "Users Record", icon: Users },
+  { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/user-logs", label: "User Logs", icon: History },
   { to: "/admin/subjects", label: "Courses & Subjects", icon: BookOpen },
   { to: "/admin/approvals", label: "Content Approvals", icon: CheckSquare },
   { to: "/admin/knowledge", label: "Knowledge Base", icon: Database },

@@ -167,6 +167,8 @@ export async function createUserWithDefaultPassword(
         generatedPassword: data.generatedPassword || dummyPassword,
         emailSent: data.emailSent ?? true,
       };
+    } else if (response.status === 400 && data.error) {
+      return { ok: false, error: data.error };
     }
   } catch (err: any) {
     console.warn("[AuthStore] Backend API unreachable, falling back to direct Supabase write:", err.message);
@@ -181,7 +183,7 @@ export async function createUserWithDefaultPassword(
       .maybeSingle();
 
     if (existing) {
-      return { ok: false, error: "A user with this email already exists in Supabase." };
+      return { ok: false, error: "A user with this email already exists in database." };
     }
 
     const salt = bcrypt.genSaltSync(10);
@@ -194,18 +196,38 @@ export async function createUserWithDefaultPassword(
       role: role.toLowerCase(),
       department_id: departmentId || "CSE",
       must_change_password: true,
-      status: "active",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
 
     if (error) {
       console.error("[AuthStore] Supabase insert error:", error);
-      return { ok: false, error: error.message || "Failed to create user in Supabase." };
+      return { ok: false, error: error.message || "Failed to create user in database." };
     }
 
     appendAudit(actorEmail, "CREATE_USER", `${cleanEmail} (${role})`);
-    return { ok: true, generatedPassword: dummyPassword, emailSent: false };
+
+    // Dispatch welcome email via backend mailer service
+    let emailSent = false;
+    try {
+      const mailRes = await fetch(`${API_BASE}/api/users/send-welcome-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          toEmail: cleanEmail,
+          userName: name.trim(),
+          role: role.toLowerCase(),
+          rawPassword: dummyPassword,
+          department: departmentId || "CSE",
+        }),
+      });
+      const mailData = await mailRes.json().catch(() => ({}));
+      emailSent = mailData.success ?? mailRes.ok;
+    } catch (mailErr) {
+      console.warn("[AuthStore] Direct welcome email send error:", mailErr);
+    }
+
+    return { ok: true, generatedPassword: dummyPassword, emailSent };
   } catch (dbErr: any) {
     console.error("[AuthStore] Supabase user creation error:", dbErr);
     return { ok: false, error: dbErr.message || "Database connection error." };
@@ -316,7 +338,6 @@ export async function registerUser(
         role: role.toLowerCase(),
         department_id: departmentId || "CSE",
         must_change_password: false,
-        status: "active",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })

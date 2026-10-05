@@ -27,21 +27,28 @@ const configuredRagServiceUrl = process.env.RAG_SERVICE_URL || "http://localhost
 const RAG_SERVICE_URL = /^https?:\/\//i.test(configuredRagServiceUrl)
   ? configuredRagServiceUrl
   : `https://${configuredRagServiceUrl}`;
-const allowedOrigins = (
-  process.env.CORS_ORIGINS ||
-  process.env.FRONTEND_URL ||
-  "http://localhost:5173"
-)
+const defaultOrigins = [
+  "http://localhost:8080",
+  "http://localhost:8081",
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://127.0.0.1:8080",
+  "http://127.0.0.1:8081",
+  "http://127.0.0.1:5173",
+];
+
+const customOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || "")
   .split(",")
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...customOrigins]));
 
 // Middlewares
 app.use(
   cors({
     origin(origin, callback) {
-      // Allow server-to-server requests and local CLI/test calls without an Origin header.
-      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+      if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin) || origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:") || origin.endsWith(".vercel.app")) {
         return callback(null, true);
       }
       return callback(new Error(`CORS origin not allowed: ${origin}`));

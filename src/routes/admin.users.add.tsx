@@ -75,11 +75,11 @@ function AddUserPage() {
         subtitle="Create a department-scoped student, faculty member, or admin account."
         action={
           <Link
-            to="/admin/users/records"
+            to="/admin/users"
             className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3.5 py-2 text-sm font-semibold text-muted-foreground transition hover:border-violet/40 hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to Users Record
+            Back to Users Management
           </Link>
         }
       />
@@ -103,10 +103,10 @@ function AddUserPage() {
 
             <div className="mt-4 flex items-center justify-end border-t border-emerald-500/20 pt-3">
               <Link
-                to="/admin/users/records"
+                to="/admin/users"
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
               >
-                View in Users Record
+                Back to Users
                 <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             </div>
