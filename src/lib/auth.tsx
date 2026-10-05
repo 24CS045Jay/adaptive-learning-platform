@@ -10,6 +10,7 @@ import {
   directSupabaseLogin,
   MOCK_USERS,
 } from "./auth-store";
+import { supabase } from "./supabase";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
