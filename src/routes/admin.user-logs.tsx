@@ -385,7 +385,7 @@ function UserLogsPage() {
               <option value="all">All Departments</option>
               {DEPARTMENTS.map((d) => (
                 <option key={d.code} value={d.code}>
-                  {d.name} ({d.code})
+                  {d.label} ({d.code})
                 </option>
               ))}
             </select>

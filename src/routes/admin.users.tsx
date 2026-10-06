@@ -277,7 +277,7 @@ function UserManagementPage() {
         const parsed: ParsedUserRow[] = rows.map((r, idx) => {
           const rawName = r["Full Name"] || r["Name"] || r["name"] || r["full_name"] || r["Student Name"] || r["Faculty Name"] || "";
           const rawEmail = r["Institutional Email"] || r["Email"] || r["email"] || r["email_address"] || "";
-          const rawRole = String(r["Role"] || r["role"] || "Student").toLowerCase().includes("fac") ? "Faculty" : "Student";
+          const rawRole: AccountRole = String(r["Role"] || r["role"] || "Student").toLowerCase().includes("fac") ? "Faculty" : "Student";
           
           const rawStudentId = r["Student ID"] || r["Student Id"] || r["Roll Number"] || r["Roll No"] || r["roll_no"] || r["student_id"] || (rawEmail.match(/^([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})/)?.[1] || "");
           const rawFacultyId = r["Faculty ID"] || r["Faculty Id"] || r["Employee ID"] || r["Emp ID"] || r["emp_id"] || r["faculty_id"] || "";
@@ -297,7 +297,7 @@ function UserManagementPage() {
             endYear: rawEnd,
             batch: `${rawStart}-${rawEnd}`,
             semester: rawSem,
-            status: "pending",
+            status: "pending" as const,
           };
         }).filter((r) => r.name && r.email);
 
@@ -487,13 +487,10 @@ function UserManagementPage() {
     setRemoveLoading(true);
     setRemoveError(null);
 
-    const targetDept = isSuperAdmin ? undefined : adminDeptCode;
     const res = await deleteUserAccount(
       selectedUserToRemove.id,
-      selectedUserToRemove.email,
       adminUser?.email ?? "admin@charusat.edu.in",
       adminUser?.token,
-      targetDept,
     );
 
     setRemoveLoading(false);
@@ -778,7 +775,7 @@ function UserManagementPage() {
                   >
                     {DEPARTMENTS.map((dept) => (
                       <option key={dept.code} value={dept.code}>
-                        {dept.name} ({dept.code})
+                        {dept.label} ({dept.code})
                       </option>
                     ))}
                   </select>

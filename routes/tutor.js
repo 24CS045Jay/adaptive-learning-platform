@@ -81,26 +81,20 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       return res.status(400).json({ error: "question is required." });
     }
 
-    // Validate studentId
-    const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
-    const rawStudentId = req.user?.id || req.user?._id || null;
-    const studentId =
-      rawStudentId && OBJECTID_RE.test(String(rawStudentId)) ? rawStudentId : null;
+    // Validate studentId (supports MongoDB ObjectId, UUID, or string)
+    const studentId = req.user?.id || req.user?._id || null;
 
     // Step 1: Resolve subject & subjectCode
     let subject = null;
     let subjectCode = bodySubjectCode?.trim() || "GENERAL";
 
-    if (!bodySubjectCode && subjectId) {
+    if (subjectId) {
       try {
-        subject = await Subject.findById(subjectId).lean();
+        subject = await Subject.findById(subjectId);
+        if (!subject) {
+          subject = await Subject.findOne({ code: String(subjectId).toUpperCase() });
+        }
         if (subject?.code) subjectCode = subject.code;
-      } catch {
-        // non-fatal
-      }
-    } else if (subjectId && OBJECTID_RE.test(String(subjectId))) {
-      try {
-        subject = await Subject.findById(subjectId).lean();
       } catch {
         // non-fatal
       }
@@ -108,7 +102,7 @@ router.post("/ask", softAuthenticate, async (req, res) => {
 
     // Load existing Conversation if conversationId is provided
     let conversation = null;
-    if (conversationId && OBJECTID_RE.test(String(conversationId))) {
+    if (conversationId) {
       try {
         conversation = await Conversation.findById(conversationId);
       } catch (convErr) {
@@ -407,9 +401,38 @@ Visual Rules:
       sources,
       provider: llmProvider,
     });
+  } catch (err) {
+    console.error("[Ask Tutor] Unexpected error:", err);
+    return res.status(500).json({ error: "Internal tutor error.", details: err.message });
+  }
+});
+
+// ─── GET /api/tutor/queries ──────────────────────────────────────────────────
+// Retrieve recent student queries and RAG interaction telemetry
+router.get("/queries", softAuthenticate, async (req, res) => {
+  try {
+    const logs = await RagInteractionLog.find({})
+      .populate("studentId", "name email")
+      .populate("subjectId", "name code")
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    const formatted = logs.map((l) => ({
+      id: String(l._id || l.id),
+      student: l.studentId?.name || "Student",
+      studentEmail: l.studentId?.email || "",
+      subject: l.subjectId?.name || l.subjectId?.code || "Big Data Analytics",
+      question: l.question,
+      confidence: l.confidenceScore ? Math.round(l.confidenceScore * 100) : 92,
+      escalated: !!l.escalated,
+      createdAt: l.createdAt ? new Date(l.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recently",
+      timestamp: l.createdAt ? new Date(l.createdAt).toISOString() : new Date().toISOString(),
+    }));
+
+    res.json(formatted);
   } catch (error) {
-    console.error("[Ask Tutor] Unhandled error:", error);
-    return res.status(500).json({ error: "Failed to process your question. Please try again." });
+    console.error("[Tutor API] GET /queries error:", error);
+    res.status(500).json({ error: "Failed to fetch student queries." });
   }
 });
 

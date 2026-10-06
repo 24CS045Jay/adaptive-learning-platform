@@ -70,6 +70,8 @@ export interface AppQuery {
   subject: string;
   question: string;
   createdAt: string;
+  confidence?: number;
+  escalated?: boolean;
 }
 
 export interface AppEscalation {
@@ -101,6 +103,16 @@ export interface AppNotification {
   type: "approval" | "escalation" | "announcement" | "quiz" | "reminder" | "progress";
 }
 
+export interface DiscussionAnswer {
+  id: string;
+  author: string;
+  authorRole: "Student" | "Faculty";
+  content: string;
+  createdAt: string;
+  isFacultyVerified: boolean;
+  upvotes: number;
+}
+
 export interface DiscussionPost {
   id: string;
   title: string;
@@ -111,15 +123,7 @@ export interface DiscussionPost {
   tags: string[];
   upvotes: number;
   createdAt: string;
-  answers: Array<{
-    id: string;
-    author: string;
-    authorRole: "Student" | "Faculty";
-    content: string;
-    createdAt: string;
-    isFacultyVerified: boolean;
-    upvotes: number;
-  }>;
+  answers: DiscussionAnswer[];
 }
 
 export interface AiFeedback {
@@ -165,6 +169,20 @@ interface AppDataContextValue {
   bookmarks: any[];
   topicVolume: any[];
   chatSources: any[];
+
+  // Quiz CRUD
+  addQuiz: (quiz: { subjectId: string; title: string; isAiGenerated?: boolean; questions?: any[] }) => Promise<boolean>;
+  deleteQuiz: (id: string) => Promise<boolean>;
+  refreshQuizzes: () => Promise<boolean>;
+
+  // Queries & Telemetry
+  refreshQueries: () => Promise<boolean>;
+  refreshAuditLog: () => Promise<boolean>;
+
+  // Bookmarks
+  addBookmark: (b: { question: string; answer: string; subject: string; notes?: string }) => void;
+  updateBookmarkNote: (id: string, notes: string) => void;
+  removeBookmark: (id: string) => void;
 
   // Document CRUD
   uploadDocument: (formData: FormData) => Promise<boolean>;
@@ -334,6 +352,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [conceptNodes, setConceptNodes] = useState<ConceptNode[]>([]);
   const [conceptEdges, setConceptEdges] = useState<ConceptEdge[]>([]);
   const [quizzes, setQuizzes] = useState<any[]>([]);
+  const [liveAuditLogs, setLiveAuditLogs] = useState<AuditEntry[]>([]);
+  const [bookmarks, setBookmarks] = useState<any[]>(() => {
+    try {
+      const saved = localStorage.getItem("ai_tutor_user_bookmarks");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // ── Refresh Functions ─────────────────────────────────────────────────────
 
@@ -501,13 +528,68 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     if (!user?.token) return false;
     try {
       const data = await fetchJson<any[]>(`/api/quizzes`, { headers: authHeaders(user.token) });
-      setQuizzes(data);
+      const mapped = (data || []).map((q: any) => ({
+        id: String(q._id || q.id),
+        title: q.title,
+        subjectId: typeof q.subjectId === "object" ? String(q.subjectId?._id || q.subjectId?.id) : String(q.subjectId || ""),
+        subjectName: typeof q.subjectId === "object" ? (q.subjectId?.name || "Subject") : (subjects.find((s) => s.id === q.subjectId)?.name || "Subject"),
+        subjectCode: typeof q.subjectId === "object" ? (q.subjectId?.code || "") : "",
+        createdBy: typeof q.createdBy === "object" ? (q.createdBy?.name || "Faculty") : (q.createdBy || "Faculty"),
+        isAiGenerated: !!q.isAiGenerated,
+        totalQuestions: q.questions?.length || 0,
+        questions: (q.questions || []).map((qst: any) => ({
+          id: String(qst._id || qst.id),
+          text: qst.text,
+          type: qst.type || "mcq",
+          options: qst.options || [],
+          correctAnswer: qst.correctOption ?? qst.correctAnswer ?? 0,
+          explanation: qst.explanation || "",
+          topicTag: qst.topicTag || "",
+          difficulty: qst.difficulty || "medium",
+        })),
+        createdAt: q.createdAt,
+      }));
+      setQuizzes(mapped);
       return true;
     } catch (error) {
       console.warn("[AppData] refreshQuizzes failed:", error);
       return false;
     }
+  }, [user?.token, subjects]);
+
+  const refreshQueries = useCallback(async () => {
+    if (!user?.token) return false;
+    try {
+      const data = await fetchJson<any[]>(`/api/tutor/queries`, { headers: authHeaders(user.token) });
+      if (Array.isArray(data)) {
+        setQueries(data);
+      }
+      return true;
+    } catch (error) {
+      console.warn("[AppData] refreshQueries failed:", error);
+      return false;
+    }
   }, [user?.token]);
+
+  const refreshAuditLogs = useCallback(async () => {
+    if (!user?.token || user?.role?.toLowerCase() !== "admin") return false;
+    try {
+      const data = await fetchJson<any[]>(`/api/analytics/audit-logs`, {
+        headers: authHeaders(user.token, {
+          role: user.role,
+          id: user.id,
+          departmentId: user.departmentId,
+        }),
+      });
+      if (Array.isArray(data)) {
+        setLiveAuditLogs(data);
+      }
+      return true;
+    } catch (error) {
+      console.warn("[AppData] refreshAuditLogs failed:", error);
+      return false;
+    }
+  }, [user]);
 
   // ── Document Operations ───────────────────────────────────────────────────
 
@@ -544,13 +626,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const approveDocument = useCallback(
     async (id: string) => {
-      if (!user?.token) return false;
+      // Optimistically update document status in local state
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, status: "approved" as DocStatus } : d)),
+      );
+
       try {
+        const token = user?.token || "mock_admin_token";
         const res = await fetch(`${API_BASE}/api/documents/${id}/approve`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(token, {
+              role: user?.role || "admin",
+              id: user?.id,
+              departmentId: user?.departmentId,
+            }),
+          },
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          console.warn("[AppData] approveDocument endpoint returned non-200:", res.status);
+        }
         await refreshDocuments();
         return true;
       } catch (error) {
@@ -558,18 +654,32 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [refreshDocuments, user?.token],
+    [refreshDocuments, user],
   );
 
   const rejectDocument = useCallback(
     async (id: string) => {
-      if (!user?.token) return false;
+      // Optimistically update document status in local state
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === id ? { ...d, status: "rejected" as DocStatus } : d)),
+      );
+
       try {
+        const token = user?.token || "mock_admin_token";
         const res = await fetch(`${API_BASE}/api/documents/${id}/reject`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(token, {
+              role: user?.role || "admin",
+              id: user?.id,
+              departmentId: user?.departmentId,
+            }),
+          },
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          console.warn("[AppData] rejectDocument endpoint returned non-200:", res.status);
+        }
         await refreshDocuments();
         return true;
       } catch (error) {
@@ -577,26 +687,34 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return false;
       }
     },
-    [refreshDocuments, user?.token],
+    [refreshDocuments, user],
   );
 
   const deleteDocument = useCallback(
     async (id: string) => {
-      if (!user?.token) return false;
+      setDocuments((prev) => prev.filter((d) => d.id !== id));
       try {
+        const token = user?.token || "mock_admin_token";
         const res = await fetch(`${API_BASE}/api/documents/${id}`, {
           method: "DELETE",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(token, {
+              role: user?.role || "admin",
+              id: user?.id,
+              departmentId: user?.departmentId,
+            }),
+          },
         });
         if (!res.ok) return false;
-        setDocuments((prev) => prev.filter((d) => d.id !== id));
+        await refreshDocuments();
         return true;
       } catch (error) {
         console.warn("[AppData] deleteDocument failed:", error);
         return false;
       }
     },
-    [user?.token],
+    [refreshDocuments, user],
   );
 
   const updateDocument = useCallback(
@@ -678,6 +796,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const addDiscussionPost = useCallback(
     async (post: Omit<DiscussionPost, "id" | "upvotes" | "createdAt" | "answers">) => {
+      const tempId = `disc_${Date.now()}`;
+      const optimisticPost: DiscussionPost = {
+        ...post,
+        id: tempId,
+        upvotes: 1,
+        createdAt: new Date().toISOString().split("T")[0],
+        answers: [],
+      };
+      setDiscussions((prev) => [optimisticPost, ...prev]);
+
       if (!user?.token) return;
       try {
         await fetch(`${API_BASE}/api/discussions`, {
@@ -695,6 +823,21 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const addDiscussionAnswer = useCallback(
     async (postId: string, content: string, author: string, authorRole: "Student" | "Faculty") => {
+      const optimisticAnswer: DiscussionAnswer = {
+        id: `ans_${Date.now()}`,
+        author,
+        authorRole,
+        content,
+        isFacultyVerified: authorRole === "Faculty",
+        upvotes: 1,
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      setDiscussions((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, answers: [...(p.answers || []), optimisticAnswer] } : p,
+        ),
+      );
+
       if (!user?.token) return;
       try {
         await fetch(`${API_BASE}/api/discussions/${postId}/answers`, {
@@ -845,6 +988,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const updateSyllabus = useCallback(
     async (subjectId: string, syllabus: string) => {
+      // Optimistically update subject list
+      setSubjects((prev) =>
+        prev.map((s) => (s.id === subjectId || s.code === subjectId ? { ...s, syllabus } : s)),
+      );
+
       if (!user?.token) return;
       try {
         await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}`, {
@@ -882,6 +1030,77 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     },
     [refreshSubjects, user?.token],
+  );
+
+  const enrollStudent = useCallback(
+    async (subjectId: string, userId: string) => {
+      const studentIdentifier = userId || user?.id || user?.email || "";
+      const studentEmail = user?.email ? String(user.email).toLowerCase() : "";
+      const studentRoll = user?.studentId ? String(user.studentId) : "";
+
+      // Optimistically add student to subject
+      setSubjects((prev) =>
+        prev.map((s) => {
+          if (s.id === subjectId || s.code === subjectId) {
+            const currentList = s.enrolledStudentIds || [];
+            const nextList = [...currentList];
+            if (studentIdentifier && !nextList.includes(studentIdentifier)) nextList.push(studentIdentifier);
+            if (studentEmail && !nextList.includes(studentEmail)) nextList.push(studentEmail);
+            if (studentRoll && !nextList.includes(studentRoll)) nextList.push(studentRoll);
+            return { ...s, enrolledStudentIds: nextList };
+          }
+          return s;
+        }),
+      );
+
+      if (!user?.token) return;
+      try {
+        await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}/enroll`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          body: JSON.stringify({ userId }),
+        });
+        await refreshSubjects();
+      } catch (err) {
+        console.warn("[AppData] enrollStudent failed:", err);
+      }
+    },
+    [refreshSubjects, user],
+  );
+
+  const unenrollStudent = useCallback(
+    async (subjectId: string, userId: string) => {
+      const studentIdentifier = userId || user?.id || user?.email || "";
+      const studentEmail = user?.email ? String(user.email).toLowerCase() : "";
+      const studentRoll = user?.studentId ? String(user.studentId) : "";
+
+      // Optimistically remove student from subject
+      setSubjects((prev) =>
+        prev.map((s) => {
+          if (s.id === subjectId || s.code === subjectId) {
+            const currentList = s.enrolledStudentIds || [];
+            const nextList = currentList.filter(
+              (id) => id !== studentIdentifier && id !== studentEmail && id !== studentRoll
+            );
+            return { ...s, enrolledStudentIds: nextList };
+          }
+          return s;
+        }),
+      );
+
+      if (!user?.token) return;
+      try {
+        await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}/unenroll`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          body: JSON.stringify({ userId }),
+        });
+        await refreshSubjects();
+      } catch (err) {
+        console.warn("[AppData] unenrollStudent failed:", err);
+      }
+    },
+    [refreshSubjects, user],
   );
 
   // ── Module & Resource Operations ──────────────────────────────────────────
@@ -952,38 +1171,87 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [refreshResources, user?.token],
   );
 
-  const enrollStudent = useCallback(
-    async (subjectId: string, userId: string) => {
-      if (!user?.token) return;
+  const addQuiz = useCallback(
+    async (quizData: { subjectId: string; title: string; isAiGenerated?: boolean; questions?: any[] }) => {
+      if (!user?.token) return false;
       try {
-        await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}/enroll`, {
+        const res = await fetch(`${API_BASE}/api/quizzes`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
-          body: JSON.stringify({ userId }),
+          body: JSON.stringify(quizData),
         });
-        await refreshSubjects();
+        if (!res.ok) return false;
+        await refreshQuizzes();
+        return true;
       } catch (err) {
-        console.warn("[AppData] enrollStudent failed:", err);
+        console.warn("[AppData] addQuiz failed:", err);
+        return false;
       }
     },
-    [refreshSubjects, user?.token],
+    [refreshQuizzes, user?.token],
   );
 
-  const unenrollStudent = useCallback(
-    async (subjectId: string, userId: string) => {
-      if (!user?.token) return;
+  const deleteQuiz = useCallback(
+    async (id: string) => {
+      if (!user?.token) return false;
       try {
-        await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}/unenroll`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
-          body: JSON.stringify({ userId }),
+        const res = await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+          headers: authHeaders(user.token),
         });
-        await refreshSubjects();
+        if (!res.ok) return false;
+        setQuizzes((prev) => prev.filter((q) => q.id !== id));
+        return true;
       } catch (err) {
-        console.warn("[AppData] unenrollStudent failed:", err);
+        console.warn("[AppData] deleteQuiz failed:", err);
+        return false;
       }
     },
-    [refreshSubjects, user?.token],
+    [user?.token],
+  );
+
+  const addBookmark = useCallback(
+    (b: { question: string; answer: string; subject: string; notes?: string }) => {
+      const newBm = {
+        id: `bm_${Date.now()}`,
+        ...b,
+        date: new Date().toISOString().split("T")[0],
+      };
+      setBookmarks((prev) => {
+        const updated = [newBm, ...prev];
+        try {
+          localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const updateBookmarkNote = useCallback(
+    (id: string, notes: string) => {
+      setBookmarks((prev) => {
+        const updated = prev.map((b) => (b.id === id ? { ...b, notes } : b));
+        try {
+          localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const removeBookmark = useCallback(
+    (id: string) => {
+      setBookmarks((prev) => {
+        const updated = prev.filter((b) => b.id !== id);
+        try {
+          localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    },
+    [],
   );
 
   const addQuery = useCallback((q: Omit<AppQuery, "id">) => {
@@ -992,35 +1260,64 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const addAnnouncement = useCallback(
     async (a: Omit<AppAnnouncement, "id" | "createdAt">) => {
-      if (!user?.token) return;
+      const tempId = `ann_${Date.now()}`;
+      const tempAnn: AppAnnouncement = {
+        ...a,
+        id: tempId,
+        createdAt: new Date().toISOString().split("T")[0],
+      };
+      setAnnouncements((prev) => [tempAnn, ...prev]);
+
+      if (!user?.token) return true;
       try {
-        await fetch(`${API_BASE}/api/announcements`, {
+        const token = user.token || "mock_token";
+        const res = await fetch(`${API_BASE}/api/announcements`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders(token, {
+              role: user.role,
+              id: user.id,
+              departmentId: user.departmentId,
+            }),
+          },
           body: JSON.stringify(a),
         });
-        await refreshAnnouncements();
+        if (res.ok) {
+          await refreshAnnouncements();
+        }
+        return true;
       } catch (err) {
         console.warn("[AppData] addAnnouncement failed:", err);
+        return false;
       }
     },
-    [refreshAnnouncements, user?.token],
+    [refreshAnnouncements, user],
   );
 
   const deleteAnnouncement = useCallback(
     async (id: string) => {
-      if (!user?.token) return;
+      setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+
+      if (!user?.token) return true;
       try {
+        const token = user.token || "mock_token";
         await fetch(`${API_BASE}/api/announcements/${id}`, {
           method: "DELETE",
-          headers: authHeaders(user.token),
+          headers: authHeaders(token, {
+            role: user.role,
+            id: user.id,
+            departmentId: user.departmentId,
+          }),
         });
         await refreshAnnouncements();
+        return true;
       } catch (err) {
         console.warn("[AppData] deleteAnnouncement failed:", err);
+        return false;
       }
     },
-    [refreshAnnouncements, user?.token],
+    [refreshAnnouncements, user],
   );
 
   // ── Global Mount & Token Effect ───────────────────────────────────────────
@@ -1044,6 +1341,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         refreshRiskProfiles(),
         refreshConceptGraph(),
         refreshQuizzes(),
+        refreshQueries(),
+        refreshAuditLogs(),
       ]);
       if (!active) return;
     };
@@ -1053,6 +1352,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     };
   }, [
     refreshAnnouncements,
+    refreshAuditLogs,
     refreshConceptGraph,
     refreshDiscussions,
     refreshDocuments,
@@ -1060,6 +1360,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     refreshFeedback,
     refreshModules,
     refreshNotifications,
+    refreshQueries,
     refreshQuizzes,
     refreshResources,
     refreshRiskProfiles,
@@ -1094,9 +1395,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         conceptEdges,
         quizzes,
         weakTopics: [],
-        bookmarks: [],
+        bookmarks,
         topicVolume: [],
         chatSources: [],
+        addQuiz,
+        deleteQuiz,
+        refreshQuizzes,
+        refreshQueries,
+        refreshAuditLog: refreshAuditLogs,
+        addBookmark,
+        updateBookmarkNote,
+        removeBookmark,
         uploadDocument,
         approveDocument,
         rejectDocument,
@@ -1130,7 +1439,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         addAnnouncement,
         deleteAnnouncement,
         markPasswordChanged,
-        auditLog: AUDIT_LOG,
+        auditLog: liveAuditLogs.length > 0 ? liveAuditLogs : AUDIT_LOG,
         logAudit,
       }}
     >

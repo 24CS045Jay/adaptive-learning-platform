@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useId, useRef } from "react";
 import {
   Send,
@@ -291,11 +291,30 @@ function SourceModal({ source, onClose }: { source: SourceChip; onClose: () => v
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 function AskTutorPage() {
-  const { subjects, addQuery } = useAppData();
+  const { subjects, addQuery, refreshQueries } = useAppData();
   const { user } = useAuth();
   const id = useId();
 
-  const firstSubject = subjects[0];
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = user?.studentId ? String(user.studentId) : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return (
+      list.some((item) => {
+        const clean = String(item).toLowerCase();
+        return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId.toLowerCase());
+      })
+    );
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const firstSubject = enrolledSubjects[0] || subjects[0];
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(firstSubject?.id ?? "");
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>(firstSubject?.name ?? "");
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
@@ -517,6 +536,15 @@ function AskTutorPage() {
 
       if (res.ok) {
         apiResp = (await res.json()) as ApiResponse;
+        addQuery({
+          student: user?.name || "Student",
+          subject: selectedSubjectName || "General",
+          question: q,
+          confidence: apiResp ? Math.round((apiResp.confidence || 0.92) * 100) : 92,
+          escalated: Boolean(apiResp?.escalated),
+          createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        });
+        refreshQueries().catch(() => {});
       } else {
         const errData = await res.json().catch(() => ({}));
         console.error("[Ask Tutor] API error:", res.status, errData);
@@ -585,21 +613,41 @@ function AskTutorPage() {
         }
       />
 
+      {enrolledSubjects.length === 0 && (
+        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+            <div>
+              <div className="text-xs font-bold text-foreground">0 Course Enrollments Active</div>
+              <p className="text-xs text-muted-foreground">
+                Enroll in subjects from your dashboard to ground the AI Tutor directly on your university syllabus and course documents.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/student"
+            className="rounded-xl bg-violet px-4 py-2 text-xs font-bold text-white hover:bg-violet-hover transition shadow-2xs shrink-0"
+          >
+            Go to Course Catalog →
+          </Link>
+        </div>
+      )}
+
       {showControls && (
         <div className="mb-6 rounded-2xl border border-violet/20 bg-violet/5 p-5 shadow-sm space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Subject Context
+                Subject Context ({enrolledSubjects.length > 0 ? "Enrolled Only" : "All Subjects"})
               </label>
               <select
                 value={selectedSubjectId}
                 onChange={handleSubjectChange}
                 className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-violet transition"
               >
-                {subjects.map((s) => (
+                {(enrolledSubjects.length > 0 ? enrolledSubjects : subjects).map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.code})
+                    {s.name} ({s.code}) {isEnrolled(s) ? "✓ Enrolled" : "(Not Enrolled)"}
                   </option>
                 ))}
               </select>

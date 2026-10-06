@@ -30,6 +30,7 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as FacultyIndexRouteImport } from './routes/faculty.index'
 import { Route as FacultyAnalyticsRouteImport } from './routes/faculty.analytics'
 import { Route as FacultyAnnouncementsRouteImport } from './routes/faculty.announcements'
+import { Route as FacultyDiscussionRouteImport } from './routes/faculty.discussion'
 import { Route as FacultyDocumentsRouteImport } from './routes/faculty.documents'
 import { Route as FacultyEscalationsRouteImport } from './routes/faculty.escalations'
 import { Route as FacultyKnowledgeGraphRouteImport } from './routes/faculty.knowledge-graph'
@@ -155,6 +156,11 @@ const FacultyAnnouncementsRoute = FacultyAnnouncementsRouteImport.update({
   path: '/announcements',
   getParentRoute: () => FacultyRoute,
 } as any)
+const FacultyDiscussionRoute = FacultyDiscussionRouteImport.update({
+  id: '/discussion',
+  path: '/discussion',
+  getParentRoute: () => FacultyRoute,
+} as any)
 const FacultyDocumentsRoute = FacultyDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -271,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/faculty/analytics': typeof FacultyAnalyticsRoute
   '/faculty/announcements': typeof FacultyAnnouncementsRoute
+  '/faculty/discussion': typeof FacultyDiscussionRoute
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
@@ -310,6 +317,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/faculty/analytics': typeof FacultyAnalyticsRoute
   '/faculty/announcements': typeof FacultyAnnouncementsRoute
+  '/faculty/discussion': typeof FacultyDiscussionRoute
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
@@ -353,6 +361,7 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/faculty/analytics': typeof FacultyAnalyticsRoute
   '/faculty/announcements': typeof FacultyAnnouncementsRoute
+  '/faculty/discussion': typeof FacultyDiscussionRoute
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
@@ -397,6 +406,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/faculty/analytics'
     | '/faculty/announcements'
+    | '/faculty/discussion'
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
@@ -436,6 +446,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/faculty/analytics'
     | '/faculty/announcements'
+    | '/faculty/discussion'
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
@@ -478,6 +489,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/faculty/analytics'
     | '/faculty/announcements'
+    | '/faculty/discussion'
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
@@ -656,6 +668,13 @@ declare module '@tanstack/react-router' {
       path: '/announcements'
       fullPath: '/faculty/announcements'
       preLoaderRoute: typeof FacultyAnnouncementsRouteImport
+      parentRoute: typeof FacultyRoute
+    }
+    '/faculty/discussion': {
+      id: '/faculty/discussion'
+      path: '/discussion'
+      fullPath: '/faculty/discussion'
+      preLoaderRoute: typeof FacultyDiscussionRouteImport
       parentRoute: typeof FacultyRoute
     }
     '/faculty/documents': {
@@ -843,6 +862,7 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 interface FacultyRouteChildren {
   FacultyAnalyticsRoute: typeof FacultyAnalyticsRoute
   FacultyAnnouncementsRoute: typeof FacultyAnnouncementsRoute
+  FacultyDiscussionRoute: typeof FacultyDiscussionRoute
   FacultyDocumentsRoute: typeof FacultyDocumentsRoute
   FacultyEscalationsRoute: typeof FacultyEscalationsRoute
   FacultyKnowledgeGraphRoute: typeof FacultyKnowledgeGraphRoute
@@ -857,6 +877,7 @@ interface FacultyRouteChildren {
 const FacultyRouteChildren: FacultyRouteChildren = {
   FacultyAnalyticsRoute: FacultyAnalyticsRoute,
   FacultyAnnouncementsRoute: FacultyAnnouncementsRoute,
+  FacultyDiscussionRoute: FacultyDiscussionRoute,
   FacultyDocumentsRoute: FacultyDocumentsRoute,
   FacultyEscalationsRoute: FacultyEscalationsRoute,
   FacultyKnowledgeGraphRoute: FacultyKnowledgeGraphRoute,

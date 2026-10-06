@@ -8,6 +8,7 @@ import { AppShell, type NavItem } from "@/components/app-shell";
 const nav: NavItem[] = [
   { to: "/faculty", label: "Dashboard", icon: LayoutDashboard },
   { to: "/faculty/subjects", label: "My Subjects", icon: BookOpen },
+  { to: "/faculty/discussion", label: "Discussions", icon: MessagesSquare },
   { to: "/faculty/knowledge-graph", label: "Knowledge Graph", icon: Network },
   { to: "/faculty/upload", label: "Upload Content", icon: Upload },
   { to: "/faculty/documents", label: "My Documents", icon: FileText },

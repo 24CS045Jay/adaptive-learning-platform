@@ -20,6 +20,8 @@ export interface AuthUser {
   email: string;
   role: Role;
   departmentId?: string;
+  studentId?: string;
+  facultyId?: string;
   token?: string;
   mustChangePassword?: boolean;
 }
@@ -40,6 +42,12 @@ interface AuthContextValue {
   sendOtp: (email: string, name?: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
   changePassword: (currentPw: string, newPw: string) => { ok: boolean; error?: string };
   clearMustChangePw: () => void;
+  updateProfile: (updates: {
+    name?: string;
+    studentId?: string;
+    facultyId?: string;
+    departmentId?: string;
+  }) => Promise<{ ok: boolean; error?: string }>;
   register: (
     name: string,
     email: string,
@@ -218,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         customName ||
         email.split("@")[0].charAt(0).toUpperCase() + email.split("@")[0].slice(1) + " (Google)";
 
-      const { user: account } = loginOrCreateGoogleUser(name, email, role);
+      const account = loginOrCreateGoogleUser(role, email, name);
       const authUser: AuthUser = {
         id: account.id,
         name: account.name,
@@ -461,6 +469,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateProfile = useCallback(
+    async (updates: {
+      name?: string;
+      studentId?: string;
+      facultyId?: string;
+      departmentId?: string;
+    }) => {
+      if (!user) return { ok: false, error: "Not logged in" };
+
+      const updatedUser: AuthUser = {
+        ...user,
+        name: updates.name ?? user.name,
+        studentId: updates.studentId ?? user.studentId,
+        facultyId: updates.facultyId ?? user.facultyId,
+        departmentId: updates.departmentId ?? user.departmentId,
+      };
+
+      try {
+        const token = user.token || "mock_token";
+        const res = await fetch(`${API_BASE}/api/users/profile`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            "x-user-id": user.id,
+            "x-user-role": user.role,
+          },
+          body: JSON.stringify(updates),
+        });
+
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData.name) updatedUser.name = resData.name;
+          if (resData.studentId) updatedUser.studentId = resData.studentId;
+          if (resData.facultyId) updatedUser.facultyId = resData.facultyId;
+          if (resData.departmentId) updatedUser.departmentId = resData.departmentId;
+        }
+      } catch (err) {
+        console.warn("[Auth] Profile update API notice:", err);
+      }
+
+      saveActiveUser(updatedUser);
+      return { ok: true };
+    },
+    [user, saveActiveUser],
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -473,6 +528,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendOtp,
         changePassword,
         clearMustChangePw,
+        updateProfile,
         register,
       }}
     >
