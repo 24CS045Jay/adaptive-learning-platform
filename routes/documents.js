@@ -267,37 +267,43 @@ router.post("/upload", authenticate, requireRole("faculty", "admin"), handleUplo
 // PATCH /api/documents/:id/approve - Admin only
 router.patch("/:id/approve", authenticate, requireRole("admin"), async (req, res) => {
   try {
-    const doc = await Document.findById(req.params.id).populate("subjectId", "name code");
+    const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: "Document not found." });
 
     doc.status = "approved";
     await doc.save();
 
-    const ingestionResult = await performDocumentIngestion(doc, req.user._id || req.user.id, "APPROVE_DOCUMENT");
+    // Trigger vector ingestion in the background so response is instantaneous
+    performDocumentIngestion(doc, req.user._id || req.user.id, "APPROVE_DOCUMENT").catch((err) => {
+      console.warn("[Background Ingestion Notice]:", err.message);
+    });
 
     return res.json({
-      message: `Document approved successfully. Ingestion: ${ingestionResult.ingestionStatus}.`,
+      message: "Document approved successfully and queued for vector indexing.",
       document: doc,
     });
   } catch (error) {
     console.error("[Document Approve Error]:", error);
-    return res.status(500).json({ error: "Failed to approve document." });
+    return res.status(500).json({ error: error.message || "Failed to approve document." });
   }
 });
 
 // POST /api/documents/:id/reingest - Admin only
 router.post("/:id/reingest", authenticate, requireRole("admin"), async (req, res) => {
   try {
-    const doc = await Document.findById(req.params.id).populate("subjectId", "name code");
+    const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: "Document not found." });
     if (doc.status !== "approved") {
       return res.status(400).json({ error: "Only approved documents can be re-ingested." });
     }
 
-    const ingestionResult = await performDocumentIngestion(doc, req.user._id || req.user.id, "REINGEST_DOCUMENT");
+    // Trigger ingestion asynchronously
+    performDocumentIngestion(doc, req.user._id || req.user.id, "REINGEST_DOCUMENT").catch((err) => {
+      console.warn("[Background Ingestion Notice]:", err.message);
+    });
 
     return res.json({
-      message: `Document re-ingested successfully. Ingestion: ${ingestionResult.ingestionStatus}.`,
+      message: "Document re-ingestion started in background.",
       document: doc,
     });
   } catch (error) {
@@ -309,7 +315,7 @@ router.post("/:id/reingest", authenticate, requireRole("admin"), async (req, res
 // PATCH /api/documents/:id/reject - Admin only
 router.patch("/:id/reject", authenticate, requireRole("admin"), async (req, res) => {
   try {
-    const doc = await Document.findById(req.params.id).populate("subjectId", "code");
+    const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ error: "Document not found." });
 
     const wasApproved = doc.status === "approved";
@@ -318,35 +324,34 @@ router.patch("/:id/reject", authenticate, requireRole("admin"), async (req, res)
 
     // If it was approved, remove its vectors from ChromaDB to avoid orphaned data
     if (wasApproved) {
-      const subjectCode = doc.subjectId?.code || "GENERAL";
-      try {
-        const delRes = await fetch(`${RAG_SERVICE_URL}/delete-document`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documentId: String(doc._id), subjectCode }),
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (!delRes.ok) {
-          console.warn(`[RAG Delete] Non-ok response for doc ${doc._id}: ${delRes.status}`);
-        } else {
-          const delData = await delRes.json();
-          console.log(`[RAG Delete] Removed ${delData.deleted} vectors for rejected doc ${doc._id}`);
+      (async () => {
+        try {
+          const subject = await Subject.findById(doc.subjectId);
+          const subjectCode = subject?.code || "GENERAL";
+          await fetch(`${RAG_SERVICE_URL}/delete-document`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentId: String(doc._id || doc.id), subjectCode }),
+            signal: AbortSignal.timeout(10_000),
+          });
+        } catch (delErr) {
+          console.warn("[RAG Delete] Background vector deletion notice:", delErr.message);
         }
-      } catch (delErr) {
-        console.warn(`[RAG Delete] Failed to delete vectors for rejected doc ${doc._id}:`, delErr.message);
-      }
+      })();
     }
 
-    await AuditLog.create({
-      actorId: req.user._id || req.user.id,
-      action: "REJECT_DOCUMENT",
-      details: { documentId: doc._id, fileName: doc.fileName, status: "rejected", vectorsRemoved: wasApproved },
-    });
+    try {
+      await AuditLog.create({
+        actorId: req.user._id || req.user.id,
+        action: "REJECT_DOCUMENT",
+        details: { documentId: doc._id || doc.id, fileName: doc.fileName, status: "rejected", vectorsRemoved: wasApproved },
+      });
+    } catch {}
 
     return res.json({ message: "Document rejected.", document: doc });
   } catch (error) {
     console.error("[Document Reject Error]:", error);
-    return res.status(500).json({ error: "Failed to reject document." });
+    return res.status(500).json({ error: error.message || "Failed to reject document." });
   }
 });
 

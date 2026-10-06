@@ -1,6 +1,6 @@
 import express from "express";
 import { authenticate, requireRole } from "../middleware/auth.js";
-import { User, TopicMastery, Attempt, Subject } from "../models/index.js";
+import { User, TopicMastery, Attempt, Subject, AuditLog } from "../models/index.js";
 
 const router = express.Router();
 
@@ -73,4 +73,25 @@ router.get("/risk-profiles", requireRole("admin", "faculty"), async (req, res) =
   }
 });
 
+// ── GET /api/analytics/audit-logs ──────────────────────────────────────────
+// Fetch live compliance and platform audit logs
+router.get("/audit-logs", requireRole("admin"), async (req, res) => {
+  try {
+    const logs = await AuditLog.find({}).sort({ createdAt: -1 }).limit(100);
+    const mapped = logs.map((l) => ({
+      id: String(l._id || l.id),
+      actor: l.actor || l.actorEmail || "system",
+      action: l.action || "SYSTEM_ACTION",
+      target: l.target || (typeof l.details === "object" ? JSON.stringify(l.details) : String(l.details || "")),
+      details: typeof l.details === "object" ? JSON.stringify(l.details) : String(l.details || l.target || ""),
+      time: l.createdAt ? new Date(l.createdAt).toLocaleString() : new Date().toLocaleString(),
+    }));
+    res.json(mapped);
+  } catch (error) {
+    console.error("[Analytics API] GET /audit-logs error:", error);
+    res.status(500).json({ error: "Failed to fetch audit logs." });
+  }
+});
+
 export default router;
+

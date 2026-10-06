@@ -101,7 +101,49 @@ function FacultySubjectsPage() {
           const isOpen = expandedId === s.id;
           const tab = getTab(s.id);
           const mods = subjectModules(s.id);
-          const enrolled = users.filter((u) => u.role === "Student" && s.enrolledStudentIds.includes(u.id));
+          const sidList: string[] = Array.isArray(s.enrolledStudentIds)
+            ? s.enrolledStudentIds
+            : typeof s.enrolledStudentIds === "string"
+            ? JSON.parse(s.enrolledStudentIds || "[]")
+            : [];
+
+          // Find known matching student users
+          const matchedStudents = users.filter((u) => {
+            if (u.role !== "Student") return false;
+            const uid = String(u.id || "").toLowerCase();
+            const uemail = String(u.email || "").toLowerCase();
+            const usid = String(u.studentId || "").toLowerCase();
+            return sidList.some((raw) => {
+              const r = String(raw).toLowerCase();
+              return r === uid || r === uemail || (usid && r === usid);
+            });
+          });
+
+          // Also account for direct student emails/IDs in list not yet in user table
+          const uniqueStudentEntries = [...matchedStudents];
+          sidList.forEach((raw) => {
+            const rawStr = String(raw);
+            const exists = uniqueStudentEntries.some(
+              (u) =>
+                u.id === rawStr ||
+                u.email.toLowerCase() === rawStr.toLowerCase() ||
+                (u.studentId && u.studentId === rawStr),
+            );
+            if (!exists && rawStr.includes("@")) {
+              uniqueStudentEntries.push({
+                id: rawStr,
+                name: rawStr.split("@")[0].replace(/[._]/g, " "),
+                email: rawStr,
+                role: "Student",
+                studentId: "",
+                status: "active",
+                joinedAt: new Date().toISOString().split("T")[0],
+                passwordStatus: "changed",
+              });
+            }
+          });
+
+          const enrolled = uniqueStudentEntries;
 
           return (
             <div

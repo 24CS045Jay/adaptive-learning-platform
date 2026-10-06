@@ -1,6 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { MessageCircle, ListChecks, Flame, Play, Star, BookOpen, ChevronRight } from "lucide-react";
+import {
+  MessageCircle, ListChecks, Flame, Play, Star, BookOpen, ChevronRight,
+  Lock, Unlock, Layers, CheckCircle2, AlertCircle, Sparkles, Plus,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import {
   AreaChart,
@@ -15,7 +18,6 @@ import {
   ReferenceLine,
 } from "recharts";
 import { PageHeader, ActionCard, Card, Pill } from "@/components/app-shell";
-import { weakTopics } from "@/lib/mock-data";
 import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
@@ -154,7 +156,7 @@ function StreakFlame() {
 }
 
 /* ── Upcoming Quizzes ── */
-function UpcomingQuizzes({ subjects }: { subjects: any[] }) {
+function UpcomingQuizzes({ subjects, quizzes }: { subjects: any[]; quizzes: any[] }) {
   const SUBJECT_ICONS: Record<string, string> = {
     "Big Data Analytics": "📊",
     "Machine Learning": "🤖",
@@ -162,24 +164,33 @@ function UpcomingQuizzes({ subjects }: { subjects: any[] }) {
     Cybersecurity: "🔒",
   };
 
-  const upcoming = subjects.slice(0, 4).map((s, i) => ({
-    id: s.id,
-    title: `${s.name} Unit ${i + 1} Assessment`,
-    subject: s.name,
-    due: i === 0 ? "Due Today" : i === 1 ? "Due Tomorrow" : `Due in ${i + 2} days`,
-    urgency: i === 0 ? "urgent" : i === 1 ? "soon" : "normal",
-    icon: SUBJECT_ICONS[s.name] ?? "📚",
-  }));
+  const activeQuizzes = quizzes && quizzes.length > 0
+    ? quizzes.slice(0, 4).map((q, i) => ({
+        id: q.id,
+        title: q.title,
+        subject: q.subjectName || "Course Assessment",
+        due: i === 0 ? "Due Today" : i === 1 ? "Due Tomorrow" : `Due in ${i + 2} days`,
+        urgency: i === 0 ? "urgent" : i === 1 ? "soon" : "normal",
+        icon: SUBJECT_ICONS[q.subjectName] ?? "📝",
+      }))
+    : subjects.slice(0, 3).map((s, i) => ({
+        id: s.id,
+        title: `${s.name} Assessment`,
+        subject: s.name,
+        due: i === 0 ? "Available Now" : `Due in ${i + 2} days`,
+        urgency: i === 0 ? "urgent" : "normal",
+        icon: SUBJECT_ICONS[s.name] ?? "📚",
+      }));
 
   return (
-    <Card title="Upcoming Quizzes">
-      {upcoming.length === 0 ? (
+    <Card title="Upcoming & Published Quizzes">
+      {activeQuizzes.length === 0 ? (
         <div className="py-6 text-center text-xs text-muted-foreground">
           No upcoming quizzes yet. Quizzes created by faculty will appear here.
         </div>
       ) : (
         <ul className="space-y-2">
-          {upcoming.map((q, i) => (
+          {activeQuizzes.map((q, i) => (
             <motion.li
               key={q.id}
               initial={{ opacity: 0, x: 10 }}
@@ -207,7 +218,7 @@ function UpcomingQuizzes({ subjects }: { subjects: any[] }) {
                         : "text-muted-foreground",
                   )}
                 >
-                  {q.due}
+                  {q.due} · {q.subject}
                 </div>
               </div>
               <Link to="/student/quizzes">
@@ -271,15 +282,51 @@ function PulseChartDot(props: any) {
   );
 }
 
+import { useAuth } from "@/lib/auth";
+
 function StudentDashboard() {
-  const { subjects } = useAppData();
+  const { subjects, quizzes, modules, enrollStudent, unenrollStudent } = useAppData();
+  const { user } = useAuth();
+  const [enrollingId, setEnrollingId] = useState<string | null>(null);
+
+  const myId = user?.id || "";
+  const myEmail = user?.email || "";
+  const myStudentId = user?.studentId || "";
+
+  const isEnrolled = (s: any) => {
+    const list = s.enrolledStudentIds || [];
+    return (
+      list.includes(myId) ||
+      list.includes(myEmail) ||
+      (myStudentId && list.includes(myStudentId))
+    );
+  };
+
+  const handleToggleEnroll = async (subjectId: string) => {
+    if (!myId) return;
+    setEnrollingId(subjectId);
+    const s = subjects.find((sub) => sub.id === subjectId);
+    if (s && isEnrolled(s)) {
+      await unenrollStudent(subjectId, myId);
+    } else {
+      await enrollStudent(subjectId, myId);
+    }
+    setEnrollingId(null);
+  };
+
   const semesters = Array.from(
     new Set(subjects.map((subject) => Number(subject.semester)).filter(Boolean)),
   ).sort((a, b) => a - b);
-  const [activeSemester, setActiveSemester] = useState<number | null>(semesters[0] ?? null);
+  const [activeSemester, setActiveSemester] = useState<number | null>(null);
   const visibleSubjects = activeSemester
     ? subjects.filter((subject) => Number(subject.semester) === activeSemester)
     : subjects;
+
+  const suggestedWeakTopics = subjects.slice(0, 3).map((s, i) => ({
+    topic: i === 0 ? "MapReduce Shuffle & Partitioning" : i === 1 ? "L1/L2 Regularization Penalty" : "Distributed File Storage HDFS",
+    reason: i === 0 ? "Scored 55% in recent assessment" : "Low confidence in Ask Tutor session",
+    subject: s.name,
+  }));
 
   const axisStyle = { fontSize: 11, fill: "var(--color-muted-foreground)" };
 
@@ -501,19 +548,242 @@ function StudentDashboard() {
           </div>
         </Card>
 
-        <UpcomingQuizzes subjects={subjects} />
+        <UpcomingQuizzes subjects={subjects} quizzes={quizzes} />
       </div>
 
-      {/* ── Row 3: Weak Topics ── */}
+      {/* ── Row 3: Enrolled Subjects & Modules (Strict Access Control) ── */}
+      <div className="mt-6 space-y-6">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-violet">
+                Active Learning Curriculum
+              </div>
+              <h2 className="font-serif text-xl font-bold text-foreground">
+                My Enrolled Subjects & Learning Modules ({subjects.filter(isEnrolled).length})
+              </h2>
+            </div>
+          </div>
+
+          {subjects.filter(isEnrolled).length === 0 ? (
+            <Card className="border-amber-500/30 bg-amber-500/5 p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 shrink-0">
+                    <Lock className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="font-serif text-base font-bold text-foreground">
+                      0 Subjects Enrolled — Learning Modules Locked
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+                      You are not currently enrolled in any subjects. To access curriculum units, learning modules, study materials, and AI tutor grounding, please browse the Course Catalog below and click <strong>+ Enroll in Subject</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {subjects.filter(isEnrolled).map((s) => {
+                const subMods = modules.filter((m) => m.subjectId === s.id);
+                return (
+                  <Card key={s.id} className="border-violet/25 bg-gradient-to-br from-card to-indigo-brand/5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet/10 text-violet font-bold">
+                          <BookOpen className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-serif text-base font-bold text-foreground">{s.name}</span>
+                            <Pill tone="green">✓ Enrolled & Unlocked</Pill>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {s.code} · Sem {s.semester} · Faculty: <strong className="text-foreground font-medium">{s.faculty || "Faculty Member"}</strong> · {subMods.length} Module{subMods.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to="/student/ask"
+                          className="rounded-xl bg-violet px-3.5 py-1.5 text-xs font-bold text-white hover:bg-violet-hover shadow-2xs flex items-center gap-1.5 transition"
+                        >
+                          <Sparkles className="h-3.5 w-3.5" /> Ask AI Tutor
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Modules list for this enrolled subject */}
+                    <div className="mt-4 space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-violet" /> Unlocked Modules for {s.name}:
+                      </div>
+                      {subMods.length === 0 ? (
+                        <div className="text-xs text-muted-foreground italic py-2 pl-1">
+                          No learning modules uploaded yet by faculty for this course.
+                        </div>
+                      ) : (
+                        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                          {subMods.map((mod) => (
+                            <div
+                              key={mod.id}
+                              className="flex items-start gap-3 rounded-xl border border-border/80 bg-background/70 p-3 hover:border-violet/40 transition"
+                            >
+                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-violet/10 text-xs font-bold text-violet">
+                                {mod.order || 1}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-bold text-foreground truncate">{mod.name}</div>
+                                {mod.description && (
+                                  <div className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                                    {mod.description}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* ── University Course Catalog ── */}
+        <Card title="University Course Catalog & Enrollment Directory">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <span className="text-muted-foreground">
+                Enroll in subjects to unlock their modules, AI tutor knowledge base, and study quizzes.
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveSemester(null)}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 font-semibold transition",
+                    activeSemester === null
+                      ? "bg-foreground text-background font-bold"
+                      : "bg-accent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  All ({subjects.length})
+                </button>
+                {semesters.map((sem) => (
+                  <button
+                    key={sem}
+                    type="button"
+                    onClick={() => setActiveSemester(sem)}
+                    className={cn(
+                      "rounded-lg px-2.5 py-1 font-semibold transition",
+                      activeSemester === sem
+                        ? "bg-foreground text-background font-bold"
+                        : "bg-accent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Sem {sem}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleSubjects.map((s) => {
+                const enrolled = isEnrolled(s);
+                const subMods = modules.filter((m) => m.subjectId === s.id);
+                const isProcessing = enrollingId === s.id;
+
+                return (
+                  <div
+                    key={s.id}
+                    className={cn(
+                      "flex flex-col justify-between rounded-xl border p-4 transition shadow-2xs",
+                      enrolled
+                        ? "border-violet/30 bg-indigo-brand/5"
+                        : "border-border bg-card hover:border-violet/20"
+                    )}
+                  >
+                    <div>
+                      <div className="flex items-start justify-between gap-2">
+                        <Pill tone="indigo">{s.code}</Pill>
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Sem {s.semester}
+                        </span>
+                      </div>
+                      <div className="mt-2 font-serif text-base font-bold text-foreground">
+                        {s.name}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Faculty: <strong className="text-foreground font-medium">{s.faculty || "Faculty"}</strong>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
+                        {enrolled ? (
+                          <span className="text-success font-medium flex items-center gap-1">
+                            <Unlock className="h-3 w-3" /> {subMods.length} module{subMods.length !== 1 ? "s" : ""} unlocked
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Lock className="h-3 w-3" /> {subMods.length} module{subMods.length !== 1 ? "s" : ""} (enroll to unlock)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleToggleEnroll(s.id)}
+                        className={cn(
+                          "rounded-lg px-3 py-1.5 text-xs font-bold transition shadow-2xs disabled:opacity-50",
+                          enrolled
+                            ? "bg-green-brand text-white hover:opacity-90"
+                            : "bg-violet text-white hover:bg-violet-hover"
+                        )}
+                      >
+                        {isProcessing
+                          ? "Updating..."
+                          : enrolled
+                          ? "✓ Enrolled"
+                          : "+ Enroll in Subject"}
+                      </button>
+
+                      {enrolled ? (
+                        <Link
+                          to="/student/ask"
+                          className="text-xs font-semibold text-violet hover:underline"
+                        >
+                          Ask Tutor →
+                        </Link>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground italic">
+                          Locked
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── Row 4: Weak Topics ── */}
       <div className="mt-4">
-        <Card title="Weak Topics — Suggested Revision">
-          {weakTopics.length === 0 ? (
+        <Card title="Weak Topics — Suggested AI Revision">
+          {suggestedWeakTopics.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               Take a few quizzes to build your personalized revision plan.
             </div>
           ) : (
             <ul className="divide-y divide-border">
-              {weakTopics.map((w) => (
+              {suggestedWeakTopics.map((w) => (
                 <li
                   key={w.topic}
                   className="flex items-center justify-between py-3 transition hover:bg-accent/30 rounded-lg px-2"
@@ -522,12 +792,20 @@ function StudentDashboard() {
                     <div className="flex items-center gap-2">
                       <div className="font-medium text-foreground">{w.topic}</div>
                       <span className="rounded-full bg-violet/10 px-1.5 py-0.5 text-[10px] font-bold text-violet">
-                        AI Generated
+                        AI Recommended
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">{w.reason}</div>
                   </div>
-                  <Pill tone="indigo">{w.subject}</Pill>
+                  <div className="flex items-center gap-2">
+                    <Pill tone="indigo">{w.subject}</Pill>
+                    <Link
+                      to="/student/ask"
+                      className="rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition"
+                    >
+                      Ask Tutor →
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

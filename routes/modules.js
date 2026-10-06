@@ -11,23 +11,23 @@ router.get("/", async (req, res) => {
   try {
     const { subjectId } = req.query;
     const filter = {};
-
     if (subjectId) {
       filter.subjectId = subjectId;
-    } else if (req.user.role === "student") {
-      const studentSubjects = await Subject.find({ enrolledStudentIds: req.user._id || req.user.id }).select("_id");
-      const subjectIds = studentSubjects.map((s) => s._id);
-      if (subjectIds.length > 0) {
-        filter.subjectId = { $in: subjectIds };
-      }
     }
 
-    const modules = await Module.find(filter).sort({ order: 1, createdAt: 1 });
-    const list = modules.map((m) => ({
-      ...m.toObject(),
-      id: String(m._id),
-      subjectId: String(m.subjectId),
-    }));
+    const modules = await Module.find(filter).sort({ createdAt: 1 });
+    const list = modules.map((m) => {
+      const plain = m.toObject ? m.toObject() : { ...m };
+      return {
+        ...plain,
+        id: String(m._id || m.id),
+        name: m.title || m.name || "Module",
+        title: m.title || m.name || "Module",
+        unitNumber: m.unitNumber || m.unit_number || m.order || 1,
+        order: m.unitNumber || m.unit_number || m.order || 1,
+        subjectId: String(m.subjectId || m.subject_id || ""),
+      };
+    });
 
     res.json(list);
   } catch (error) {
@@ -39,26 +39,32 @@ router.get("/", async (req, res) => {
 // ── POST /api/modules ───────────────────────────────────────────────────────
 router.post("/", requireRole("faculty", "admin"), async (req, res) => {
   try {
-    const { subjectId, name, title, order } = req.body;
-    const moduleName = name || title;
-    if (!subjectId || !moduleName) {
-      return res.status(400).json({ error: "subjectId and module name are required." });
+    const { subjectId, name, title, order, unitNumber, description } = req.body;
+    const moduleTitle = title || name;
+    if (!subjectId || !moduleTitle) {
+      return res.status(400).json({ error: "subjectId and module title are required." });
     }
+
+    const unitNum = unitNumber ?? order ?? 1;
 
     const newModule = await Module.create({
       subjectId,
-      name: moduleName,
-      order: order ?? 0,
+      title: moduleTitle.trim(),
+      unitNumber: Number(unitNum),
+      description: description || "",
     });
 
     res.status(201).json({
-      ...newModule.toObject(),
-      id: String(newModule._id),
-      subjectId: String(newModule.subjectId),
+      id: String(newModule._id || newModule.id),
+      name: newModule.title || moduleTitle,
+      title: newModule.title || moduleTitle,
+      unitNumber: Number(unitNum),
+      order: Number(unitNum),
+      subjectId: String(newModule.subjectId || subjectId),
     });
   } catch (error) {
     console.error("[Modules API] POST error:", error);
-    res.status(500).json({ error: "Failed to create module." });
+    res.status(500).json({ error: error.message || "Failed to create module." });
   }
 });
 

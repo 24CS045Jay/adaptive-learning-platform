@@ -1,9 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import {
   ListChecks, Sparkles, Trophy, Flame, Award, ArrowRight,
   CheckCircle2, XCircle, FileText, ChevronRight, HelpCircle,
-  BarChart3, CornerDownRight, RotateCcw,
+  BarChart3, CornerDownRight, RotateCcw, Lock, AlertCircle,
 } from "lucide-react";
 import { PageHeader, Card, Pill, PrimaryButton } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
@@ -17,12 +17,45 @@ import {
 } from "@/lib/quiz-store";
 import { cn } from "@/lib/utils";
 
+import { useAuth } from "@/lib/auth";
+import { API_BASE, authHeaders } from "@/lib/api";
+
 export const Route = createFileRoute("/student/quizzes")({
+  head: () => ({
+    meta: [
+      { title: "Adaptive Assessments & Quizzes · AI Tutor Student" },
+      { name: "description", content: "Adaptive quizzes with instant grading, XP rewards, and topic mastery tracking." },
+    ],
+  }),
   component: StudentQuizzesPage,
 });
 
 function StudentQuizzesPage() {
   const { subjects, quizzes: contextQuizzes } = useAppData();
+  const { user } = useAuth();
+
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = user?.studentId ? String(user.studentId) : "";
+
+  const isEnrolledInSubject = (subjectNameOrId: string) => {
+    const subj = subjects.find(
+      (s) =>
+        s.id === subjectNameOrId ||
+        s.name.toLowerCase() === String(subjectNameOrId || "").toLowerCase() ||
+        s.code.toLowerCase() === String(subjectNameOrId || "").toLowerCase(),
+    );
+    if (!subj) return false;
+    const list: string[] = Array.isArray(subj.enrolledStudentIds)
+      ? subj.enrolledStudentIds
+      : typeof subj.enrolledStudentIds === "string"
+      ? JSON.parse(subj.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId.toLowerCase());
+    });
+  };
 
   // Quizzes list state
   const [quizzes, setQuizzes] = useState<Quiz[]>(INITIAL_QUIZZES);
@@ -32,6 +65,8 @@ function StudentQuizzesPage() {
       setQuizzes(contextQuizzes);
     }
   }, [contextQuizzes]);
+
+  const enrolledQuizzes = quizzes.filter((q) => isEnrolledInSubject(q.subjectId || q.subjectName));
 
   const [leaderboard] = useState(INITIAL_LEADERBOARD);
   const [gamification, setGamification] = useState(DEFAULT_GAMIFICATION);
@@ -47,6 +82,7 @@ function StudentQuizzesPage() {
   const [userScore, setUserScore]           = useState<number>(0); // count of correct answers
   const [earnedXp, setEarnedXp]             = useState<number>(0);
   const [isCompleted, setIsCompleted]       = useState<boolean>(false);
+  const [collectedAnswers, setCollectedAnswers] = useState<any[]>([]);
 
   const startQuiz = (q: Quiz) => {
     setActiveQuiz(q);
@@ -58,6 +94,7 @@ function StudentQuizzesPage() {
     setUserScore(0);
     setEarnedXp(0);
     setIsCompleted(false);
+    setCollectedAnswers([]);
   };
 
   const currentQ: QuizQuestion | undefined = activeQuiz?.questions[currentQIndex];
@@ -67,11 +104,15 @@ function StudentQuizzesPage() {
     setSubmittedAnswer(true);
 
     let isCorrect = false;
+    let chosenVal: any = selectedOption;
     if (currentQ.type === "mcq" || currentQ.type === "code") {
       isCorrect = selectedOption === currentQ.correctAnswer;
     } else if (currentQ.type === "short_answer") {
+      chosenVal = shortAnswerInput.trim();
       isCorrect = shortAnswerInput.trim().length >= 10;
     }
+
+    setCollectedAnswers((prev) => [...prev, chosenVal]);
 
     if (isCorrect) {
       setUserScore((s) => s + 1);
@@ -87,7 +128,7 @@ function StudentQuizzesPage() {
     }
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (!activeQuiz) return;
     if (currentQIndex + 1 < activeQuiz.questions.length) {
       setCurrentQIndex((i) => i + 1);
@@ -97,7 +138,20 @@ function StudentQuizzesPage() {
     } else {
       // Finish Quiz
       setIsCompleted(true);
-      const finalPercentage = Math.round(((userScore + 1) / activeQuiz.questions.length) * 100);
+      const finalPercentage = Math.round(((userScore) / Math.max(activeQuiz.questions.length, 1)) * 100);
+
+      // Post attempt to backend for live topic mastery & analytics sync
+      try {
+        if (user?.token && activeQuiz.id) {
+          await fetch(`${API_BASE}/api/quizzes/${encodeURIComponent(activeQuiz.id)}/attempt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+            body: JSON.stringify({ answers: collectedAnswers }),
+          });
+        }
+      } catch (err) {
+        console.warn("[StudentQuizzes] Attempt post notice:", err);
+      }
 
       // Update quiz best score in state
       setQuizzes((prev) =>
@@ -170,58 +224,80 @@ function StudentQuizzesPage() {
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Available Quizzes</div>
-            <div className="text-xl font-bold text-foreground">{quizzes.length} Quizzes</div>
+            <div className="text-xl font-bold text-foreground">{enrolledQuizzes.length} Quizzes</div>
           </div>
         </div>
       </div>
 
       {/* ── Main Section: Quiz Cards or Active Quiz Runner ── */}
       {!activeQuiz ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {quizzes.map((q) => (
-            <Card key={q.id} className="flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-brand/15 text-gold">
-                      <ListChecks className="h-5 w-5" />
+        enrolledQuizzes.length === 0 ? (
+          <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto space-y-4 shadow-sm">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mx-auto">
+              <Lock className="h-6 w-6" />
+            </div>
+            <div>
+              <div className="font-serif text-lg font-bold text-foreground">
+                Quizzes Locked — 0 Subjects Enrolled
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                You must enroll in your semester subjects to unlock adaptive quizzes, earn XP, and build your topic mastery profile.
+              </p>
+            </div>
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white hover:bg-violet-hover transition shadow-2xs"
+            >
+              Browse Catalog & Enroll →
+            </Link>
+          </Card>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {enrolledQuizzes.map((q) => (
+              <Card key={q.id} className="flex flex-col justify-between">
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-brand/15 text-gold">
+                        <ListChecks className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="font-serif text-base font-bold text-foreground leading-tight">{q.title}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{q.subjectName}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-serif text-base font-bold text-foreground leading-tight">{q.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{q.subjectName}</div>
+                  </div>
+
+                  <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
+                    <div className="flex justify-between">
+                      <span>Questions:</span>
+                      <span className="font-semibold text-foreground">{q.totalQuestions} Questions</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Best Score:</span>
+                      <span className="font-semibold text-violet">
+                        {q.bestScore != null ? `${q.bestScore}%` : "Not attempted"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Adaptive Scaling:</span>
+                      <span className="font-semibold text-green-600">Easy → Medium → Hard</span>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-1.5 text-xs text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Questions:</span>
-                    <span className="font-semibold text-foreground">{q.totalQuestions} Questions</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Best Score:</span>
-                    <span className="font-semibold text-violet">
-                      {q.bestScore != null ? `${q.bestScore}%` : "Not attempted"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Adaptive Scaling:</span>
-                    <span className="font-semibold text-green-600">Easy → Medium → Hard</span>
-                  </div>
+                <div className="mt-6 pt-3 border-t border-border flex items-center justify-between">
+                  <Pill tone={q.bestScore == null ? "slate" : q.bestScore >= 80 ? "green" : "amber"}>
+                    {q.bestScore == null ? "New Quiz" : q.bestScore >= 80 ? "Mastered ✓" : "Review Needed"}
+                  </Pill>
+                  <PrimaryButton icon={ArrowRight} onClick={() => startQuiz(q)}>
+                    Start Quiz
+                  </PrimaryButton>
                 </div>
-              </div>
-
-              <div className="mt-6 pt-3 border-t border-border flex items-center justify-between">
-                <Pill tone={q.bestScore == null ? "slate" : q.bestScore >= 80 ? "green" : "amber"}>
-                  {q.bestScore == null ? "New Quiz" : q.bestScore >= 80 ? "Mastered ✓" : "Review Needed"}
-                </Pill>
-                <PrimaryButton icon={ArrowRight} onClick={() => startQuiz(q)}>
-                  Start Quiz
-                </PrimaryButton>
-              </div>
-            </Card>
-          ))}
-        </div>
+              </Card>
+            ))}
+          </div>
+        )
       ) : isCompleted ? (
         /* ── Quiz Completed Summary ── */
         <Card className="max-w-xl mx-auto py-8 px-6 text-center space-y-6">

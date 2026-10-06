@@ -23,10 +23,20 @@ const STYLE_OPTIONS: { value: LearningStyle; label: string; desc: string }[] = [
 // ─── Main Profile Page ────────────────────────────────────────────────────────
 
 export function ProfilePage({ role }: { role: Role }) {
-  const { user, changePassword, clearMustChangePw } = useAuth();
+  const { user, changePassword, clearMustChangePw, updateProfile } = useAuth();
   const { markPasswordChanged } = useAppData();
   const id = useId();
 
+  // Profile Edit State
+  const [name, setName] = useState(user?.name ?? "");
+  const [studentId, setStudentId] = useState(user?.studentId ?? "");
+  const [facultyId, setFacultyId] = useState(user?.facultyId ?? "");
+  const [departmentId, setDepartmentId] = useState(user?.departmentId ?? "CE");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  // Password Change State
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw]         = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -36,12 +46,34 @@ export function ProfilePage({ role }: { role: Role }) {
 
   const meta = roleMeta[role];
   const displayUser = user ?? { name: "—", email: "—", role };
-  const initials = displayUser.name
+  const initials = (name || displayUser.name)
     .split(" ")
     .map((w) => w[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setProfileError(null);
+    setProfileSuccess(false);
+    setProfileSaving(true);
+
+    const res = await updateProfile({
+      name: name.trim(),
+      studentId: role === "student" ? studentId.trim() : undefined,
+      facultyId: role === "faculty" ? facultyId.trim() : undefined,
+      departmentId: departmentId.trim(),
+    });
+
+    setProfileSaving(false);
+    if (res.ok) {
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 4000);
+    } else {
+      setProfileError(res.error || "Failed to save profile changes.");
+    }
+  };
 
   const handleChangePw = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,37 +94,135 @@ export function ProfilePage({ role }: { role: Role }) {
   };
 
   return (
-    <div>
-      <PageHeader title="My Profile" subtitle="Your account details and security settings." />
+    <div className="space-y-6">
+      <PageHeader title="My Profile" subtitle="Your account details, identifier, and security settings." />
 
       {/* Avatar + info row */}
       <div className="grid gap-6 md:grid-cols-3">
         <Card>
           <div className="flex flex-col items-center py-4 text-center">
             <div className={cn("flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold", meta.color)}>
-              {initials}
+              {initials || "U"}
             </div>
-            <div className="mt-4 font-serif text-xl font-bold text-foreground">{displayUser.name}</div>
+            <div className="mt-4 font-serif text-xl font-bold text-foreground">{name || displayUser.name}</div>
             <div className="mt-1 text-sm text-muted-foreground">{displayUser.email}</div>
-            <div className="mt-3"><Pill tone={meta.pillTone}>{meta.label}</Pill></div>
+            <div className="mt-3 flex items-center gap-2">
+              <Pill tone={meta.pillTone}>{meta.label}</Pill>
+              {role === "student" && studentId && (
+                <span className="rounded-full bg-indigo-brand/10 px-2.5 py-0.5 text-xs font-bold text-violet">
+                  ID: {studentId}
+                </span>
+              )}
+              {role === "faculty" && facultyId && (
+                <span className="rounded-full bg-amber-brand/15 px-2.5 py-0.5 text-xs font-bold text-gold">
+                  ID: {facultyId}
+                </span>
+              )}
+            </div>
           </div>
         </Card>
 
         <div className="md:col-span-2">
-          <Card title="Account Information">
-            <dl className="divide-y divide-border">
-              {[
-                { label: "Full name",    value: displayUser.name },
-                { label: "Email address", value: displayUser.email },
-                { label: "Role",         value: meta.label },
-                { label: "Institution",  value: "CSPIT · Charotar University" },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between py-3">
-                  <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-                  <dd className="text-sm text-foreground">{value}</dd>
+          <Card title="Update & Save Profile">
+            {profileSuccess && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-green-200 bg-success/8 px-4 py-3 text-xs font-semibold text-success">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Profile changes saved and synchronized successfully!
+              </div>
+            )}
+            {profileError && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-danger/8 px-4 py-3 text-xs font-semibold text-danger">
+                <span>⚠</span> {profileError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="Enter your name"
+                    className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm outline-none focus:border-violet"
+                  />
                 </div>
-              ))}
-            </dl>
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={displayUser.email}
+                    disabled
+                    className="w-full rounded-xl border border-border bg-accent/30 px-3.5 py-2.5 text-sm text-muted-foreground cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {role === "student" && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Student ID / Roll No
+                    </label>
+                    <input
+                      type="text"
+                      value={studentId}
+                      onChange={(e) => setStudentId(e.target.value.toUpperCase())}
+                      placeholder="e.g. 24CS045"
+                      className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-semibold uppercase outline-none focus:border-violet"
+                    />
+                  </div>
+                )}
+
+                {role === "faculty" && (
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Faculty ID / Employee Code
+                    </label>
+                    <input
+                      type="text"
+                      value={facultyId}
+                      onChange={(e) => setFacultyId(e.target.value.toUpperCase())}
+                      placeholder="e.g. FAC001"
+                      className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-semibold uppercase outline-none focus:border-violet"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Department
+                  </label>
+                  <select
+                    value={departmentId}
+                    onChange={(e) => setDepartmentId(e.target.value)}
+                    className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium outline-none focus:border-violet"
+                  >
+                    <option value="CE">Computer Engineering (CE)</option>
+                    <option value="CSE">Computer Science & Eng (CSE)</option>
+                    <option value="IT">Information Technology (IT)</option>
+                    <option value="AIML">AI & Machine Learning (AIML)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-violet-hover transition disabled:opacity-50"
+                >
+                  {profileSaving ? "Saving changes..." : "Save Profile Details"}
+                </button>
+              </div>
+            </form>
           </Card>
         </div>
       </div>

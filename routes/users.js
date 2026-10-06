@@ -341,14 +341,60 @@ router.post("/", authenticate, requireRole("admin"), async (req, res) => {
   }
 });
 
-// PUT /api/users/:id - Update user
-router.put("/:id", authenticate, requireRole("admin"), async (req, res) => {
+// PUT /api/users/profile - Update current user profile (Student/Faculty/Admin)
+router.put("/profile", authenticate, async (req, res) => {
   try {
+    const userId = req.user.id || req.user._id;
+    const { name, studentId, facultyId, departmentId } = req.body;
+
+    const updates = {};
+    if (name) updates.name = String(name).trim();
+    if (studentId !== undefined) updates.studentId = String(studentId).trim().toUpperCase();
+    if (facultyId !== undefined) updates.facultyId = String(facultyId).trim().toUpperCase();
+    if (departmentId !== undefined) updates.departmentId = String(departmentId).trim().toUpperCase();
+
+    const user = await User.findByIdAndUpdate(userId, updates);
+    if (!user) return res.status(404).json({ error: "User not found." });
+
+    try {
+      await AuditLog.create({
+        actorId: userId,
+        action: "UPDATE_PROFILE",
+        details: { name: user.name, role: user.role, studentId, facultyId, departmentId },
+      });
+    } catch {}
+
+    return res.json({
+      ...publicUser(user),
+      studentId: user.studentId || user.student_id || studentId,
+      facultyId: user.facultyId || user.faculty_id || facultyId,
+      departmentId: user.departmentId || user.department_id || departmentId,
+    });
+  } catch (error) {
+    console.error("[User Error] Profile update error:", error);
+    return res.status(500).json({ error: error.message || "Failed to update profile." });
+  }
+});
+
+// PUT /api/users/:id - Update user (Admin or user updating own profile)
+router.put("/:id", authenticate, async (req, res) => {
+  try {
+    const callerId = String(req.user.id || req.user._id);
+    const targetId = String(req.params.id);
+    const isAdmin = String(req.user.role || "").toLowerCase() === "admin";
+
+    if (!isAdmin && callerId !== targetId) {
+      return res.status(403).json({ error: "Forbidden: You can only update your own account." });
+    }
+
     const updates = { ...req.body };
     delete updates._id;
     delete updates.id;
     delete updates.passwordHash;
     delete updates.password_hash;
+    if (!isAdmin) {
+      delete updates.role;
+    }
 
     const user = await User.findByIdAndUpdate(req.params.id, updates);
     if (!user) return res.status(404).json({ error: "User not found." });

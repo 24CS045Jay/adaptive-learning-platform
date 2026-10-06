@@ -13,33 +13,33 @@ router.get("/", async (req, res) => {
     const filter = {};
     if (subjectId) {
       filter.subjectId = subjectId;
-    } else if (req.user.role === "student") {
-      const studentSubjects = await Subject.find({ enrolledStudentIds: req.user._id || req.user.id }).select("_id");
-      const subjectIds = studentSubjects.map((s) => s._id);
-      if (subjectIds.length > 0) {
-        filter.subjectId = { $in: subjectIds };
-      }
     }
 
-    const discussions = await Discussion.find(filter)
-      .populate("authorId", "name role")
-      .populate("subjectId", "name code")
-      .sort({ createdAt: -1 });
+    const discussions = await Discussion.find(filter).sort({ createdAt: -1 });
 
     const list = discussions.map((d) => {
-      const obj = d.toObject();
+      const obj = d.toObject ? d.toObject() : { ...d };
+      const rawDate = d.createdAt || d.created_at || new Date().toISOString();
       return {
         ...obj,
-        id: String(d._id),
-        subjectName: d.subjectId?.name || "General",
-        author: d.authorName || d.authorId?.name || "Anonymous",
-        authorRole: d.authorRole || (d.authorId?.role === "faculty" ? "Faculty" : "Student"),
-        createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : new Date().toISOString(),
+        id: String(d._id || d.id),
+        title: d.title || "",
+        content: d.message || d.content || "",
+        subjectName: d.subjectName || d.subject_name || "General",
+        author: d.authorName || d.author_name || "Anonymous",
+        authorRole: d.authorRole || d.author_role || "Student",
+        tags: Array.isArray(d.tags) ? d.tags : [],
+        upvotes: d.upvotes ?? 0,
+        createdAt: typeof rawDate === "string" ? rawDate.split("T")[0] : new Date(rawDate).toISOString().split("T")[0],
         answers: (obj.answers || []).map((ans) => ({
           ...ans,
-          id: String(ans._id),
-          author: ans.authorName || "Anonymous",
-          createdAt: ans.createdAt ? new Date(ans.createdAt).toISOString() : new Date().toISOString(),
+          id: String(ans._id || ans.id || `ans_${Date.now()}`),
+          author: ans.authorName || ans.author_name || ans.author || "Anonymous",
+          authorRole: ans.authorRole || ans.author_role || "Faculty",
+          content: ans.content || ans.message || "",
+          isFacultyVerified: !!ans.isFacultyVerified,
+          upvotes: ans.upvotes ?? 0,
+          createdAt: ans.createdAt || ans.created_at ? new Date(ans.createdAt || ans.created_at).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
         })),
       };
     });
@@ -54,41 +54,52 @@ router.get("/", async (req, res) => {
 // ── POST /api/discussions ───────────────────────────────────────────────────
 router.post("/", async (req, res) => {
   try {
-    const { subjectId, title, message, content, tags } = req.body;
+    const { subjectId, subjectName, title, message, content, tags } = req.body;
     const discussionMessage = message || content;
 
-    if (!subjectId || !discussionMessage) {
-      return res.status(400).json({ error: "subjectId and message are required." });
+    if (!discussionMessage) {
+      return res.status(400).json({ error: "Discussion content is required." });
+    }
+
+    let finalSubjectId = subjectId || null;
+    let finalSubjectName = subjectName || "General";
+
+    if (!finalSubjectId && subjectName) {
+      const subj = await Subject.findOne({ name: subjectName });
+      if (subj) {
+        finalSubjectId = subj._id || subj.id;
+        finalSubjectName = subj.name;
+      }
     }
 
     const post = await Discussion.create({
-      subjectId,
-      authorId: req.user._id || req.user.id,
-      authorName: req.user.name,
-      authorRole: req.user.role === "faculty" ? "Faculty" : "Student",
+      subjectId: finalSubjectId,
+      departmentId: req.user?.departmentId || "CE",
+      authorId: req.user?._id || req.user?.id,
+      authorName: req.user?.name || "Student",
+      authorRole: req.user?.role === "faculty" ? "Faculty" : "Student",
       title: title || "",
       message: discussionMessage,
-      tags: tags || [],
+      tags: Array.isArray(tags) ? tags : [],
       upvotes: 1,
       answers: [],
     });
 
-    const populated = await Discussion.findById(post._id)
-      .populate("authorId", "name role")
-      .populate("subjectId", "name code");
-
     res.status(201).json({
-      ...populated.toObject(),
-      id: String(populated._id),
-      subjectName: populated.subjectId?.name || "General",
-      author: populated.authorName || req.user.name,
-      authorRole: populated.authorRole,
-      createdAt: new Date().toISOString(),
+      id: String(post._id || post.id),
+      title: post.title || title || "",
+      content: discussionMessage,
+      subjectName: finalSubjectName,
+      author: req.user?.name || "Student",
+      authorRole: req.user?.role === "faculty" ? "Faculty" : "Student",
+      tags: Array.isArray(tags) ? tags : [],
+      upvotes: 1,
+      createdAt: new Date().toISOString().split("T")[0],
       answers: [],
     });
   } catch (error) {
     console.error("[Discussions API] POST error:", error);
-    res.status(500).json({ error: "Failed to create discussion post." });
+    res.status(500).json({ error: error.message || "Failed to create discussion post." });
   }
 });
 
@@ -107,34 +118,42 @@ router.post("/:id/answers", async (req, res) => {
 
     const authorRole = req.user.role === "faculty" ? "Faculty" : "Student";
     const newAnswer = {
+      id: `ans_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       authorId: req.user._id || req.user.id,
-      authorName: req.user.name,
+      author: req.user.name || "Faculty",
+      authorName: req.user.name || "Faculty",
       authorRole,
-      content,
+      content: content.trim(),
       isFacultyVerified: authorRole === "Faculty",
       upvotes: 1,
+      createdAt: new Date().toISOString().split("T")[0],
     };
 
-    post.answers.push(newAnswer);
-    await post.save();
+    let currentAnswers = [];
+    if (Array.isArray(post.answers)) {
+      currentAnswers = [...post.answers];
+    } else if (typeof post.answers === "string") {
+      try {
+        currentAnswers = JSON.parse(post.answers);
+      } catch {
+        currentAnswers = [];
+      }
+    }
+    currentAnswers.push(newAnswer);
 
-    const updated = await Discussion.findById(req.params.id)
-      .populate("authorId", "name role")
-      .populate("subjectId", "name code");
+    await Discussion.findByIdAndUpdate(post.id || post._id, { answers: currentAnswers });
 
     res.status(201).json({
-      ...updated.toObject(),
-      id: String(updated._id),
-      subjectName: updated.subjectId?.name || "General",
-      author: updated.authorName || req.user.name,
-      authorRole: updated.authorRole,
-      createdAt: updated.createdAt ? new Date(updated.createdAt).toISOString() : new Date().toISOString(),
-      answers: updated.answers.map((ans) => ({
-        ...ans.toObject(),
-        id: String(ans._id),
-        author: ans.authorName || "Anonymous",
-        createdAt: ans.createdAt ? new Date(ans.createdAt).toISOString() : new Date().toISOString(),
-      })),
+      id: String(post.id || post._id),
+      title: post.title || "",
+      content: post.message || post.content || "",
+      subjectName: post.subjectName || "General",
+      author: post.authorName || post.author || "Student",
+      authorRole: post.authorRole || "Student",
+      tags: Array.isArray(post.tags) ? post.tags : [],
+      upvotes: post.upvotes ?? 1,
+      createdAt: post.createdAt ? new Date(post.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      answers: currentAnswers,
     });
   } catch (error) {
     console.error("[Discussions API] POST answer error:", error);
@@ -150,10 +169,10 @@ router.patch("/:id/upvote", async (req, res) => {
       return res.status(404).json({ error: "Discussion post not found." });
     }
 
-    post.upvotes += 1;
-    await post.save();
+    const newUpvotes = (post.upvotes || 0) + 1;
+    await Discussion.findByIdAndUpdate(post.id || post._id, { upvotes: newUpvotes });
 
-    res.json({ id: String(post._id), upvotes: post.upvotes });
+    res.json({ id: String(post.id || post._id), upvotes: newUpvotes });
   } catch (error) {
     console.error("[Discussions API] PATCH upvote error:", error);
     res.status(500).json({ error: "Failed to upvote discussion post." });

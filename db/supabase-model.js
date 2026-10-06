@@ -14,10 +14,23 @@ function toCamelCase(str) {
 export function objectToSnake(obj) {
   if (!obj || typeof obj !== "object" || Array.isArray(obj) || obj instanceof Date) return obj;
   const result = {};
-  for (const [key, val] of Object.entries(obj)) {
+  for (const [key, rawVal] of Object.entries(obj)) {
     if (key === "_id") {
-      result["id"] = val;
+      result["id"] = rawVal;
+    } else if (key === "__tableName" || key === "save" || key === "toObject") {
+      continue;
     } else {
+      let val = rawVal;
+      // If a populated relation object is passed, extract only its primitive id
+      if (
+        val &&
+        typeof val === "object" &&
+        !Array.isArray(val) &&
+        !(val instanceof Date) &&
+        (val.id || val._id)
+      ) {
+        val = val.id || val._id;
+      }
       const snakeKey = toSnakeCase(key);
       result[snakeKey] = val;
     }
@@ -26,7 +39,7 @@ export function objectToSnake(obj) {
 }
 
 // Transform a Supabase row to camelCase with _id and id
-export function rowToCamel(row, relations = {}) {
+export function rowToCamel(row, tableName = "") {
   if (!row || typeof row !== "object") return row;
   const doc = {};
   for (const [key, val] of Object.entries(row)) {
@@ -35,10 +48,14 @@ export function rowToCamel(row, relations = {}) {
   }
   doc._id = row.id || doc.id;
   doc.id = row.id || doc._id;
+  if (tableName) {
+    doc.__tableName = tableName;
+  }
 
   // Add instance methods like save()
   Object.defineProperty(doc, "save", {
     value: async function () {
+      const targetTable = this.__tableName || tableName || "documents";
       const updates = objectToSnake(this);
       delete updates.id;
       delete updates._id;
@@ -46,13 +63,14 @@ export function rowToCamel(row, relations = {}) {
       updates.updated_at = new Date().toISOString();
 
       const { data, error } = await supabase
-        .from(this.__tableName)
+        .from(targetTable)
         .update(updates)
         .eq("id", this.id || this._id)
         .select()
         .single();
       if (error) throw new Error(error.message);
-      return rowToCamel(data);
+      const updated = rowToCamel(data, targetTable);
+      return updated;
     },
     enumerable: false,
     writable: true,

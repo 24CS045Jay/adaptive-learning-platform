@@ -1,7 +1,15 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
-export function authHeaders(token?: string): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {};
+export function authHeaders(
+  token?: string,
+  extra?: { role?: string; id?: string; departmentId?: string },
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (extra?.role) headers["x-user-role"] = extra.role.toLowerCase();
+  if (extra?.id) headers["x-user-id"] = extra.id;
+  if (extra?.departmentId) headers["x-department-id"] = extra.departmentId;
+  return headers;
 }
 
 export async function fetchJson<T = any>(endpoint: string, options: RequestInit = {}) {
