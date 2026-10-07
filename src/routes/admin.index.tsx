@@ -4,7 +4,12 @@ import {
   MessageSquare, CheckCircle, XCircle, Clock,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { PageHeader, StatCard, Card, Pill } from "@/components/app-shell";
+import { StatCard, Card, Pill } from "@/components/app-shell";
+import { WelcomeHero } from "@/components/welcome-hero";
+import { useAuth } from "@/lib/auth";
+import { useState } from "react";
+import { ArrowRight, LayoutGrid, Activity, Server, BarChart3, ChevronDown } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
@@ -59,12 +64,13 @@ function DocQueueRow({
   );
 }
 
-function MiniBarRow({ topic, value, max }: { topic: string; value: number; max: number }) {
+function MiniBarRow({ topic, value, max, rank }: { topic: string; value: number; max: number; rank: number }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
   return (
-    <li className="flex items-center gap-3 py-2">
-      <span className="w-40 truncate text-sm text-foreground">{topic}</span>
-      <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+    <li className="flex items-center gap-3 py-2.5">
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet/12 text-xs font-bold text-violet">{rank}</span>
+      <span className="w-44 truncate text-sm font-medium text-foreground">{topic}</span>
+      <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
@@ -72,12 +78,21 @@ function MiniBarRow({ topic, value, max }: { topic: string; value: number; max: 
           className="h-full rounded-full bg-gradient-to-r from-violet to-violet/70"
         />
       </div>
-      <Pill tone="indigo">{value}</Pill>
+      <span className="w-10 text-right text-sm font-semibold tabular-nums text-muted-foreground">{value}</span>
     </li>
   );
 }
 
+const TABS = [
+  { id: "overview", label: "Overview", icon: LayoutGrid },
+  { id: "insights", label: "Platform Insights", icon: BarChart3 },
+  { id: "activity", label: "Recent Activity", icon: Activity },
+  { id: "status", label: "System Status", icon: Server },
+];
+
 function AdminDashboard() {
+  const { user } = useAuth();
+  const [tab, setTab] = useState("overview");
   const { users, subjects, documents, escalations, topicVolume } = useAppData();
 
   const students = users.filter((u) => u.role === "Student").length;
@@ -109,9 +124,15 @@ function AdminDashboard() {
 
   return (
     <div>
-      <PageHeader title="Institution Overview" subtitle="Platform-wide stats across all subjects and users." />
+      <WelcomeHero
+        name={(user?.name ?? "Admin").split(" ")[0]}
+        subtitle="Here’s what’s happening with your AI Tutor platform."
+        tabs={TABS}
+        activeTab={tab}
+        onTab={setTab}
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className={cn("grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4", tab === "status" && "hidden")}>
         <StatCard
           label="Total Students"
           value={students}
@@ -137,8 +158,9 @@ function AdminDashboard() {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <Card title="Document Approval Queue">
+      <div className={cn("mt-6 grid gap-5 md:grid-cols-2", (tab === "status") && "hidden")}>
+        {(tab === "overview" || tab === "activity") && (
+        <Card title="Document Approval Queue" icon={FileCheck} action={<Link to="/admin/approvals" className="inline-flex items-center gap-1.5 rounded-full bg-violet/10 px-4 py-1.5 text-xs font-bold text-violet hover:bg-violet/15">View All <ArrowRight className="h-3 w-3" /></Link>}>
           <ul className="space-y-2">
             <DocQueueRow
               label="Pending review"
@@ -166,18 +188,34 @@ function AdminDashboard() {
             />
           </ul>
         </Card>
+        )}
 
-        <Card title="Most-Asked Topics">
+        {(tab === "overview" || tab === "insights") && (
+        <Card title="Most-Asked Topics" icon={BarChart3} action={<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-semibold text-foreground">Last 7 days <ChevronDown className="h-3 w-3" /></span>}>
           <ul>
-            {topTopics.map((t) => (
-              <MiniBarRow key={t.topic} topic={t.topic} value={t.asked} max={topMax} />
+            {topTopics.map((t, i) => (
+              <MiniBarRow key={t.topic} topic={t.topic} value={t.asked} max={topMax} rank={i + 1} />
             ))}
           </ul>
         </Card>
+        )}
       </div>
 
-      <div className="mt-6">
-        <Card title="Subject Activity — Approved Documents">
+      {tab === "status" && (
+        <Card title="System Status" icon={Server}>
+          <ul className="grid gap-3 md:grid-cols-2">
+            {["API server", "RAG retrieval engine", "Vector index", "Mail service"].map((n) => (
+              <li key={n} className="flex items-center justify-between rounded-2xl border border-border bg-background/40 px-5 py-4">
+                <span className="font-semibold">{n}</span>
+                <Pill tone="success">Operational</Pill>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className={cn("mt-6", (tab === "activity" || tab === "status") && "hidden")}>
+        <Card title="Subject Activity — Approved Documents" icon={BookOpen} action={<Link to="/admin/subjects" className="inline-flex items-center gap-1.5 rounded-full bg-violet/10 px-4 py-1.5 text-xs font-bold text-violet hover:bg-violet/15">View All <ArrowRight className="h-3 w-3" /></Link>}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth";
 import { useAppData } from "@/lib/app-data-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useCountUp } from "@/hooks/use-count-up";
+import { Logo, Mascot, ThemeToggle, Sparkle } from "@/components/brand";
 
 export type NavItem = { to: string; label: string; icon: LucideIcon };
 
@@ -40,7 +41,7 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
 
   const handleLogout = () => {
     logout();
-    navigate({ to: "/" });
+    navigate({ to: "/login" });
   };
 
   const activeNav = nav.find(
@@ -51,140 +52,82 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
   return (
     <div className="flex min-h-screen bg-background font-sans text-foreground">
       {/* ── Sidebar ── */}
-      <aside className="sidebar-gradient fixed inset-y-0 left-0 z-20 flex w-64 flex-col border-r border-border shadow-xl transition-colors">
-        {/* Logo */}
-        <div className="px-6 pt-7 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet/15 ring-1 ring-violet/25 shadow-[0_0_12px_-2px_oklch(0.62_0.22_293_/_30%)]">
-              <GraduationCap className="h-5 w-5 text-violet" />
-            </div>
-            <div className="leading-tight">
-              <div className="font-serif text-xl font-bold text-foreground">AI Tutor</div>
-              <div className="text-[11px] text-muted-foreground">CSPIT CSE · RAG Platform</div>
-            </div>
-          </div>
+      <aside className="sidebar-gradient fixed inset-y-0 left-0 z-20 flex w-[17.5rem] flex-col border-r border-border">
+        <div className="px-6 pb-4 pt-6">
+          <Logo size="sm" subtitle="CSPIT CSE · RAG Platform" />
         </div>
 
-        {/* Nav items */}
-        <LayoutGroup>
-          <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
-            {nav.map((item) => {
-              const active = pathname === item.to || (item.to !== `/${role}` && pathname.startsWith(item.to));
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors"
-                >
-                  {active && (
-                    <motion.div
-                      layoutId="sidebar-active-pill"
-                      className="absolute inset-0 rounded-xl bg-violet/12 ring-1 ring-violet/20"
-                      style={{ boxShadow: "inset 3px 0 0 var(--color-violet), 0 0 12px -3px oklch(0.62 0.22 293 / 18%)" }}
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    />
-                  )}
-                  <Icon
-                    className={cn(
-                      "relative z-10 h-4 w-4 shrink-0 transition-all duration-200",
-                      active ? "text-violet" : "text-muted-foreground group-hover:text-foreground"
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "relative z-10 transition-colors",
-                      active ? "font-semibold text-violet" : "text-sidebar-foreground group-hover:text-foreground"
-                    )}
-                  >
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </nav>
-        </LayoutGroup>
+        <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">
+          {nav.map((item) => {
+            const active = pathname === item.to || (item.to !== `/${role}` && pathname.startsWith(item.to));
+            const Icon = item.icon;
+            return (
+              <Link key={item.to} to={item.to} className={cn("nav-link", active && "is-active")}>
+                <Icon className="nav-ico h-[1.15rem] w-[1.15rem] shrink-0" />
+                <span className="truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
 
-        {/* User card at bottom */}
-        <div className="mx-3 mt-auto border-t border-border px-1 pt-4 pb-5">
+        <div className="mx-4 mb-4 mt-auto border-t border-border pt-4">
           <Link
             to={`/${role}/profile`}
-            className="group flex items-center gap-2.5 rounded-xl px-2 py-2 transition hover:bg-accent"
+            className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-accent"
           >
-            <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet/20 text-xs font-bold text-violet avatar-ring-violet">
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet/25 to-violet/10 text-xs font-bold text-violet ring-2 ring-violet/30">
               {initials}
               <span className="online-dot absolute -bottom-0.5 -right-0.5" />
             </div>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-foreground group-hover:text-violet transition-colors">{displayName}</div>
+              <div className="truncate text-sm font-bold text-foreground">{displayName}</div>
               <div className="truncate text-[11px] text-muted-foreground">{displayEmail}</div>
             </div>
           </Link>
           <button
             type="button"
             onClick={handleLogout}
-            className="mt-2 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition hover:text-danger"
+            className="mt-1 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground transition hover:text-danger"
           >
-            <LogOut className="h-3.5 w-3.5" /> Sign out
+            <LogOut className="h-4 w-4" /> Sign out
           </button>
         </div>
       </aside>
 
       {/* ── Main Workspace ── */}
-      <div className="ml-64 flex min-w-0 flex-1 flex-col">
+      <div className="ml-[17.5rem] flex min-w-0 flex-1 flex-col">
         {/* ── Top Bar ── */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-8 py-3.5 backdrop-blur-md transition-colors">
-          {/* Left — page title */}
-          <div>
-            <h2 className="text-base font-semibold text-foreground">{pageTitle}</h2>
-            <p className="text-[11px] text-muted-foreground">CSPIT CSE Adaptive Learning</p>
+        <header className="sticky top-0 z-30 flex items-center gap-4 bg-background/70 px-8 py-4 backdrop-blur-xl">
+          <div className="group top-chip max-w-xl flex-1 gap-3 px-5 text-sm transition-all focus-within:border-violet/50 focus-within:shadow-[0_0_0_4px_oklch(0.62_0.22_293_/_14%)]">
+            <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-violet" />
+            <input
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              placeholder={`Quick search ${role === "admin" ? "students, subjects, documents" : role === "faculty" ? "subjects, queries, documents" : "subjects, notes, topics"}…`}
+              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            <kbd className="hidden rounded-md border border-border bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:block">Ctrl + K</kbd>
           </div>
 
-          {/* Right — controls */}
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="group hidden items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 text-sm transition-all duration-200 focus-within:border-violet/40 focus-within:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] md:flex">
-              <Search className="h-3.5 w-3.5 text-muted-foreground transition-colors group-focus-within:text-violet" />
-              <input
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="Quick search…"
-                className="w-36 bg-transparent text-sm outline-none placeholder:text-muted-foreground transition-all focus:w-48"
-              />
-            </div>
-
-            {/* Messages icon */}
-            <button
-              type="button"
-              className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:border-violet/30 hover:text-violet hover:shadow-[0_0_12px_-3px_oklch(0.62_0.22_293_/_25%)]"
-              title="Messages"
-            >
-              <MessageSquare className="h-4 w-4" />
-              <span className="badge-pulse absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet text-[9px] font-bold text-white">
-                2
-              </span>
-            </button>
-
-            {/* Notification bell */}
+          <div className="ml-auto flex items-center gap-3">
             <div className="relative">
               <button
                 type="button"
                 onClick={() => { setShowNotifications((v) => !v); setShowUserMenu(false); }}
-                className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all hover:border-violet/30 hover:text-violet hover:shadow-[0_0_12px_-3px_oklch(0.62_0.22_293_/_25%)]"
+                className="top-chip relative w-[2.6rem] justify-center text-muted-foreground transition hover:text-violet"
                 title="Notifications"
               >
-                <Bell className="h-4 w-4" />
+                <Bell className="h-[1.1rem] w-[1.1rem]" />
                 {unreadCount > 0 && (
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="badge-pulse absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[9px] font-bold text-white"
+                    className="absolute -right-0.5 -top-1 flex h-[1.1rem] min-w-[1.1rem] items-center justify-center rounded-full bg-violet px-1 text-[10px] font-bold text-white"
                   >
                     {unreadCount}
                   </motion.span>
                 )}
               </button>
-
               <AnimatePresence>
                 {showNotifications && (
                   <motion.div
@@ -192,7 +135,7 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-80 rounded-2xl border border-border bg-card p-4 shadow-2xl z-50 space-y-3"
+                    className="absolute right-0 mt-2 w-80 rounded-3xl border border-border bg-card p-4 shadow-2xl z-50 space-y-3"
                     style={{ boxShadow: "0 16px 48px -12px rgba(0,0,0,0.35), 0 0 0 1px var(--color-border)" }}
                   >
                     <div className="flex items-center justify-between border-b border-border pb-2">
@@ -230,51 +173,20 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
               </AnimatePresence>
             </div>
 
-            {/* Theme toggle — pill style */}
-            <button
-              type="button"
-              onClick={toggle}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className="theme-toggle-pill"
-              aria-label="Toggle theme"
-            >
-              {/* Sun icon track-left */}
-              <span className={cn("absolute left-2 flex h-5 w-5 items-center justify-center transition-opacity duration-200", isDark ? "opacity-30" : "opacity-0")}>
-                <Sun className="h-3.5 w-3.5 text-gold" />
-              </span>
-              {/* Moon icon track-right */}
-              <span className={cn("absolute right-2 flex h-5 w-5 items-center justify-center transition-opacity duration-200", !isDark ? "opacity-30" : "opacity-0")}>
-                <Moon className="h-3.5 w-3.5 text-violet" />
-              </span>
-              <span className={cn("theme-toggle-thumb", isDark ? "is-dark" : "is-light")}>
-                <AnimatePresence mode="wait" initial={false}>
-                  {isDark ? (
-                    <motion.span key="sun" initial={{ rotate: -45, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: 45, opacity: 0 }} transition={{ duration: 0.18 }}>
-                      <Sun className="h-3.5 w-3.5 text-white" />
-                    </motion.span>
-                  ) : (
-                    <motion.span key="moon" initial={{ rotate: 45, opacity: 0 }} animate={{ rotate: 0, opacity: 1 }} exit={{ rotate: -45, opacity: 0 }} transition={{ duration: 0.18 }}>
-                      <Moon className="h-3.5 w-3.5 text-white" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </span>
-            </button>
+            <ThemeToggle />
 
-            {/* User avatar + dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => { setShowUserMenu((v) => !v); setShowNotifications(false); }}
-                className="flex items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 transition-all hover:border-violet/30 hover:shadow-[0_0_10px_-3px_oklch(0.62_0.22_293_/_20%)]"
+                className="top-chip gap-2 py-0 pl-1.5 pr-3 transition hover:border-violet/40"
               >
-                <div className="relative flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-br from-violet/30 to-violet/10 text-[11px] font-bold text-violet ring-1 ring-violet/30">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet/30 to-violet/10 text-[11px] font-bold text-violet ring-1 ring-violet/30">
                   {initials}
                 </div>
-                <span className="hidden text-xs font-semibold text-foreground sm:block">{displayName.split(" ")[0]}</span>
-                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                <span className="hidden text-sm font-semibold text-foreground sm:block">{displayName.split(" ")[0]}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
-
               <AnimatePresence>
                 {showUserMenu && (
                   <motion.div
@@ -282,7 +194,7 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -8, scale: 0.96 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-44 rounded-xl border border-border bg-card py-1.5 shadow-xl z-50"
+                    className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-card py-1.5 shadow-xl z-50"
                     style={{ boxShadow: "0 16px 48px -12px rgba(0,0,0,0.3), 0 0 0 1px var(--color-border)" }}
                   >
                     {[
@@ -311,19 +223,9 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
           </div>
         </header>
 
-        {/* ── Page Content with transition ── */}
-        <main className="flex-1 px-8 py-7">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={pathname}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15, ease: "easeInOut" }}
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+        {/* ── Page Content with instant navigation ── */}
+        <main className="flex-1 px-8 pb-10 pt-2">
+          <Outlet />
         </main>
       </div>
     </div>
@@ -333,27 +235,83 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
 /* ─────────────────────────────────────────────────
    PAGE HEADER
 ───────────────────────────────────────────────── */
+const HERO_ART = [
+  { src: "/assets/ui/users-hero.png", cls: "h-[10.5rem]" },
+  { src: "/assets/ui/dash-hero.png", cls: "h-[10rem]" },
+  { src: "/assets/ui/logs-hero.png", cls: "h-[9rem]" },
+];
+const HERO_NOTES = [
+  ["Learn", "Grow", "Shine"],
+  ["Manage", "Guide", "Empower"],
+  ["Ask", "Learn", "Grow"],
+  ["Plan", "Practice", "Succeed"],
+  ["Track", "Improve", "Achieve"],
+];
+function strHash(str: string) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
 export function PageHeader({
   title,
   subtitle,
   action,
+  note,
+  art,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /** Handwritten annotation lines shown beside the mascot */
+  note?: string[] | false;
+  art?: "boy" | "boy-books" | "peek" | false;
 }) {
+  const h = strHash(title);
+  const pick = art === "boy" ? HERO_ART[1] : art === "boy-books" ? HERO_ART[0] : art === "peek" ? HERO_ART[2] : HERO_ART[h % HERO_ART.length];
+  const lines = note === false ? null : (note ?? HERO_NOTES[h % HERO_NOTES.length]);
+  const words = title.trim().split(" ");
+  const last = words.pop() as string;
+  const head = words.join(" ");
+
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className="mb-8 flex items-start justify-between gap-4"
+      transition={{ duration: 0.25 }}
+      className="hero-banner relative mb-8 flex min-h-[9.5rem] items-center gap-4 pb-2 pt-3 lg:pr-[17rem]"
     >
-      <div>
-        <h1 className="font-serif text-3xl font-bold tracking-tight text-foreground">{title}</h1>
-        {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
+      {/* soft lavender blob behind the mascot */}
+      {art !== false && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-6 right-0 hidden h-[13rem] w-[26rem] rounded-[4rem] bg-gradient-to-br from-violet/20 via-violet/10 to-transparent blur-2xl lg:block"
+        />
+      )}
+
+      <div className="relative z-10 min-w-0 flex-1">
+        <h1 className="text-[2.1rem] font-extrabold leading-tight tracking-tight text-foreground">
+          {head && <>{head} </>}
+          <span className="gradient-word">{last}</span>
+        </h1>
+        {subtitle && <p className="mt-2 max-w-2xl text-[0.95rem] text-muted-foreground">{subtitle}</p>}
+        {action && <div className="mt-4 flex flex-wrap items-center gap-3">{action}</div>}
       </div>
-      {action}
+
+      {art !== false && (
+        <div className="pointer-events-none absolute bottom-0 right-4 hidden select-none lg:block">
+          <Sparkle className="-left-2 top-2 h-3 w-3 text-violet" delay={0.4} />
+          <Sparkle className="right-1 top-0 h-3.5 w-3.5 text-violet" delay={1.1} />
+          {lines && (
+            <div className="hand-note absolute -left-[7.4rem] top-0 z-10 hidden w-28 2xl:block">
+              {lines.map((l) => (
+                <div key={l}>{l}</div>
+              ))}
+            </div>
+          )}
+          <img src={pick.src} alt="" draggable={false} className={cn("relative z-0 w-auto object-contain drop-shadow-[0_14px_20px_rgba(76,56,190,.28)]", pick.cls)} />
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -367,35 +325,41 @@ export function Card({
   action,
   className,
   variant = "default",
+  icon: Icon,
 }: {
   title?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
   variant?: "default" | "hero" | "glow" | "hero-gold";
+  icon?: LucideIcon;
 }) {
   const variantClasses = {
-    default: "rounded-2xl border border-border bg-card p-6",
-    hero: "card-hero rounded-2xl border p-6",
-    glow: "card-glow rounded-2xl border border-border bg-card p-6",
-    "hero-gold": "card-hero-gold rounded-2xl border p-6",
+    default: "rounded-3xl border border-border bg-card p-6",
+    hero: "card-hero rounded-3xl border p-6",
+    glow: "card-glow rounded-3xl border border-border bg-card p-6",
+    "hero-gold": "card-hero-gold rounded-3xl border p-6",
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      whileHover={{ y: -3, boxShadow: "0 12px 40px -10px oklch(0.62 0.22 293 / 22%), 0 0 0 1px oklch(0.62 0.22 293 / 12%)" }}
-      className={cn(
-        variantClasses[variant],
-        "transition-all duration-200",
-        className
-      )}
+      transition={{ duration: 0.25 }}
+      className={cn(variantClasses[variant], "transition-shadow duration-200 hover:shadow-[0_18px_44px_-18px_rgba(95,63,230,.35)]", className)}
     >
       {(title || action) && (
-        <div className="mb-4 flex items-center justify-between">
-          {title && <div className="font-serif text-lg font-bold text-foreground">{title}</div>}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          {title && (
+            <div className="flex items-center gap-3 text-lg font-extrabold text-foreground">
+              {Icon && (
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet/12 text-violet">
+                  <Icon className="h-5 w-5" />
+                </span>
+              )}
+              {title}
+            </div>
+          )}
           {action}
         </div>
       )}
@@ -445,58 +409,54 @@ export function StatCard({ label, value, caption, color = "violet", icon: Icon, 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
       whileHover={{ y: -3 }}
-      className="glow-hover-violet rounded-2xl border border-border bg-card p-5"
+      className="relative overflow-hidden rounded-3xl border border-border bg-card p-5 transition-shadow hover:shadow-[0_18px_44px_-18px_rgba(95,63,230,.4)]"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 h-16 opacity-60", colors.bg)} style={{ maskImage: "linear-gradient(to top, black, transparent)", WebkitMaskImage: "linear-gradient(to top, black, transparent)" }} />
+      <div className="relative flex items-start gap-4">
         {Icon && (
-          <motion.div
-            whileHover={{ scale: 1.1, boxShadow: "0 0 16px -2px oklch(0.62 0.22 293 / 45%)" }}
-            transition={{ duration: 0.15 }}
-            className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all duration-200", colors.bg)}
-          >
+          <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full", colors.bg)}>
             <Icon className={cn("h-5 w-5", colors.text)} />
-          </motion.div>
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-muted-foreground">{label}</div>
+          <div className="mt-1 text-[2.1rem] font-extrabold leading-none tabular-nums text-foreground">
+            {isNumeric ? count.toLocaleString() : value}
+          </div>
+        </div>
+        {sparklineData && sparklineData.length > 0 && (
+          <div className="flex h-12 items-end gap-1">
+            {sparklineData.map((v, i) => {
+              const max = Math.max(...sparklineData);
+              const pct = max > 0 ? (v / max) * 100 : 0;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ height: 0 }}
+                  animate={{ height: `${pct}%` }}
+                  transition={{ delay: 0.1 + i * 0.04, duration: 0.4, ease: "easeOut" }}
+                  className={cn("w-1.5 rounded-full", colors.bg, "!opacity-100 brightness-95")}
+                  style={{ minHeight: 4, background: "color-mix(in srgb, var(--color-violet) 35%, transparent)" }}
+                />
+              );
+            })}
+          </div>
         )}
       </div>
-      <div className={cn("mt-3 text-4xl font-bold tabular-nums", colors.gradient || colors.text)}>
-        {isNumeric ? count.toLocaleString() : value}
-        {typeof value === "string" && value.endsWith("%") ? "%" : ""}
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        {trend && (
-          <motion.span
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.2 }}
-            className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold",
-              trend.up ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
-            )}
-          >
-            {trend.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {trend.pct}% vs last week
-          </motion.span>
-        )}
-        {caption && <div className="text-xs text-muted-foreground">{caption}</div>}
-      </div>
-      {/* Sparkline mini bars */}
-      {sparklineData && sparklineData.length > 0 && (
-        <div className="mt-3 flex h-8 items-end gap-0.5">
-          {sparklineData.map((v, i) => {
-            const max = Math.max(...sparklineData);
-            const pct = max > 0 ? (v / max) * 100 : 0;
-            return (
-              <motion.div
-                key={i}
-                initial={{ height: 0 }}
-                animate={{ height: `${pct}%` }}
-                transition={{ delay: 0.1 + i * 0.04, duration: 0.4, ease: "easeOut" }}
-                className={cn("flex-1 rounded-sm", colors.bg)}
-                style={{ minHeight: 3 }}
-              />
-            );
-          })}
+      {(trend || caption) && (
+        <div className="relative mt-3 flex flex-wrap items-center gap-2">
+          {trend && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                trend.up ? "bg-success/12 text-success" : "bg-danger/12 text-danger",
+              )}
+            >
+              {trend.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+              {trend.pct}% vs last week
+            </span>
+          )}
+          {caption && <div className="text-xs text-muted-foreground">{caption}</div>}
         </div>
       )}
     </motion.div>
@@ -536,7 +496,7 @@ export function ActionCard({
       whileHover={{ y: -4 }}
       whileTap={{ scale: 0.97 }}
       className={cn(
-        "group relative flex w-full items-start gap-4 overflow-hidden rounded-2xl border border-border bg-card p-5 text-left transition-all duration-200 hover:shadow-lg",
+        "group relative flex w-full items-start gap-4 overflow-hidden rounded-3xl border border-border bg-card p-5 text-left shadow-[var(--card-shadow)] transition-all duration-200 hover:shadow-lg",
         c.border
       )}
     >
@@ -545,7 +505,7 @@ export function ActionCard({
 
       <motion.div
         whileHover={{ boxShadow: c.glow }}
-        className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all duration-200", c.bg)}
+        className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-all duration-200", c.bg)}
       >
         <Icon className={cn("h-5 w-5", c.text)} />
       </motion.div>
@@ -581,7 +541,7 @@ const PILL_STYLES: Record<PillTone, string> = {
 
 export function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider", PILL_STYLES[tone])}>
+    <span className={cn("inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide", PILL_STYLES[tone])}>
       {children}
     </span>
   );
@@ -651,7 +611,7 @@ export function PrimaryButton({
       disabled={disabled}
       whileHover={{ boxShadow: "0 0 22px -4px oklch(0.62 0.22 293 / 55%)" }}
       whileTap={{ scale: 0.95 }}
-      className="btn-shimmer inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50 hover:from-[#9d72f7] hover:to-[#8b5cf6]"
+      className="btn-shimmer btn-pill disabled:opacity-50"
     >
       {Icon && <Icon className="h-4 w-4" />}
       {children}
@@ -664,7 +624,7 @@ export function PrimaryButton({
 ───────────────────────────────────────────────── */
 export function SkeletonCard({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 space-y-3">
+    <div className="rounded-3xl border border-border bg-card p-6 space-y-3">
       <div className="skeleton h-5 w-32" />
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="skeleton h-4" style={{ width: `${60 + (i * 13) % 35}%` }} />

@@ -335,7 +335,7 @@ function UserLogsPage() {
               type="button"
               onClick={fetchLogs}
               disabled={loading}
-              className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-accent shadow-sm transition active:scale-95 disabled:opacity-50"
+              className="btn-pill-ghost disabled:opacity-50"
             >
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin text-violet")} />
               <span>Refresh</span>
@@ -343,7 +343,7 @@ function UserLogsPage() {
             <button
               type="button"
               onClick={handleExportCSV}
-              className="flex items-center gap-2 rounded-xl bg-violet px-4 py-2 text-sm font-semibold text-white hover:bg-violet-hover shadow-sm transition active:scale-95"
+              className="btn-pill"
             >
               <Download className="h-4 w-4" />
               <span>Export CSV</span>
@@ -361,9 +361,9 @@ function UserLogsPage() {
       )}
 
       {/* Department Context & Scope Pill */}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-card p-5 shadow-[var(--card-shadow)]">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet/10 text-violet">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet/12 text-violet">
             <Building2 className="h-5 w-5" />
           </div>
           <div>
@@ -394,67 +394,39 @@ function UserLogsPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <Card className="p-4 border-l-4 border-l-violet">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Users</div>
-            <Users className="h-4 w-4 text-violet" />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+        {[
+          { label: "Total Users", v: stats.total, cap: "Registered in Dept", Icon: Users, c: "violet", tone: "text-violet bg-violet/12", stroke: "#7c5cf0" },
+          { label: "1st Year", v: stats.y1, cap: "Batch 2025-2026", Icon: GraduationCap, c: "emerald", tone: "text-emerald-500 bg-emerald-500/12", stroke: "#10b981" },
+          { label: "2nd Year", v: stats.y2, cap: "Batch 2024-2025", Icon: GraduationCap, c: "sky", tone: "text-sky-500 bg-sky-500/12", stroke: "#0ea5e9" },
+          { label: "3rd Year", v: stats.y3, cap: "Batch 2023-2024", Icon: GraduationCap, c: "indigo", tone: "text-indigo-500 bg-indigo-500/12", stroke: "#6366f1" },
+          { label: "4th Year", v: stats.y4, cap: "Batch 2022-2023", Icon: GraduationCap, c: "amber", tone: "text-amber-500 bg-amber-500/14", stroke: "#f59e0b" },
+          { label: "Faculty", v: stats.facultyCount, cap: "Staff & Instructors", Icon: Shield, c: "rose", tone: "text-rose-500 bg-rose-500/12", stroke: "#f43f5e" },
+        ].map((c) => (
+          <div key={c.label} className="relative overflow-hidden rounded-3xl border border-border bg-card p-4 shadow-[var(--card-shadow)] transition hover:-translate-y-1">
+            <div className="relative z-10 flex items-center gap-3">
+              <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", c.tone)}>
+                <c.Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 leading-tight">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">{c.label}</div>
+                <div className="text-3xl font-extrabold">{c.v}</div>
+              </div>
+            </div>
+            <div className="relative z-10 mt-1 text-[11px] text-muted-foreground">{c.cap}</div>
+            <svg viewBox="0 0 120 30" preserveAspectRatio="none" className="pointer-events-none absolute inset-x-0 bottom-0 h-8 w-full opacity-70" aria-hidden>
+              <path d="M0 24C15 8 25 28 45 18S80 4 100 14s16 6 20 2V30H0z" fill={c.stroke} fillOpacity=".12" />
+              <path d="M0 24C15 8 25 28 45 18S80 4 100 14s16 6 20 2" fill="none" stroke={c.stroke} strokeOpacity=".55" strokeWidth="1.6" />
+            </svg>
           </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.total}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Registered in Dept</div>
-        </Card>
-
-        <Card className="p-4 border-l-4 border-l-emerald-500">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1st Year</div>
-            <GraduationCap className="h-4 w-4 text-emerald-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.y1}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Batch 2025-2029</div>
-        </Card>
-
-        <Card className="p-4 border-l-4 border-l-cyan-500">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2nd Year</div>
-            <GraduationCap className="h-4 w-4 text-cyan-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.y2}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Batch 2024-2028</div>
-        </Card>
-
-        <Card className="p-4 border-l-4 border-l-indigo-500">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">3rd Year</div>
-            <GraduationCap className="h-4 w-4 text-indigo-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.y3}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Batch 2023-2027</div>
-        </Card>
-
-        <Card className="p-4 border-l-4 border-l-amber-500">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">4th Year</div>
-            <GraduationCap className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.y4}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Batch 2022-2026</div>
-        </Card>
-
-        <Card className="p-4 border-l-4 border-l-rose-500">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Faculty</div>
-            <Shield className="h-4 w-4 text-rose-500" />
-          </div>
-          <div className="mt-2 text-2xl font-bold text-foreground">{stats.facultyCount}</div>
-          <div className="mt-1 text-[11px] text-muted-foreground">Staff & Instructors</div>
-        </Card>
+        ))}
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm space-y-4">
+      <div className="rounded-3xl border border-border bg-card p-5 shadow-[var(--card-shadow)] space-y-4">
         {/* Search & Top Controls */}
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2 flex-1 min-w-[260px] rounded-xl border border-border bg-background px-3 py-2">
+          <div className="flex items-center gap-2 flex-1 min-w-[260px] rounded-full border border-border bg-background px-4 py-2.5">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               type="text"

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ChangePasswordRouteImport } from './routes/change-password'
 import { Route as FacultyRouteImport } from './routes/faculty'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as StudentRouteImport } from './routes/student'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
@@ -69,6 +70,11 @@ const ChangePasswordRoute = ChangePasswordRouteImport.update({
 const FacultyRoute = FacultyRouteImport.update({
   id: '/faculty',
   path: '/faculty',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudentRoute = StudentRouteImport.update({
@@ -262,6 +268,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteWithChildren
   '/change-password': typeof ChangePasswordRoute
   '/faculty': typeof FacultyRouteWithChildren
+  '/login': typeof LoginRoute
   '/student': typeof StudentRouteWithChildren
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/announcements': typeof AdminAnnouncementsRoute
@@ -303,6 +310,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/change-password': typeof ChangePasswordRoute
+  '/login': typeof LoginRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/announcements': typeof AdminAnnouncementsRoute
   '/admin/approvals': typeof AdminApprovalsRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteWithChildren
   '/change-password': typeof ChangePasswordRoute
   '/faculty': typeof FacultyRouteWithChildren
+  '/login': typeof LoginRoute
   '/student': typeof StudentRouteWithChildren
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/announcements': typeof AdminAnnouncementsRoute
@@ -391,6 +400,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/change-password'
     | '/faculty'
+    | '/login'
     | '/student'
     | '/admin/analytics'
     | '/admin/announcements'
@@ -432,6 +442,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/change-password'
+    | '/login'
     | '/admin/analytics'
     | '/admin/announcements'
     | '/admin/approvals'
@@ -474,6 +485,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/change-password'
     | '/faculty'
+    | '/login'
     | '/student'
     | '/admin/analytics'
     | '/admin/announcements'
@@ -518,6 +530,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRouteWithChildren
   ChangePasswordRoute: typeof ChangePasswordRoute
   FacultyRoute: typeof FacultyRouteWithChildren
+  LoginRoute: typeof LoginRoute
   StudentRoute: typeof StudentRouteWithChildren
 }
 
@@ -549,6 +562,13 @@ declare module '@tanstack/react-router' {
       path: '/faculty'
       fullPath: '/faculty'
       preLoaderRoute: typeof FacultyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/student': {
@@ -926,6 +946,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRouteWithChildren,
   ChangePasswordRoute: ChangePasswordRoute,
   FacultyRoute: FacultyRouteWithChildren,
+  LoginRoute: LoginRoute,
   StudentRoute: StudentRouteWithChildren,
 }
 export const routeTree = rootRouteImport

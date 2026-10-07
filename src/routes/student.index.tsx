@@ -17,7 +17,8 @@ import {
   CartesianGrid,
   ReferenceLine,
 } from "recharts";
-import { PageHeader, ActionCard, Card, Pill } from "@/components/app-shell";
+import { ActionCard, Card, Pill } from "@/components/app-shell";
+import { WelcomeHero } from "@/components/welcome-hero";
 import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
@@ -332,9 +333,11 @@ function StudentDashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Your Learning Dashboard"
-        subtitle="Personalized progress across all subjects."
+      <WelcomeHero
+        name={(user?.name ?? "Student").split(" ")[0]}
+        subtitle="Here’s your personalized learning progress across all subjects."
+        note={["Ask", "Learn", "Grow"]}
+        tagline={["Keep learning,", "keep growing", "every day!"]}
       />
 
       {/* ── Semester navigator ── */}
@@ -463,17 +466,11 @@ function StudentDashboard() {
                 />
                 <Bar
                   dataKey="active"
+                  fill="var(--color-violet)"
                   radius={[5, 5, 0, 0]}
                   isAnimationActive
                   animationDuration={700}
                 >
-                  {STREAK_DAYS.map((d, i) => (
-                    <motion.rect key={i} />
-                  ))}
-                  {STREAK_DAYS.map((d, i) => (
-                    // Use Cell equivalent via custom fill
-                    <></>
-                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

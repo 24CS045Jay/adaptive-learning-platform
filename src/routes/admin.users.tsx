@@ -26,7 +26,8 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import * as XLSX from "xlsx";
-import { Card } from "@/components/app-shell";
+import { Card, PageHeader } from "@/components/app-shell";
+import { Users as UsersIcon, Zap, Landmark } from "lucide-react";
 import { useAppData } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import {
@@ -508,76 +509,100 @@ function UserManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div>
-        <h1 className="font-serif text-2xl font-bold text-foreground">User Management</h1>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Centralized enrollment portal for <strong className="text-foreground">{getDepartmentLabel(adminDeptCode)} ({adminDeptCode})</strong>.
-        </p>
-      </div>
+      <PageHeader
+        title="User Management"
+        subtitle={`Create and manage user accounts for ${getDepartmentLabel(adminDeptCode)} (${adminDeptCode}).`}
+        note={["Add", "Learners", "Build", "Opportunities!"]}
+        art="boy-books"
+      />
 
-      {/* Tabs */}
-      <div className="flex border-b border-border">
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("single");
-            setAddError(null);
-            setCreatedSuccess(null);
-          }}
-          className={cn(
-            "flex items-center gap-2 border-b-2 px-6 py-3 text-sm font-semibold transition",
-            activeTab === "single"
-              ? "border-violet text-violet"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <UserPlus className="h-4 w-4" />
-          Single Enrollment
-        </button>
+      {/* Tabs + totals */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="seg max-w-full overflow-x-auto">
+          <button
+            type="button"
+            aria-pressed={activeTab === "single"}
+            onClick={() => {
+              setActiveTab("single");
+              setAddError(null);
+              setCreatedSuccess(null);
+            }}
+          >
+            <UserPlus className="h-4 w-4" />
+            Single Enrollment
+          </button>
+          <button
+            type="button"
+            aria-pressed={activeTab === "bulk"}
+            onClick={() => {
+              setActiveTab("bulk");
+              setBulkSummary(null);
+            }}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Bulk Upload &amp; Extraction (Excel / CSV / PDF)
+          </button>
+          <button
+            type="button"
+            aria-pressed={activeTab === "remove"}
+            onClick={() => {
+              setActiveTab("remove");
+              setRemoveError(null);
+              setRemoveSuccess(null);
+              setSelectedUserToRemove(null);
+            }}
+          >
+            <UserMinus className="h-4 w-4" />
+            Remove User
+          </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("bulk");
-            setBulkSummary(null);
-          }}
-          className={cn(
-            "flex items-center gap-2 border-b-2 px-6 py-3 text-sm font-semibold transition",
-            activeTab === "bulk"
-              ? "border-violet text-violet"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <FileSpreadsheet className="h-4 w-4" />
-          Bulk Upload & Extraction (Excel / CSV / PDF)
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab("remove");
-            setRemoveError(null);
-            setRemoveSuccess(null);
-            setSelectedUserToRemove(null);
-          }}
-          className={cn(
-            "flex items-center gap-2 border-b-2 px-6 py-3 text-sm font-semibold transition",
-            activeTab === "remove"
-              ? "border-destructive text-destructive"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <UserMinus className="h-4 w-4" />
-          Remove User
-        </button>
+        <div className="glass flex items-center gap-4 rounded-3xl border border-border px-5 py-3 shadow-[var(--card-shadow)]">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet/12 text-violet">
+            <UsersIcon className="h-6 w-6" />
+          </span>
+          <div className="leading-tight">
+            <div className="text-xs font-semibold text-muted-foreground">Total Users</div>
+            <div className="text-3xl font-extrabold">{users.length}</div>
+            <div className="text-[11px] text-muted-foreground">
+              {users.filter((u) => u.role === "Faculty").length} faculty · {users.filter((u) => u.role === "Admin").length} admin · {users.filter((u) => u.role === "Student").length} student
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {/* TAB 1: SINGLE USER ENROLLMENT */}
       {/* ────────────────────────────────────────────────────────────────────────── */}
       {activeTab === "single" && (
-        <div className="mx-auto max-w-2xl">
+        <div className="grid gap-6 xl:grid-cols-[22rem_1fr]">
+          {/* Left info panel */}
+          <aside className="relative hidden overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-[var(--card-shadow)] xl:block">
+            <div aria-hidden className="pointer-events-none absolute -right-16 -top-10 h-56 w-56 rounded-full bg-violet/15 blur-3xl" />
+            <h3 className="relative text-xl font-extrabold">Add New User</h3>
+            <p className="relative mt-1 text-sm text-muted-foreground">Enroll a student or faculty member to the platform with proper role and department.</p>
+            <ul className="relative mt-6 space-y-5">
+              {[
+                { i: Zap, t: "Quick Enrollment", d: "Add users in seconds", c: "text-amber-500 bg-amber-500/14" },
+                { i: UsersIcon, t: "Role Based Access", d: "Student, Faculty or Admin", c: "text-violet bg-violet/12" },
+                { i: Landmark, t: "Department Mapping", d: "Assign to specific department", c: "text-sky-500 bg-sky-500/12" },
+                { i: Mail, t: "Welcome Email", d: "Auto-generated credentials", c: "text-blue-500 bg-blue-500/12" },
+              ].map((f) => (
+                <li key={f.t} className="flex items-center gap-4">
+                  <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full", f.c)}>
+                    <f.i className="h-5 w-5" />
+                  </span>
+                  <div className="leading-tight">
+                    <div className="text-sm font-bold">{f.t}</div>
+                    <div className="text-xs text-muted-foreground">{f.d}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <img src="/assets/ui/users-side.png" alt="" draggable={false} className="relative mx-auto mt-6 w-full max-w-[17rem] drop-shadow-[0_14px_20px_rgba(76,56,190,.25)]" />
+          </aside>
+
+          <div className="min-w-0">
           {createdSuccess && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -670,7 +695,7 @@ function UserManagementPage() {
                   placeholder="e.g. Amit Thakkar"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
                 />
               </div>
 
@@ -685,7 +710,7 @@ function UserManagementPage() {
                   placeholder="e.g. 24cs045@charusat.edu.in"
                   value={email}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
                 />
               </div>
 
@@ -727,7 +752,7 @@ function UserManagementPage() {
                       placeholder="e.g. 24CS045"
                       value={studentId}
                       onChange={(e) => setStudentId(e.target.value.toUpperCase())}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet font-mono"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet font-mono"
                     />
                     <IdCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
@@ -747,7 +772,7 @@ function UserManagementPage() {
                       placeholder="e.g. CSE-FAC-01 or EMP045"
                       value={facultyId}
                       onChange={(e) => setFacultyId(e.target.value.toUpperCase())}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet font-mono"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet font-mono"
                     />
                     <IdCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
@@ -771,7 +796,7 @@ function UserManagementPage() {
                   <select
                     value={departmentCode}
                     onChange={(e) => setDepartmentCode(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
                   >
                     {DEPARTMENTS.map((dept) => (
                       <option key={dept.code} value={dept.code}>
@@ -848,7 +873,7 @@ function UserManagementPage() {
                     <select
                       value={semester}
                       onChange={(e) => setSemester(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                         <option key={s} value={String(s)}>
@@ -891,6 +916,7 @@ function UserManagementPage() {
               </div>
             </form>
           </Card>
+          </div>
         </div>
       )}
 

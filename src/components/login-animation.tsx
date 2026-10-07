@@ -140,7 +140,7 @@ export function LoginAnimation({ role, active, onComplete }: Props) {
 
   useEffect(() => {
     if (!active) return;
-    const duration = prefersReduced ? 150 : 1050;
+    const duration = prefersReduced ? 100 : 350;
     addTimer(onComplete, duration);
   }, [active, prefersReduced, onComplete, addTimer]);
 

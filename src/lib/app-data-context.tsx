@@ -555,7 +555,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       console.warn("[AppData] refreshQuizzes failed:", error);
       return false;
     }
-  }, [user?.token, subjects]);
+  }, [user?.token]);
 
   const refreshQueries = useCallback(async () => {
     if (!user?.token) return false;
@@ -1327,7 +1327,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
     let active = true;
     const loadAllBackendData = async () => {
-      await Promise.all([
+      await Promise.allSettled([
         refreshSubjects(),
         refreshDocuments(),
         refreshUsers(),
@@ -1350,24 +1350,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [
-    refreshAnnouncements,
-    refreshAuditLogs,
-    refreshConceptGraph,
-    refreshDiscussions,
-    refreshDocuments,
-    refreshEscalations,
-    refreshFeedback,
-    refreshModules,
-    refreshNotifications,
-    refreshQueries,
-    refreshQuizzes,
-    refreshResources,
-    refreshRiskProfiles,
-    refreshSubjects,
-    refreshUsers,
-    user?.token,
-  ]);
+  }, [user?.token, user?.id]);
 
   useEffect(() => {
     _setGlobalOnRegister((name, email, role) => {
