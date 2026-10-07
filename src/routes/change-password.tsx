@@ -30,7 +30,7 @@ function ChangePasswordPage() {
   // redirect immediately so this URL cannot be bypassed or bookmarked uselessly.
   useEffect(() => {
     if (!user) {
-      navigate({ to: "/" });
+      navigate({ to: "/login" });
       return;
     }
     // If they reached here voluntarily (mustChangePassword is false), that's fine —
@@ -288,7 +288,7 @@ function ChangePasswordPage() {
             {isMandatory && (
               <button
                 type="button"
-                onClick={() => { logout(); navigate({ to: "/" }); }}
+                onClick={() => { logout(); navigate({ to: "/login" }); }}
                 className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-danger transition"
               >
                 Sign out instead

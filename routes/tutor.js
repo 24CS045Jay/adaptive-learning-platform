@@ -119,7 +119,7 @@ router.post("/ask", softAuthenticate, async (req, res) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subjectCode, question: question.trim(), topK: 5 }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(4_000),
       });
 
       if (ragRes.ok) {

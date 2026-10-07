@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Upload, MessagesSquare, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
-import { PageHeader, StatCard, ActionCard, Card, EmptyState, Pill } from "@/components/app-shell";
+import { StatCard, ActionCard, Card, EmptyState, Pill } from "@/components/app-shell";
+import { WelcomeHero } from "@/components/welcome-hero";
 import { useAppData } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import { BookOpen, AlertCircle, FileText, MessageSquare } from "lucide-react";
@@ -54,12 +55,14 @@ function FacultyDashboard() {
 
   return (
     <div>
-      <PageHeader
-        title="Faculty Dashboard"
-        subtitle={`Welcome back, ${myName}. Managing ${displaySubjectsCount} CSE subjects.`}
+      <WelcomeHero
+        name={myName.split(" ")[0]}
+        subtitle={`Managing ${displaySubjectsCount} CSE subjects. Here’s what’s happening in your classes.`}
+        note={["Teach", "Guide", "Inspire"]}
+        tagline={["Great teaching", "shapes brighter", "futures!"]}
       />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
         <Link to="/faculty/subjects" className="block">
           <StatCard label="My Subjects" value={displaySubjectsCount} color="indigo" icon={BookOpen} caption="Click to manage →" />
         </Link>
