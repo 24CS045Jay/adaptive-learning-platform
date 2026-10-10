@@ -1221,7 +1221,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const updated = [newBm, ...prev];
         try {
           localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
-        } catch {}
+        } catch { }
         return updated;
       });
     },
@@ -1234,7 +1234,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const updated = prev.map((b) => (b.id === id ? { ...b, notes } : b));
         try {
           localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
-        } catch {}
+        } catch { }
         return updated;
       });
     },
@@ -1247,7 +1247,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const updated = prev.filter((b) => b.id !== id);
         try {
           localStorage.setItem("ai_tutor_user_bookmarks", JSON.stringify(updated));
-        } catch {}
+        } catch { }
         return updated;
       });
     },

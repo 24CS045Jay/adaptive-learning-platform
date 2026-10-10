@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-chromadb
-sentence-transformers
-pypdf
-python-docx
-python-pptx

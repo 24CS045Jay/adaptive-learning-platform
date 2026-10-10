@@ -89,6 +89,17 @@ router.get("/:id", softAuthenticate, async (req, res) => {
       return res.status(404).json({ error: "Conversation not found." });
     }
 
+    const currentUserId = req.user?.id || req.user?._id;
+    if (
+      currentUserId &&
+      conversation.studentId &&
+      String(conversation.studentId) !== String(currentUserId) &&
+      req.user?.role !== "admin" &&
+      req.user?.role !== "super_admin"
+    ) {
+      return res.status(403).json({ error: "Forbidden: You do not own this conversation." });
+    }
+
     return res.json({
       _id: conversation._id,
       id: conversation._id,

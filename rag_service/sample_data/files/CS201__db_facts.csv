@@ -1,0 +1,5 @@
+topic,fact
+"Database Normalization","First normal form requires that every column holds atomic values and there are no repeating groups. Second normal form removes partial dependencies on a composite primary key."
+"Database Normalization","Third normal form removes transitive dependencies, so non-key attributes depend only on the primary key. Boyce-Codd normal form is a stricter version of third normal form."
+"Transactions","ACID stands for Atomicity, Consistency, Isolation and Durability. Atomicity means a transaction either completes fully or has no effect. Durability guarantees committed data survives crashes."
+"Transactions","A deadlock occurs when two transactions each wait for a lock held by the other. Databases resolve deadlocks by aborting one transaction, called the victim."

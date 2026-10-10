@@ -70,6 +70,18 @@ app.use(express.urlencoded({ extended: true }));
 // Serve uploaded documents statically
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
+// Root route
+app.get("/", (req, res) => {
+  res.json({
+    status: "online",
+    service: "AI Tutor Express API Backend",
+    health: "/api/health",
+    frontend: "http://localhost:8080",
+    rag_service: configuredRagServiceUrl,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Healthcheck
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "AI Tutor API Backend (Supabase)", timestamp: new Date().toISOString() });
@@ -118,7 +130,7 @@ async function checkRagServiceHealth() {
   } catch {
     console.warn(
       `[Startup] ⚠️  Python RAG service is UNREACHABLE at ${RAG_SERVICE_URL}\n` +
-        `         → Make sure the Python service is running: cd ml_service && uvicorn main:app --port 8001\n` +
+        `         → Make sure the Python service is running: cd rag_service && uvicorn app.main:app --port 8001\n` +
         `         → Ask Tutor will still escalate gracefully, but no real answers will be generated.`,
     );
   }

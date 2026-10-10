@@ -1,0 +1,47 @@
+# University Agentic RAG Service Dependencies
+
+# FastAPI Framework & Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+python-multipart>=0.0.9
+httpx>=0.27.0
+requests>=2.31.0
+
+# LangChain & LangGraph Ecosystem
+langchain>=0.1.16
+langchain-core>=0.1.42
+langchain-community>=0.0.34
+langgraph>=0.0.39
+
+# LLM Providers
+google-generativeai>=0.4.1
+langchain-google-genai>=1.0.1
+groq>=0.5.0
+langchain-groq>=0.1.2
+openai>=1.14.0
+langchain-openai>=0.1.1
+
+# Vectorstore
+chromadb>=0.4.24
+
+# Embeddings & Reranking
+sentence-transformers>=2.6.1
+FlagEmbedding>=1.2.8
+
+# Document Parsing & Processing & OCR
+pypdf>=4.1.0
+python-docx>=1.1.0
+python-pptx>=0.6.23
+openpyxl>=3.1.2
+pandas>=2.2.1
+pytesseract>=0.3.10
+pillow>=10.0.0
+
+# Async Queue & Background Tasks
+celery>=5.3.6
+redis>=5.0.3
+
+# Utilities
+python-dotenv>=1.0.1
+

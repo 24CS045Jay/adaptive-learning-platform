@@ -16,7 +16,6 @@ import {
   Conversation,
   TopicMastery,
 } from "../models/index.js";
-import { callLLM } from "../lib/llm.js";
 
 const router = express.Router();
 
@@ -86,7 +85,7 @@ router.post("/ask", softAuthenticate, async (req, res) => {
 
     // Step 1: Resolve subject & subjectCode
     let subject = null;
-    let subjectCode = bodySubjectCode?.trim() || "GENERAL";
+    let subjectCode = bodySubjectCode?.trim() || "";
 
     if (subjectId) {
       try {
@@ -100,11 +99,35 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       }
     }
 
+    if (!subject || !subjectCode || subjectCode === "GENERAL") {
+      try {
+        const defaultSubj = await Subject.findOne();
+        if (defaultSubj) {
+          subject = defaultSubj;
+          subjectCode = defaultSubj.code || subjectCode;
+        }
+      } catch {
+        // non-fatal
+      }
+    }
+    if (!subjectCode) subjectCode = "CSUC301";
+
     // Load existing Conversation if conversationId is provided
     let conversation = null;
     if (conversationId) {
       try {
         conversation = await Conversation.findById(conversationId);
+        const currentUserId = req.user?.id || req.user?._id || studentId;
+        if (
+          conversation &&
+          conversation.studentId &&
+          currentUserId &&
+          String(conversation.studentId) !== String(currentUserId) &&
+          req.user?.role !== "admin" &&
+          req.user?.role !== "super_admin"
+        ) {
+          return res.status(403).json({ error: "Forbidden: You do not own this conversation." });
+        }
       } catch (convErr) {
         console.warn("[Ask Tutor] Failed to load conversation:", convErr.message);
       }
@@ -113,62 +136,176 @@ router.post("/ask", softAuthenticate, async (req, res) => {
     // Step 2: Query Python RAG service
     let ragResults = [];
     let ragError = null;
+    let agenticResponse = null;
 
     try {
+      const internalToken = process.env.INTERNAL_SERVICE_TOKEN || "univ-rag-internal-dev-token";
       const ragRes = await fetch(`${RAG_SERVICE_URL}/query`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subjectCode, question: question.trim(), topK: 5 }),
-        signal: AbortSignal.timeout(4_000),
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": internalToken,
+        },
+        body: JSON.stringify({
+          query: question.trim(),
+          conversation_id: conversationId ? String(conversationId) : undefined,
+          subject_id: subject?._id ? String(subject._id) : undefined,
+          subject_name: subject?.name || subjectCode,
+          mode: req.body.mode || "ask_tutor",
+          learner_level: bodyMasteryLevel || "intermediate",
+          chat_history: (conversation?.messages || []).slice(-4).map((m) => ({
+            role: m.role === "student" ? "user" : "assistant",
+            content: m.text || "",
+          })),
+          security_context: {
+            user_id: String(studentId || "anonymous-student"),
+            role: req.user?.role || "student",
+            university_id: req.user?.universityId || "univ-default",
+            department_id: req.user?.departmentId || subject?.departmentId || "dept-default",
+            semester: req.user?.semester || subject?.semester || 1,
+            course_ids: req.user?.courseIds || (subject?.courseId ? [String(subject.courseId)] : []),
+            subject_ids: subject?._id ? [String(subject._id)] : [],
+          },
+          // Legacy fields for backward compatibility
+          subjectCode,
+          question: question.trim(),
+          topK: 5,
+        }),
+        signal: AbortSignal.timeout(25_000),
       });
 
       if (ragRes.ok) {
         const ragData = await ragRes.json();
-        ragResults = ragData.results ?? [];
+        if (ragData.answer && typeof ragData.answer === "string") {
+          // Full Agentic RAG response from LangGraph agent
+          agenticResponse = ragData;
+        } else if (Array.isArray(ragData.results)) {
+          // Legacy chunk results
+          ragResults = ragData.results;
+        }
       } else {
         ragError = `RAG service returned ${ragRes.status}`;
         console.warn("[Ask Tutor] RAG query error:", ragError);
       }
     } catch (err) {
       ragError = err.message;
-      console.warn("[Ask Tutor] RAG service unreachable:", ragError);
+      console.warn("[Ask Tutor] RAG service notice:", ragError);
     }
 
-    // Step 3: Compute confidence
-    const bestDistance = ragResults.length > 0 ? ragResults[0].distance : 2;
-    const confidence = distanceToConfidence(bestDistance);
+    // Step 2b: Handle direct Agentic RAG response
+    if (agenticResponse) {
+      const confidence = typeof agenticResponse.confidence === "number" ? agenticResponse.confidence : 0.85;
+      const isEscalated = confidence < CONFIDENCE_THRESHOLD;
 
-    // Step 4a: Escalation (low confidence or no chunks)
-    if (confidence < CONFIDENCE_THRESHOLD || ragResults.length === 0) {
+      // Update / Create Conversation
       try {
-        await Escalation.create({
-          studentId: studentId || undefined,
-          subjectId: subject?._id || undefined,
-          question: question.trim(),
-          status: "open",
+        if (!conversation) {
+          conversation = new Conversation({
+            studentId: studentId || undefined,
+            subjectId: subject?._id || undefined,
+            title: question.trim().slice(0, 40) + (question.trim().length > 40 ? "..." : ""),
+            messages: [],
+          });
+        }
+
+        if (!Array.isArray(conversation.messages)) {
+          conversation.messages = [];
+        }
+
+        conversation.messages.push({
+          role: "student",
+          text: question.trim(),
+          timestamp: new Date(),
         });
-      } catch (escErr) {
-        console.warn("[Ask Tutor] Failed to create escalation:", escErr.message);
+
+        conversation.messages.push({
+          role: "tutor",
+          text: agenticResponse.answer,
+          worked_example: null,
+          visual: null,
+          sources: (agenticResponse.sources || []).map((s) => ({
+            documentId: s.document_id,
+            fileName: s.file_name,
+            chunkIndex: s.page || 0,
+          })),
+          timestamp: new Date(),
+        });
+
+        conversation.updatedAt = new Date();
+        await conversation.save().catch((e) =>
+          console.warn("[Ask Tutor] Failed to save conversation:", e.message)
+        );
+      } catch (convErr) {
+        console.warn("[Ask Tutor] Conversation handling warning:", convErr.message);
       }
 
+      // Log interaction
       await RagInteractionLog.create({
+        user_id: studentId || undefined,
+        query: question.trim(),
+        response: agenticResponse.answer || "",
+        context_chunks: (agenticResponse.sources || []).map((s) => s.snippet || ""),
+        confidence: confidence,
+      }).catch((e) => console.warn("[RagInteractionLog] write failed:", e.message));
+
+      return res.json({
+        conversationId: conversation?._id || conversation?.id || String(conversationId || ""),
+        answer: agenticResponse.answer,
+        worked_example: null,
+        visual: null,
+        escalated: isEscalated,
+        confidence: parseFloat(confidence.toFixed(4)),
+        grounded: agenticResponse.grounded ?? true,
+        mode: agenticResponse.mode || "ask_tutor",
+        intent: agenticResponse.intent || "conceptual",
+        sources: agenticResponse.sources || [],
+        agent_trace: (agenticResponse.agent_trace || []).map((t) => {
+          if (typeof t === "string") return t;
+          if (t && typeof t === "object") {
+            if (t.node === "route" && t.intent) return `route (${t.intent})`;
+            if (t.node === "grade" && t.kept !== undefined) return `grade (${t.kept}/${t.of || ""})`;
+            if (t.node) return String(t.node);
+            return JSON.stringify(t);
+          }
+          return String(t);
+        }),
+        tool_used: agenticResponse.tool_used || null,
+        follow_up: agenticResponse.follow_up || [],
+        provider: "agentic_rag",
+      });
+    }
+
+    // Step 3: Fail-closed fallback when Python RAG service is unreachable or does not generate answer
+    console.warn("[Ask Tutor] RAG service unavailable or did not return answer. Failing closed.");
+    const fallbackAnswer =
+      "I don't have enough approved material to answer this confidently yet. " +
+      "Your question has been escalated to the faculty for review.";
+
+    try {
+      await Escalation.create({
         studentId: studentId || undefined,
         subjectId: subject?._id || undefined,
         question: question.trim(),
-        confidenceScore: confidence,
-        escalated: true,
-        llmProvider: null,
-        sources: [],
-        hasVisual: false,
-        visualType: null,
-        hasWorkedExample: false,
-      }).catch((e) => console.warn("[RagInteractionLog] write failed:", e.message));
+        status: "open",
+      });
+    } catch (escErr) {
+      console.warn("[Ask Tutor] Failed to create escalation:", escErr.message);
+    }
 
-      const fallbackAnswer =
-        "I don't have enough approved material to answer this confidently yet. " +
-        "Your question has been escalated to the faculty for review.";
+    await RagInteractionLog.create({
+      studentId: studentId || undefined,
+      subjectId: subject?._id || undefined,
+      question: question.trim(),
+      confidenceScore: 0.0,
+      escalated: true,
+      llmProvider: null,
+      sources: [],
+      hasVisual: false,
+      visualType: null,
+      hasWorkedExample: false,
+    }).catch((e) => console.warn("[RagInteractionLog] write failed:", e.message));
 
-      // Append to conversation history if thread exists or create new
+    try {
       if (!conversation) {
         conversation = new Conversation({
           studentId: studentId || undefined,
@@ -176,6 +313,10 @@ router.post("/ask", softAuthenticate, async (req, res) => {
           title: question.trim().slice(0, 40) + (question.trim().length > 40 ? "..." : ""),
           messages: [],
         });
+      }
+
+      if (!Array.isArray(conversation.messages)) {
+        conversation.messages = [];
       }
 
       conversation.messages.push({
@@ -197,209 +338,18 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       await conversation.save().catch((e) =>
         console.warn("[Ask Tutor] Failed to save conversation escalation:", e.message)
       );
-
-      return res.json({
-        conversationId: conversation._id,
-        answer: fallbackAnswer,
-        worked_example: null,
-        visual: null,
-        escalated: true,
-        confidence: parseFloat(confidence.toFixed(4)),
-        sources: [],
-      });
+    } catch (convErr) {
+      console.warn("[Ask Tutor] Conversation escalation warning:", convErr.message);
     }
-
-    // Step 4b: Determine student topic mastery level
-    let masteryLabel = bodyMasteryLevel || "average";
-    if (studentId && subject?._id) {
-      try {
-        const masteryRecord = await TopicMastery.findOne({
-          studentId,
-          subjectId: subject._id,
-        })
-          .sort({ updatedAt: -1 })
-          .lean();
-        if (masteryRecord?.masteryLabel) {
-          masteryLabel = masteryRecord.masteryLabel;
-        }
-      } catch (mErr) {
-        console.warn("[Ask Tutor] Mastery lookup skipped:", mErr.message);
-      }
-    }
-
-    // Step 4c: Load previous 4-6 messages for conversation memory
-    let conversationContext = "";
-    if (conversation && conversation.messages?.length > 0) {
-      const pastMsgs = conversation.messages.slice(-6);
-      conversationContext =
-        "Earlier in this conversation:\n" +
-        pastMsgs
-          .map(
-            (m) =>
-              `${m.role === "student" ? "Student" : "Tutor"}: ${m.text.slice(0, 300)}`
-          )
-          .join("\n") +
-        "\n\n---\n\n";
-    }
-
-    // Step 4d: Context text from retrieved chunks
-    const contextText = ragResults
-      .map((r, i) => `[Chunk ${i + 1}]\n${r.text}`)
-      .join("\n\n---\n\n");
-
-    const systemPrompt = `You are a helpful academic tutor.
-Answer the student's question ONLY using the provided course material chunks below.
-If the chunks do not fully answer the question, say so explicitly and do NOT use any outside knowledge.
-
-Adapt your explanation style based on the student's current mastery level (${masteryLabel.toUpperCase()}):
-- Weak: Provide step-by-step guidance with extra scaffolding, clear basic definitions, and simple intuitive explanations.
-- Strong: Provide a concise, direct, in-depth explanation focusing on core mechanics and technical nuance.
-- Average: Provide a balanced explanation with moderate detail and clear structure.
-
-You MUST respond strictly in valid JSON matching this exact schema:
-{
-  "answer": "string (the main explanation text)",
-  "worked_example": "string or null (a concrete numeric/code/real-life example — ONLY include when the question is conceptual/mathematical/procedural and an example would genuinely help; return null otherwise)",
-  "visual": null OR one of:
-    { "type": "flowchart", "steps": ["Step 1", "Step 2", ...] }
-    { "type": "comparison_chart", "categories": ["Cat A", "Cat B"], "values": [10, 20], "label": "Metric Name" }
-    { "type": "concept_map", "nodes": ["Node 1", "Node 2"], "edges": [{"from": "Node 1", "to": "Node 2", "relation": "connects to"}] }
-}
-
-Visual Rules:
-- ONLY include a visual when the concept genuinely has a step sequence (flowchart), quantitative comparison (comparison_chart), or relationship structure (concept_map).
-- Otherwise return "visual": null. Do NOT force a visual on every answer.
-- Output strictly valid JSON. Do NOT wrap in markdown code blocks or add extra commentary outside JSON.`;
-
-    const userPrompt = `${conversationContext}Course material context:\n\n${contextText}\n\n---\n\nStudent question: ${question.trim()}`;
-
-    // Step 5: Call LLM & Parse JSON (with repair retry)
-    let structuredOutput = null;
-    let rawText = "";
-    let llmProvider = null;
-
-    try {
-      const llmResult = await callLLM(systemPrompt, userPrompt);
-      rawText = llmResult.text;
-      llmProvider = llmResult.provider;
-
-      try {
-        structuredOutput = parseLLMResponseJSON(rawText);
-        if (!structuredOutput || typeof structuredOutput.answer !== "string") {
-          throw new Error("Missing answer field in parsed JSON");
-        }
-      } catch (firstParseErr) {
-        console.warn(
-          "[Ask Tutor] Primary JSON parse failed:",
-          firstParseErr.message,
-          "— attempting repair..."
-        );
-        try {
-          const repairResult = await callLLM(
-            systemPrompt,
-            `The output was not valid JSON:\n${rawText}\n\nPlease fix and return ONLY valid JSON matching the schema.`
-          );
-          structuredOutput = parseLLMResponseJSON(repairResult.text);
-          if (!structuredOutput || typeof structuredOutput.answer !== "string") {
-            throw new Error("Repaired JSON still invalid");
-          }
-        } catch (repairErr) {
-          console.warn(
-            "[Ask Tutor] Repair JSON failed too:",
-            repairErr.message,
-            "— using fallback answer."
-          );
-          structuredOutput = {
-            answer: rawText,
-            worked_example: null,
-            visual: null,
-          };
-        }
-      }
-    } catch (llmErr) {
-      console.error("[Ask Tutor] LLM call failed:", llmErr.message);
-      structuredOutput = {
-        answer: contextText,
-        worked_example: null,
-        visual: null,
-      };
-    }
-
-    // Step 6: Resolve source document titles
-    const documentIds = [
-      ...new Set(ragResults.map((r) => r.metadata?.documentId).filter(Boolean)),
-    ];
-
-    const docRecords = await Document.find({ _id: { $in: documentIds } })
-      .select("fileName")
-      .lean();
-
-    const docMap = {};
-    for (const d of docRecords) {
-      docMap[String(d._id)] = d.fileName;
-    }
-
-    const sources = ragResults
-      .map((r) => ({
-        documentId: r.metadata?.documentId ?? null,
-        fileName: docMap[r.metadata?.documentId] ?? "Unknown document",
-        chunkIndex: parseInt(r.metadata?.chunkIndex ?? "0", 10),
-      }))
-      .filter((s) => s.documentId);
-
-    // Step 7: Update Conversation in MongoDB
-    if (!conversation) {
-      conversation = new Conversation({
-        studentId: studentId || undefined,
-        subjectId: subject?._id || undefined,
-        title: question.trim().slice(0, 40) + (question.trim().length > 40 ? "..." : ""),
-        messages: [],
-      });
-    }
-
-    conversation.messages.push({
-      role: "student",
-      text: question.trim(),
-      timestamp: new Date(),
-    });
-
-    conversation.messages.push({
-      role: "tutor",
-      text: structuredOutput.answer,
-      worked_example: structuredOutput.worked_example || null,
-      visual: structuredOutput.visual || null,
-      sources,
-      timestamp: new Date(),
-    });
-
-    conversation.updatedAt = new Date();
-    await conversation.save().catch((e) =>
-      console.warn("[Ask Tutor] Conversation save failed:", e.message)
-    );
-
-    // Step 8: Log to RagInteractionLog
-    await RagInteractionLog.create({
-      studentId: studentId || undefined,
-      subjectId: subject?._id || undefined,
-      question: question.trim(),
-      confidenceScore: confidence,
-      escalated: false,
-      llmProvider,
-      sources,
-      hasVisual: Boolean(structuredOutput.visual),
-      visualType: structuredOutput.visual?.type || null,
-      hasWorkedExample: Boolean(structuredOutput.worked_example),
-    }).catch((e) => console.warn("[RagInteractionLog] write failed:", e.message));
 
     return res.json({
-      conversationId: conversation._id,
-      answer: structuredOutput.answer,
-      worked_example: structuredOutput.worked_example || null,
-      visual: structuredOutput.visual || null,
-      escalated: false,
-      confidence: parseFloat(confidence.toFixed(4)),
-      sources,
-      provider: llmProvider,
+      conversationId: conversation?._id || conversation?.id || String(conversationId || ""),
+      answer: fallbackAnswer,
+      worked_example: null,
+      visual: null,
+      escalated: true,
+      confidence: 0.0,
+      sources: [],
     });
   } catch (err) {
     console.error("[Ask Tutor] Unexpected error:", err);

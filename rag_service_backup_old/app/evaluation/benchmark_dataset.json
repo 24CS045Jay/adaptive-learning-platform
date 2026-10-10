@@ -1,0 +1,66 @@
+[
+  {
+    "question": "What are the four necessary conditions for a deadlock to occur in an operating system?",
+    "subject_id": "subj_os",
+    "subject_name": "Operating Systems",
+    "expected_answer": "Mutual exclusion, hold and wait, no preemption, and circular wait.",
+    "difficulty": "medium",
+    "type": "conceptual"
+  },
+  {
+    "question": "Explain the difference between preemptive and non-preemptive CPU scheduling.",
+    "subject_id": "subj_os",
+    "subject_name": "Operating Systems",
+    "expected_answer": "In preemptive scheduling, a process can be interrupted and moved to ready state by the OS. In non-preemptive scheduling, once a process gets CPU time, it holds it until it terminates or blocks for I/O.",
+    "difficulty": "medium",
+    "type": "comparison"
+  },
+  {
+    "question": "What is the formula for calculating effective memory access time (EMAT) with paging and TLB?",
+    "subject_id": "subj_os",
+    "subject_name": "Operating Systems",
+    "expected_answer": "EMAT = Hit_Ratio * (TLB_access_time + Memory_access_time) + (1 - Hit_Ratio) * (TLB_access_time + 2 * Memory_access_time)",
+    "difficulty": "hard",
+    "type": "mathematical"
+  },
+  {
+    "question": "Write a Python implementation of the Producer-Consumer problem using threading and Condition variables.",
+    "subject_id": "subj_os",
+    "subject_name": "Operating Systems",
+    "expected_answer": "A solution using threading.Condition with wait() and notify() to synchronize shared queue access.",
+    "difficulty": "hard",
+    "type": "coding"
+  },
+  {
+    "question": "How does virtual memory paging interact with disk swap space during a page fault?",
+    "subject_id": "subj_os",
+    "subject_name": "Operating Systems",
+    "expected_answer": "When an invalid page is accessed, the CPU traps to the OS page fault handler, finds an empty frame (or evicts a victim page via replacement algorithm), issues disk I/O to read the page from swap, updates the page table, and restarts the instruction.",
+    "difficulty": "hard",
+    "type": "multi-hop"
+  },
+  {
+    "question": "What is the third normal form (3NF) in relational databases?",
+    "subject_id": "subj_dbms",
+    "subject_name": "Database Management Systems",
+    "expected_answer": "A relation is in 3NF if it is in 2NF and every non-prime attribute is non-transitively dependent on the primary key (no transitive dependencies X -> Y -> Z).",
+    "difficulty": "medium",
+    "type": "conceptual"
+  },
+  {
+    "question": "Compare B-Tree and B+ Tree indexing structures.",
+    "subject_id": "subj_dbms",
+    "subject_name": "Database Management Systems",
+    "expected_answer": "In a B-Tree, keys and data records can be stored in internal and leaf nodes. In a B+ Tree, data records or pointers are strictly stored in leaf nodes which are linked in a sequence for efficient range scans, while internal nodes only store routing keys.",
+    "difficulty": "medium",
+    "type": "comparison"
+  },
+  {
+    "question": "Calculate the height of a B+ tree storing 1,000,000 records with node order 100.",
+    "subject_id": "subj_dbms",
+    "subject_name": "Database Management Systems",
+    "expected_answer": "With order 100, fan-out is ~100. Height = ceil(log_100(1,000,000)) = 3 levels.",
+    "difficulty": "medium",
+    "type": "mathematical"
+  }
+]

@@ -309,6 +309,64 @@ CREATE TABLE public.rag_interaction_logs (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 22. DOCUMENT VERSIONS TABLE
+CREATE TABLE IF NOT EXISTS public.document_versions (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    document_id TEXT NOT NULL,
+    version_number INTEGER NOT NULL DEFAULT 1,
+    file_url TEXT DEFAULT '',
+    chunk_count INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 23. INGESTION JOBS TABLE
+CREATE TABLE IF NOT EXISTS public.ingestion_jobs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    document_id TEXT NOT NULL,
+    version_id TEXT,
+    status TEXT NOT NULL DEFAULT 'QUEUED',
+    current_step TEXT DEFAULT 'QUEUED',
+    percentage INTEGER DEFAULT 0,
+    error_message TEXT DEFAULT '',
+    retry_count INTEGER DEFAULT 0,
+    started_at TIMESTAMPTZ DEFAULT now(),
+    completed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 21. CONVERSATIONS TABLE
+CREATE TABLE IF NOT EXISTS public.conversations (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT,
+    student_id TEXT,
+    subject_id TEXT,
+    title TEXT DEFAULT '',
+    messages JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 22. RAG INTERACTION LOGS TABLE
+CREATE TABLE IF NOT EXISTS public.rag_interaction_logs (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    user_id TEXT,
+    student_id TEXT,
+    subject_id TEXT,
+    question TEXT NOT NULL,
+    confidence_score NUMERIC DEFAULT 0.0,
+    escalated BOOLEAN DEFAULT false,
+    llm_provider TEXT DEFAULT 'agentic_rag',
+    sources JSONB DEFAULT '[]'::jsonb,
+    has_visual BOOLEAN DEFAULT false,
+    visual_type TEXT,
+    has_worked_example BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ==============================================================================
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 -- ==============================================================================

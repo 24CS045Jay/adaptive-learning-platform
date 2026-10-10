@@ -14,7 +14,7 @@ This project is prepared for a split deployment: the Vite/TanStack frontend runs
 The repository includes `render.yaml` with two web services:
 
 - `adeptive-learning-api`: Node/Express API, `npm ci`, `npm run server`, health check `/api/health`.
-- `adeptive-learning-rag`: Python/FastAPI RAG service under `ml_service`, health check `/health`, and a persistent disk mounted at `/var/data` for ChromaDB.
+- `adeptive-learning-rag`: Python/FastAPI Agentic RAG service under `rag_service`, health check `/health`, with BGE-M3 embeddings, hybrid retrieval, and Chroma Cloud / persistent storage.
 
 In Render, choose **New → Blueprint**, select this GitHub repository, and deploy the blueprint. Set these secret values in the API service without committing them:
 
