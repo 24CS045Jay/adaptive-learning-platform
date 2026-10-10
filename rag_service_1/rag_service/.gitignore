@@ -1,0 +1,6 @@
+.env
+chroma_data/
+chroma_notebook/
+__pycache__/
+.pytest_cache/
+.ipynb_checkpoints/

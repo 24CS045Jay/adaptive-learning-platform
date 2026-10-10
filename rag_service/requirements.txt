@@ -1,0 +1,30 @@
+# --- API ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+httpx>=0.27
+python-dotenv>=1.0
+# --- LangChain / LangGraph ---
+langchain>=0.3
+langchain-core>=0.3
+langchain-community>=0.3
+langchain-text-splitters>=0.3
+langgraph>=0.2
+langchain-chroma>=0.1.4
+chromadb>=0.5
+# --- LLM + embedding providers (install all; only the ones with keys are used) ---
+langchain-google-genai>=2.0
+langchain-groq>=0.2
+langchain-openai>=0.2
+# --- Parsing ---
+pypdf>=4.0
+python-docx>=1.1
+python-pptx>=0.6.23
+openpyxl>=3.1
+beautifulsoup4>=4.12
+# --- Dev / notebooks / tests ---
+pytest>=8
+nbformat>=5
+nbconvert>=7
+ipykernel>=6
+reportlab>=4

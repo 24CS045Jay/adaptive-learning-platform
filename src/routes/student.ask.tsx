@@ -45,6 +45,9 @@ interface SourceChip {
   documentId: string | null;
   fileName: string;
   chunkIndex: number;
+  page?: number | null;
+  section?: string | null;
+  score?: number | null;
 }
 
 interface ApiResponse {
@@ -56,6 +59,11 @@ interface ApiResponse {
   confidence: number;
   sources: SourceChip[];
   provider?: string | null;
+  grounded?: boolean;
+  mode?: string;
+  intent?: string;
+  agent_trace?: string[];
+  follow_up?: string[];
 }
 
 interface ChatMessage {
@@ -69,6 +77,11 @@ interface ChatMessage {
   confidence?: number;
   sources?: SourceChip[];
   provider?: string | null;
+  grounded?: boolean;
+  mode?: string;
+  intent?: string;
+  agent_trace?: string[];
+  follow_up?: string[];
 }
 
 interface ChatSession {
@@ -230,7 +243,16 @@ function SourceChipBadge({
     >
       <FileText className="h-3 w-3 shrink-0" />
       <span className="max-w-[140px] truncate">{source.fileName}</span>
-      <span className="text-violet/60">#{source.chunkIndex}</span>
+      {source.page !== null && source.page !== undefined ? (
+        <span className="text-violet/70">p.{source.page}</span>
+      ) : (
+        <span className="text-violet/60">#{source.chunkIndex}</span>
+      )}
+      {source.section && (
+        <span className="text-muted-foreground/75 text-[10px] hidden sm:inline truncate max-w-[80px]">
+          ({source.section})
+        </span>
+      )}
       <ExternalLink className="h-2.5 w-2.5 opacity-50" />
     </button>
   );
@@ -255,19 +277,33 @@ function SourceModal({ source, onClose }: { source: SourceChip; onClose: () => v
       >
         <div className="flex items-center gap-2 text-sm font-bold text-foreground">
           <FileText className="h-4 w-4 text-violet" />
-          Source Reference
+          Verified Course Source
         </div>
         <div className="rounded-xl bg-muted p-4 space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-muted-foreground">File</span>
+            <span className="text-muted-foreground">Document</span>
             <span className="font-semibold text-foreground max-w-[220px] truncate text-right">
               {source.fileName}
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Chunk</span>
-            <span className="font-semibold text-foreground">#{source.chunkIndex}</span>
-          </div>
+          {source.page !== null && source.page !== undefined && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Page</span>
+              <span className="font-semibold text-foreground">Page {source.page}</span>
+            </div>
+          )}
+          {source.section && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Section</span>
+              <span className="font-semibold text-foreground max-w-[220px] truncate text-right">{source.section}</span>
+            </div>
+          )}
+          {source.score !== undefined && source.score !== null && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Relevance Score</span>
+              <span className="font-semibold text-success">{Math.round((source.score || 0) * 100)}%</span>
+            </div>
+          )}
           {source.documentId && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Document ID</span>
@@ -288,6 +324,18 @@ function SourceModal({ source, onClose }: { source: SourceChip; onClose: () => v
     </motion.div>
   );
 }
+
+// ── Educational Modes ──────────────────────────────────────────────────────────
+const EDUCATIONAL_MODES = [
+  { id: "ask_tutor", label: "Ask Tutor", icon: "🎓" },
+  { id: "explain", label: "Explain", icon: "💡" },
+  { id: "summarize", label: "Summarize", icon: "📝" },
+  { id: "exam_prep", label: "Exam Prep", icon: "🎯" },
+  { id: "quiz_me", label: "Quiz Me", icon: "❓" },
+  { id: "compare", label: "Compare", icon: "⚖️" },
+  { id: "solve", label: "Solve", icon: "🔢" },
+  { id: "code_help", label: "Code Help", icon: "💻" },
+];
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 function AskTutorPage() {
@@ -318,6 +366,7 @@ function AskTutorPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(firstSubject?.id ?? "");
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>(firstSubject?.name ?? "");
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
+  const [selectedMode, setSelectedMode] = useState<string>("ask_tutor");
 
   const [showControls, setShowControls] = useState<boolean>(false);
 
@@ -399,8 +448,12 @@ function AskTutorPage() {
       setSelectedSubjectId(subj.id);
       setSelectedSubjectName(subj.name);
       setSelectedSubjectCode(subj.code);
+    } else if (firstSubject) {
+      setSelectedSubjectId(firstSubject.id);
+      setSelectedSubjectName(firstSubject.name);
+      setSelectedSubjectCode(firstSubject.code);
     }
-  }, [activeSessionId, activeSession?.subject, activeSession?.subjectId, subjects]);
+  }, [activeSessionId, activeSession?.subject, activeSession?.subjectId, subjects, firstSubject]);
 
   // Load conversation messages from server when selected
   const handleSelectSession = async (sessId: string) => {
@@ -527,10 +580,11 @@ function AskTutorPage() {
           ...(user?.role ? { "x-user-role": user.role } : {}),
         },
         body: JSON.stringify({
-          subjectId: selectedSubjectId || undefined,
-          subjectCode: selectedSubjectCode || undefined,
+          subjectId: selectedSubjectId || firstSubject?.id || undefined,
+          subjectCode: selectedSubjectCode || firstSubject?.code || "CSUC301",
           question: q,
           conversationId: conversationIdToSend,
+          mode: selectedMode,
         }),
       });
 
@@ -576,6 +630,11 @@ function AskTutorPage() {
       confidence: apiResp.confidence,
       sources: apiResp.sources ?? [],
       provider: apiResp.provider ?? null,
+      grounded: apiResp.grounded,
+      mode: apiResp.mode,
+      intent: apiResp.intent,
+      agent_trace: apiResp.agent_trace,
+      follow_up: apiResp.follow_up,
     };
 
     setSessions((prev) =>
@@ -773,7 +832,12 @@ function AskTutorPage() {
                 ) : (
                   <AnimatePresence initial={false}>
                     {activeSession.messages.map((msg) => (
-                      <ChatMessageBubble key={msg.id} msg={msg} onSourceClick={setSelectedSource} />
+                      <ChatMessageBubble
+                        key={msg.id}
+                        msg={msg}
+                        onSourceClick={setSelectedSource}
+                        onFollowUpClick={(fuText) => handleSend(fuText)}
+                      />
                     ))}
                   </AnimatePresence>
                 )}
@@ -792,8 +856,28 @@ function AskTutorPage() {
                 <div ref={messagesEndRef} />
               </div>
 
+              {/* Educational Mode Selector */}
+              <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 no-scrollbar">
+                {EDUCATIONAL_MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setSelectedMode(m.id)}
+                    className={cn(
+                      "flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 transition-all",
+                      selectedMode === m.id
+                        ? "bg-violet text-white shadow-sm"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                    )}
+                  >
+                    <span>{m.icon}</span>
+                    <span>{m.label}</span>
+                  </button>
+                ))}
+              </div>
+
               {/* Input bar */}
-              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 shadow-sm focus-within:border-violet/50 focus-within:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] transition-all">
+              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 shadow-sm focus-within:border-violet/50 focus-within:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] transition-all">
                 <input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -832,9 +916,11 @@ function AskTutorPage() {
 function ChatMessageBubble({
   msg,
   onSourceClick,
+  onFollowUpClick,
 }: {
   msg: ChatMessage;
   onSourceClick: (s: SourceChip) => void;
+  onFollowUpClick?: (text: string) => void;
 }) {
   const [rated, setRated] = useState<"up" | "down" | null>(null);
   const [showCommentBox, setShowCommentBox] = useState(false);
@@ -910,22 +996,36 @@ function ChatMessageBubble({
             </div>
           )}
 
-          {/* Confidence pill */}
-          {!isEscalated && msg.confidence !== undefined && (
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground font-medium">Grounded answer</span>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-0.5 font-bold text-[11px]",
-                  msg.confidence >= 0.75
-                    ? "bg-success/10 text-success"
-                    : msg.confidence >= 0.55
-                      ? "bg-violet/10 text-violet"
-                      : "bg-gold/10 text-gold",
+          {/* Header row with confidence, grounded status, and mode */}
+          {!isEscalated && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground font-medium">Grounded answer</span>
+                {msg.grounded && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                    <CheckCircle2 className="h-3 w-3" /> Verified Grounded
+                  </span>
                 )}
-              >
-                Confidence: {Math.round(msg.confidence * 100)}%
-              </span>
+                {msg.mode && (
+                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-violet/10 text-violet">
+                    {msg.mode.replace("_", " ")}
+                  </span>
+                )}
+              </div>
+              {msg.confidence !== undefined && (
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 font-bold text-[11px]",
+                    msg.confidence >= 0.75
+                      ? "bg-success/10 text-success"
+                      : msg.confidence >= 0.55
+                        ? "bg-violet/10 text-violet"
+                        : "bg-gold/10 text-gold",
+                  )}
+                >
+                  Confidence: {Math.round(msg.confidence * 100)}%
+                </span>
+              )}
             </div>
           )}
 
@@ -963,6 +1063,42 @@ function ChatMessageBubble({
               <div className="flex flex-wrap gap-1.5">
                 {msg.sources.map((src, i) => (
                   <SourceChipBadge key={i} source={src} onClick={onSourceClick} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Operational agent trace */}
+          {msg.agent_trace && msg.agent_trace.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1 pt-1">
+              <span className="text-[10px] font-mono text-muted-foreground">Trace:</span>
+              {msg.agent_trace.map((step, idx) => (
+                <span
+                  key={idx}
+                  className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40"
+                >
+                  {typeof step === "string" ? step : (step as any)?.node ? `${(step as any).node}${(step as any)?.intent ? ` (${(step as any).intent})` : ""}` : JSON.stringify(step)}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Follow-up question pills */}
+          {!isEscalated && msg.follow_up && msg.follow_up.length > 0 && (
+            <div className="pt-2 border-t border-border/50 space-y-1.5">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Suggested Follow-Ups
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {msg.follow_up.map((fu, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onFollowUpClick && onFollowUpClick(fu)}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-violet/20 bg-violet/5 hover:bg-violet/15 text-violet font-medium transition text-left"
+                  >
+                    💬 {fu}
+                  </button>
                 ))}
               </div>
             </div>

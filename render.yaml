@@ -41,16 +41,34 @@ services:
     runtime: python
     region: oregon
     plan: free
-    rootDir: ml_service
+    rootDir: rag_service
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
-    disk:
-      name: chroma-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
-      - key: CHROMA_PERSIST_DIR
-        value: /var/data/chroma
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: RAG_ENV
+        value: "production"
+      - key: ALLOW_LOCAL_VECTOR_FALLBACK
+        value: "false"
+      - key: EMBEDDING_MODEL
+        value: "BAAI/bge-m3"
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CHROMA_API_KEY
+        sync: false
+      - key: CHROMA_TENANT
+        sync: false
+      - key: CHROMA_DATABASE
+        sync: false
+      - key: REDIS_URL
+        sync: false
       - key: CONFIDENCE_THRESHOLD
         value: "0.55"

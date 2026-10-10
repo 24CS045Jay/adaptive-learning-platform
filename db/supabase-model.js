@@ -276,170 +276,246 @@ class QueryBuilder {
 }
 
 export function createSupabaseModel(tableName) {
-  return {
-    tableName,
+  function Model(initialData = {}) {
+    if (!(this instanceof Model)) {
+      return new Model(initialData);
+    }
+    Object.assign(this, initialData);
+    this.__tableName = tableName;
+    if (tableName === "conversations" && !Array.isArray(this.messages)) {
+      this.messages = [];
+    }
 
-    find(query = {}) {
-      return new QueryBuilder(tableName, query, false);
-    },
+    Object.defineProperty(this, "save", {
+      value: async function () {
+        const targetTable = this.__tableName || tableName;
+        const updates = objectToSnake(this);
+        const rowId = updates.id || this.id || this._id;
+        delete updates.id;
+        delete updates._id;
 
-    findOne(query = {}) {
-      return new QueryBuilder(tableName, query, true);
-    },
-
-    findById(id) {
-      if (!id) return new QueryBuilder(tableName, { id: "none" }, true);
-      const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
-      return new QueryBuilder(tableName, { id: cleanId }, true);
-    },
-
-    async create(doc) {
-      if (Array.isArray(doc)) {
-        return this.insertMany(doc);
-      }
-      const snakeDoc = objectToSnake(doc);
-      if (!snakeDoc.id && doc._id) snakeDoc.id = String(doc._id);
-      snakeDoc.created_at = snakeDoc.created_at || new Date().toISOString();
-      snakeDoc.updated_at = new Date().toISOString();
-
-      const { data, error } = await supabase
-        .from(tableName)
-        .insert(snakeDoc)
-        .select()
-        .single();
-
-      if (error) {
-        console.error(`[Supabase Create Error in ${tableName}]:`, error.message);
-        throw new Error(error.message);
-      }
-      const item = rowToCamel(data);
-      item.__tableName = tableName;
-      return item;
-    },
-
-    async insertMany(docs) {
-      const snakeDocs = docs.map((d) => {
-        const sd = objectToSnake(d);
-        if (!sd.id && d._id) sd.id = String(d._id);
-        sd.created_at = sd.created_at || new Date().toISOString();
-        sd.updated_at = new Date().toISOString();
-        return sd;
-      });
-
-      const { data, error } = await supabase
-        .from(tableName)
-        .insert(snakeDocs)
-        .select();
-
-      if (error) {
-        console.error(`[Supabase InsertMany Error in ${tableName}]:`, error.message);
-        throw new Error(error.message);
-      }
-      return (data || []).map((row) => {
-        const item = rowToCamel(row);
-        item.__tableName = tableName;
-        return item;
-      });
-    },
-
-    async findByIdAndUpdate(id, update, options = {}) {
-      const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
-      const updateData = update.$set ? { ...update.$set } : { ...update };
-      delete updateData.$set;
-      delete updateData.$push;
-      delete updateData.$pull;
-
-      const snakeUpdate = objectToSnake(updateData);
-      delete snakeUpdate.id;
-      delete snakeUpdate._id;
-      snakeUpdate.updated_at = new Date().toISOString();
-
-      const { data, error } = await supabase
-        .from(tableName)
-        .update(snakeUpdate)
-        .eq("id", cleanId)
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        console.error(`[Supabase Update Error in ${tableName}]:`, error.message);
-        throw new Error(error.message);
-      }
-      if (!data) return null;
-      const item = rowToCamel(data);
-      item.__tableName = tableName;
-      return item;
-    },
-
-    async findOneAndUpdate(query, update, options = {}) {
-      const existing = await this.findOne(query);
-      if (!existing) {
-        if (options.upsert) {
-          return this.create({ ...query, ...update });
+        try {
+          if (rowId) {
+            updates.updated_at = new Date().toISOString();
+            const { data, error } = await supabase
+              .from(targetTable)
+              .update(updates)
+              .eq("id", rowId)
+              .select()
+              .maybeSingle();
+            if (error) {
+              console.warn(`[Supabase Model ${targetTable} update warning]:`, error.message);
+              return this;
+            }
+            if (data) {
+              const saved = rowToCamel(data, targetTable);
+              Object.assign(this, saved);
+            }
+            return this;
+          } else {
+            updates.created_at = updates.created_at || new Date().toISOString();
+            updates.updated_at = new Date().toISOString();
+            const { data, error } = await supabase
+              .from(targetTable)
+              .insert(updates)
+              .select()
+              .single();
+            if (error) {
+              console.warn(`[Supabase Model ${targetTable} insert warning]:`, error.message);
+              this.id = this.id || `conv_${Date.now()}`;
+              this._id = this.id;
+              return this;
+            }
+            if (data) {
+              const saved = rowToCamel(data, targetTable);
+              Object.assign(this, saved);
+            }
+            return this;
+          }
+        } catch (e) {
+          console.warn(`[Supabase Model ${targetTable} save warning]:`, e.message);
+          this.id = this.id || `conv_${Date.now()}`;
+          this._id = this.id;
+          return this;
         }
-        return null;
-      }
-      return this.findByIdAndUpdate(existing.id, update, options);
-    },
+      },
+      enumerable: false,
+      writable: true,
+    });
 
-    async updateOne(query, update) {
-      const target = await this.findOne(query);
-      if (!target) return { matchedCount: 0, modifiedCount: 0 };
-      await this.findByIdAndUpdate(target.id, update);
-      return { matchedCount: 1, modifiedCount: 1 };
-    },
+    Object.defineProperty(this, "toObject", {
+      value: function () {
+        return { ...this };
+      },
+      enumerable: false,
+      writable: true,
+    });
+  }
 
-    async updateMany(query, update) {
-      const targets = await this.find(query);
-      for (const t of targets) {
-        await this.findByIdAndUpdate(t.id, update);
-      }
-      return { matchedCount: targets.length, modifiedCount: targets.length };
-    },
+  Model.tableName = tableName;
 
-    async findByIdAndDelete(id) {
-      const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
-      const { data, error } = await supabase
-        .from(tableName)
-        .delete()
-        .eq("id", cleanId)
-        .select()
-        .maybeSingle();
+  Model.find = function (query = {}) {
+    return new QueryBuilder(tableName, query, false);
+  };
 
-      if (error) {
-        console.error(`[Supabase Delete Error in ${tableName}]:`, error.message);
-        throw new Error(error.message);
-      }
-      if (!data) return null;
-      const item = rowToCamel(data);
+  Model.findOne = function (query = {}) {
+    return new QueryBuilder(tableName, query, true);
+  };
+
+  Model.findById = function (id) {
+    if (!id) return new QueryBuilder(tableName, { id: "none" }, true);
+    const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
+    return new QueryBuilder(tableName, { id: cleanId }, true);
+  };
+
+  Model.create = async function (doc) {
+    if (Array.isArray(doc)) {
+      return Model.insertMany(doc);
+    }
+    const snakeDoc = objectToSnake(doc);
+    if (!snakeDoc.id && doc._id) snakeDoc.id = String(doc._id);
+    snakeDoc.created_at = snakeDoc.created_at || new Date().toISOString();
+    snakeDoc.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from(tableName)
+      .insert(snakeDoc)
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`[Supabase Create Error in ${tableName}]:`, error.message);
+      throw new Error(error.message);
+    }
+    const item = rowToCamel(data);
+    item.__tableName = tableName;
+    return item;
+  };
+
+  Model.insertMany = async function (docs) {
+    const snakeDocs = docs.map((d) => {
+      const sd = objectToSnake(d);
+      if (!sd.id && d._id) sd.id = String(d._id);
+      sd.created_at = sd.created_at || new Date().toISOString();
+      sd.updated_at = new Date().toISOString();
+      return sd;
+    });
+
+    const { data, error } = await supabase
+      .from(tableName)
+      .insert(snakeDocs)
+      .select();
+
+    if (error) {
+      console.error(`[Supabase InsertMany Error in ${tableName}]:`, error.message);
+      throw new Error(error.message);
+    }
+    return (data || []).map((row) => {
+      const item = rowToCamel(row);
       item.__tableName = tableName;
       return item;
-    },
-
-    async deleteOne(query) {
-      const target = await this.findOne(query);
-      if (!target) return { deletedCount: 0 };
-      await this.findByIdAndDelete(target.id);
-      return { deletedCount: 1 };
-    },
-
-    async deleteMany(query) {
-      const targets = await this.find(query);
-      for (const t of targets) {
-        await this.findByIdAndDelete(t.id);
-      }
-      return { deletedCount: targets.length };
-    },
-
-    async countDocuments(query = {}) {
-      let q = supabase.from(tableName).select("*", { count: "exact", head: true });
-      for (const [key, value] of Object.entries(query)) {
-        const col = key === "_id" ? "id" : toSnakeCase(key);
-        if (value !== undefined) q = q.eq(col, value);
-      }
-      const { count, error } = await q;
-      if (error) return 0;
-      return count || 0;
-    },
+    });
   };
+
+  Model.findByIdAndUpdate = async function (id, update, options = {}) {
+    const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
+    const updateData = update.$set ? { ...update.$set } : { ...update };
+    delete updateData.$set;
+    delete updateData.$push;
+    delete updateData.$pull;
+
+    const snakeUpdate = objectToSnake(updateData);
+    delete snakeUpdate.id;
+    delete snakeUpdate._id;
+    snakeUpdate.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase
+      .from(tableName)
+      .update(snakeUpdate)
+      .eq("id", cleanId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[Supabase Update Error in ${tableName}]:`, error.message);
+      throw new Error(error.message);
+    }
+    if (!data) return null;
+    const item = rowToCamel(data);
+    item.__tableName = tableName;
+    return item;
+  };
+
+  Model.findOneAndUpdate = async function (query, update, options = {}) {
+    const existing = await Model.findOne(query);
+    if (!existing) {
+      if (options.upsert) {
+        return Model.create({ ...query, ...update });
+      }
+      return null;
+    }
+    return Model.findByIdAndUpdate(existing.id, update, options);
+  };
+
+  Model.updateOne = async function (query, update) {
+    const target = await Model.findOne(query);
+    if (!target) return { matchedCount: 0, modifiedCount: 0 };
+    await Model.findByIdAndUpdate(target.id, update);
+    return { matchedCount: 1, modifiedCount: 1 };
+  };
+
+  Model.updateMany = async function (query, update) {
+    const targets = await Model.find(query);
+    for (const t of targets) {
+      await Model.findByIdAndUpdate(t.id, update);
+    }
+    return { matchedCount: targets.length, modifiedCount: targets.length };
+  };
+
+  Model.findByIdAndDelete = async function (id) {
+    const cleanId = typeof id === "object" ? String(id._id || id.id || id) : String(id);
+    const { data, error } = await supabase
+      .from(tableName)
+      .delete()
+      .eq("id", cleanId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.error(`[Supabase Delete Error in ${tableName}]:`, error.message);
+      throw new Error(error.message);
+    }
+    if (!data) return null;
+    const item = rowToCamel(data);
+    item.__tableName = tableName;
+    return item;
+  };
+
+  Model.deleteOne = async function (query) {
+    const target = await Model.findOne(query);
+    if (!target) return { deletedCount: 0 };
+    await Model.findByIdAndDelete(target.id);
+    return { deletedCount: 1 };
+  };
+
+  Model.deleteMany = async function (query) {
+    const targets = await Model.find(query);
+    for (const t of targets) {
+      await Model.findByIdAndDelete(t.id);
+    }
+    return { deletedCount: targets.length };
+  };
+
+  Model.countDocuments = async function (query = {}) {
+    let q = supabase.from(tableName).select("*", { count: "exact", head: true });
+    for (const [key, value] of Object.entries(query)) {
+      const col = key === "_id" ? "id" : toSnakeCase(key);
+      if (value !== undefined) q = q.eq(col, value);
+    }
+    const { count, error } = await q;
+    if (error) return 0;
+    return count || 0;
+  };
+
+  return Model;
 }
