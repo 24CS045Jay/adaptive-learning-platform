@@ -67,6 +67,7 @@ class QueryRequest(BaseModel):
     conversation_id: Optional[str] = None
     mode: str = "ask_tutor"
     learner_level: str = "intermediate"
+    response_language: str = "en"
     chat_history: List[ChatMsg] = Field(default_factory=list)
     security_context: SecurityContext = Field(default_factory=SecurityContext)
     model_config = {"extra": "allow"}
@@ -157,7 +158,14 @@ def query(req: QueryRequest) -> dict:
         raise HTTPException(400, "A subject is required for student queries")  # fail closed
     hist = [{"role": m.role, "content": m.content} for m in req.chat_history if m.content]
     try:
-        out = ask(q, subject_codes=codes, subject_ids=sids, history=hist, learner_level=req.learner_level)
+        out = ask(
+            q,
+            subject_codes=codes,
+            subject_ids=sids,
+            history=hist,
+            learner_level=req.learner_level,
+            response_language=req.response_language,
+        )
     except LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except Exception as e:

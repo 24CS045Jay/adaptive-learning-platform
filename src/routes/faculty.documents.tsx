@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { RefreshCcw, Trash2, FileText, Presentation, FileType2, Sliders, BookOpen } from "lucide-react";
 import { PageHeader, Card, Pill, statusTone } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
@@ -36,30 +36,51 @@ const DIFFICULTY_PILL: Record<Difficulty, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 function MyDocuments() {
-  const { documents, subjects, modules: learningModules, deleteDocument } = useAppData();
+  const { documents, subjects, modules: learningModules, deleteDocument, refreshSubjects } = useAppData();
   const { user } = useAuth();
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [rerankDoc, setRerankDoc]       = useState<{ id: string; name: string } | null>(null);
   const [viewPdfDoc, setViewPdfDoc]     = useState<{ name: string; fileType: FileType; subjectId: string; uploadedBy: string; date: string } | null>(null);
 
-  const myEmail = (user?.email || "faculty@charusat.edu.in").toLowerCase();
-  const myName = (user?.name || "Dr. Nisha Shah").toLowerCase();
-  const myId = user?.id || "";
+  useEffect(() => {
+    refreshSubjects();
+  }, [refreshSubjects]);
 
-  // Show docs uploaded by the logged-in faculty (or all seeded docs if demo faculty)
-  const mine = documents.filter((d) => {
-    const docUploader = String(d.uploadedBy || "").toLowerCase();
-    const docUploaderName = String(d.uploadedByName || "").toLowerCase();
-    const isOwner =
-      docUploader === myEmail ||
-      docUploaderName === myName ||
-      docUploader === myId ||
-      (d as any).uploaderId === myId;
+  const myEmail = (user?.email || "").trim().toLowerCase();
+  const myName = (user?.name || "").trim().toLowerCase();
+  const myId = user?.id ? String(user.id).trim().toLowerCase() : "";
 
-    if (myEmail === "faculty@charusat.edu.in" || user?.role === "admin") {
+  // Subjects assigned to this faculty
+  const mySubjects = subjects.filter((s) => {
+    const sFacId = s.facultyId ? String(s.facultyId).trim().toLowerCase() : "";
+    const sFacEmail = s.facultyEmail ? String(s.facultyEmail).trim().toLowerCase() : "";
+    const sFacName = s.faculty ? String(s.faculty).trim().toLowerCase() : "";
+
+    if (sFacId && myId && sFacId === myId) return true;
+    if (sFacEmail && myEmail && sFacEmail === myEmail) return true;
+    if (sFacName && myName && (sFacName === myName || sFacName.includes(myName) || myName.includes(sFacName))) {
       return true;
     }
-    return isOwner;
+    return false;
+  });
+  const mySubjectIds = new Set(mySubjects.map((s) => s.id));
+
+  // Show docs uploaded by the logged-in faculty or belonging to their assigned subjects
+  const mine = documents.filter((d) => {
+    if (user?.role === "admin") return true;
+
+    const docUploader = String(d.uploadedBy || "").toLowerCase();
+    const docUploaderName = String(d.uploadedByName || "").toLowerCase();
+    const docUploaderId = String((d as any).uploaderId || "");
+
+    const isOwner =
+      (myEmail && docUploader === myEmail) ||
+      (myName && docUploaderName === myName) ||
+      (myId && (docUploader === myId || docUploaderId === myId));
+
+    const isAssignedSubject = mySubjectIds.has(d.subjectId);
+
+    return isOwner || isAssignedSubject;
   });
 
   const filtered = filterStatus === "all" ? mine : mine.filter((d) => d.status === filterStatus);

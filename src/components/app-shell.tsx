@@ -53,8 +53,8 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
     <div className="flex min-h-screen bg-background font-sans text-foreground">
       {/* ── Sidebar ── */}
       <aside className="sidebar-gradient fixed inset-y-0 left-0 z-20 flex w-[17.5rem] flex-col border-r border-border">
-        <div className="px-6 pb-4 pt-6">
-          <Logo size="sm" subtitle="CSPIT CSE · RAG Platform" />
+        <div className="px-5 pb-4 pt-5">
+          <Logo size="sm" subtitle="Learn Smarter · Adapt Faster" />
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">

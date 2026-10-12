@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useEffect } from "react";
 import {
   BookOpen, ChevronDown, ChevronRight, GripVertical, Link2, FileText,
   Presentation, FileType2, Edit3, Save, Users, Plus, Trash2, X, Check,
@@ -34,23 +34,36 @@ function FacultySubjectsPage() {
   const {
     subjects, modules, resources, users, documents,
     updateSyllabus, addModule, removeModule, addResource, removeResource,
+    refreshSubjects,
   } = useAppData();
   const { user } = useAuth();
 
-  const myEmail = user?.email?.toLowerCase() ?? "";
-  const myName = user?.name ?? "";
+  useEffect(() => {
+    refreshSubjects();
+  }, [refreshSubjects]);
 
-  // Filter subjects assigned to this faculty or uploaded by them
+  const myId = user?.id ? String(user.id).trim().toLowerCase() : "";
+  const myEmail = user?.email ? String(user.email).trim().toLowerCase() : "";
+  const myName = user?.name ? String(user.name).trim().toLowerCase() : "";
+
+  // Filter subjects strictly assigned to this faculty
   const mySubjects = subjects.filter((s) => {
-    if (!myName && !myEmail) return true;
-    return (
-      (myName && s.faculty?.toLowerCase().includes(myName.toLowerCase())) ||
-      (myName && myName.toLowerCase().includes(s.faculty?.toLowerCase())) ||
-      (myEmail && documents.some((d) => d.subjectId === s.id && d.uploadedBy?.toLowerCase() === myEmail))
-    );
+    const sFacId = s.facultyId ? String(s.facultyId).trim().toLowerCase() : "";
+    const sFacEmail = s.facultyEmail ? String(s.facultyEmail).trim().toLowerCase() : "";
+    const sFacName = s.faculty ? String(s.faculty).trim().toLowerCase() : "";
+
+    // 1. Direct facultyId match (Supabase users.id UUID)
+    if (sFacId && myId && sFacId === myId) return true;
+    // 2. Faculty email match
+    if (sFacEmail && myEmail && sFacEmail === myEmail) return true;
+    // 3. Faculty name match
+    if (sFacName && myName && (sFacName === myName || sFacName.includes(myName) || myName.includes(sFacName))) {
+      return true;
+    }
+    return false;
   });
 
-  const displaySubjects = mySubjects.length > 0 ? mySubjects : subjects;
+  const displaySubjects = mySubjects;
 
   const [expandedId, setExpandedId] = useState<string | null>(displaySubjects[0]?.id ?? null);
   const [activeTab, setActiveTab]   = useState<Record<string, "syllabus" | "modules" | "resources" | "students">>({});
@@ -93,11 +106,24 @@ function FacultySubjectsPage() {
     <div>
       <PageHeader
         title="My Subjects"
-        subtitle={`Viewing syllabus, modules, learning resources, and enrolled students for your ${displaySubjects.length} subjects.`}
+        subtitle={
+          displaySubjects.length === 0
+            ? "No subjects assigned to your faculty profile yet."
+            : `Viewing syllabus, modules, learning resources, and enrolled students for your ${displaySubjects.length} assigned subject${displaySubjects.length === 1 ? "" : "s"}.`
+        }
       />
 
-      <div className="space-y-4">
-        {displaySubjects.map((s) => {
+      {displaySubjects.length === 0 ? (
+        <Card className="p-10 text-center">
+          <EmptyState
+            icon={BookOpen}
+            title="No Subjects Assigned"
+            description="You do not have any subjects assigned to your faculty profile yet. Please contact your department administrator to assign subjects to you."
+          />
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {displaySubjects.map((s) => {
           const isOpen = expandedId === s.id;
           const tab = getTab(s.id);
           const mods = subjectModules(s.id);
@@ -401,7 +427,8 @@ function FacultySubjectsPage() {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

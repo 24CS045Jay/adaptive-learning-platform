@@ -6,11 +6,14 @@ import { PageHeader, Card, Pill, PrimaryButton } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
+import { StudentMeetingScheduler } from "@/components/meetings/StudentMeetingScheduler";
+import { AdaptiveMasteryCard } from "@/components/adaptive/AdaptiveMasteryCard";
+
 export const Route = createFileRoute("/student/planner")({
   head: () => ({
     meta: [
-      { title: "AI Study Planner & Remediation · AI Tutor Student" },
-      { name: "description", content: "Targeted revision plan tailored to weak topics and exam prep." },
+      { title: "Study Planner & Doubt Sessions · EduSense AI" },
+      { name: "description", content: "Adaptive topic remediation and Microsoft Teams faculty doubt scheduling." },
     ],
   }),
   component: Planner,
@@ -129,6 +132,7 @@ function Planner() {
     }
   });
 
+  const [mainTab, setMainTab] = useState<"targets" | "adaptive" | "meetings">("targets");
   const [inspectItem, setInspectItem] = useState<TopicRemediation | null>(null);
   const [burstId, setBurstId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -191,23 +195,80 @@ function Planner() {
   return (
     <div>
       <PageHeader
-        title="AI Personal Study Planner & Remediation"
-        subtitle="Dynamic revision schedule generated from your quiz weak points — prioritize these before your end-semester exam."
+        title="Personal Study Planner & Doubt Sessions"
+        subtitle="Adaptive syllabus revision, diagnostic mastery tracking, and faculty Microsoft Teams office hours."
         action={
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent/50 shadow-xs transition"
-            >
-              <Plus className="h-4 w-4 text-muted-foreground" /> Add Study Target
-            </button>
+            {mainTab === "targets" && (
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-4 py-2 text-xs font-semibold text-foreground hover:bg-accent/50 shadow-xs transition"
+              >
+                <Plus className="h-4 w-4 text-muted-foreground" /> Add Study Target
+              </button>
+            )}
             <div className="flex items-center gap-2 rounded-xl border border-violet/20 bg-violet/5 px-4 py-2 text-xs font-bold text-violet">
               <Target className="h-4 w-4" /> Exam In: 12 Days
             </div>
           </div>
         }
       />
+
+      {/* ── Top View Navigation Tabs ── */}
+      <div className="mb-6 flex rounded-2xl border border-border bg-card p-1.5 shadow-xs max-w-xl">
+        <button
+          type="button"
+          onClick={() => setMainTab("targets")}
+          className={cn(
+            "flex-1 rounded-xl py-2 text-xs font-bold transition-all text-center",
+            mainTab === "targets"
+              ? "bg-violet text-white shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Study Targets & Tasks
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("adaptive")}
+          className={cn(
+            "flex-1 rounded-xl py-2 text-xs font-bold transition-all text-center",
+            mainTab === "adaptive"
+              ? "bg-violet text-white shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Adaptive Topic Mastery
+        </button>
+        <button
+          type="button"
+          onClick={() => setMainTab("meetings")}
+          className={cn(
+            "flex-1 rounded-xl py-2 text-xs font-bold transition-all text-center",
+            mainTab === "meetings"
+              ? "bg-violet text-white shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Teams Doubt Sessions
+        </button>
+      </div>
+
+      {mainTab === "adaptive" && (
+        <div className="mb-6">
+          <AdaptiveMasteryCard />
+        </div>
+      )}
+
+      {mainTab === "meetings" && (
+        <div className="mb-6">
+          <StudentMeetingScheduler />
+        </div>
+      )}
+
+      {mainTab === "targets" && (
+        <>
 
       {/* Progress Card */}
       <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-xs">
@@ -516,6 +577,8 @@ function Planner() {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

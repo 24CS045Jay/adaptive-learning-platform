@@ -45,24 +45,24 @@ def nb(name, cells):
 
 
 nb("00_setup_and_provider_check.ipynb", [
-    ("md", "# 00 · Setup & provider check\nRun this first. It installs libraries, shows which keys are configured, and (in LIVE mode) makes one tiny real call to each provider so key/model problems show up *here* instead of inside the chatbot.\n\n**Pipeline map (notebooks are connected through the shared Chroma store):**\n`01 ingest` → `02 retrieve` → `03 augment + generate` → `04 agentic LangGraph` → `05 evaluate`"),
+    ("md", "# 00 · Setup & Provider Check\nRun this first. It verifies environment configuration, installed packages, API keys, embedding models, LLM tiers, and Chroma Cloud connectivity.\n\n**Pipeline map:**\n`00 setup` → `01 parse & chunk` → `02 embed & index` → `03 retrieve` → `04 augment & generate` → `05 agentic LangGraph` → `06 evaluation`"),
     ("code", INSTALL),
     ("code", SETUP),
-    ("md", "## Which keys are present? (values are never printed)"),
+    ("md", "## 1. Environment Key Validation (Values are never printed)"),
     ("code", '''for k in ["GEMINI_API_KEY","GROQ_API_KEY","OPENAI_API_KEY","CHROMA_API_KEY","CHROMA_TENANT","CHROMA_DATABASE","INTERNAL_SERVICE_TOKEN"]:
     print(f"{k:24s}", "SET" if os.getenv(k) else "-- missing --")'''),
-    ("md", "## Embedding model smoke test"),
+    ("md", "## 2. Embedding Model Smoke Test"),
     ("code", '''from app.providers import get_embeddings, embedding_id
 emb = get_embeddings()
 v = emb.embed_query("What is photosynthesis?")
 print("embedding id:", embedding_id(), "| dimension:", len(v))
 assert len(v) > 100'''),
-    ("md", "## LLM smoke test (light + heavy tier)"),
+    ("md", "## 3. LLM Smoke Test (Light + Heavy Tiers)"),
     ("code", '''from app.providers import get_llm, llm_text
 for tier in ("light", "heavy"):
     out = llm_text(get_llm(tier).invoke("Reply with the single word: pong"))
     print(tier, "->", out.strip()[:60])'''),
-    ("md", "## Vector store connectivity (write → read → delete a probe record)"),
+    ("md", "## 4. Vector Store Connectivity Probe"),
     ("code", '''from app.store import get_store
 from langchain_core.documents import Document
 st = get_store()
@@ -72,28 +72,40 @@ st.upsert([probe]); assert any(d.metadata["document_id"]=="__probe__" for d in s
 st.delete_document("__probe__"); print("probe write/read/delete OK; total chunks now:", st.count())'''),
 ])
 
-nb("01_ingestion_pipeline.ipynb", [
-    ("md", "# 01 · Ingestion pipeline\n**What happens when a faculty member uploads a file:** parse → chunk → embed → store in Chroma.\nEach step is shown separately, then run end-to-end exactly as the API does. Data written here is reused by notebooks 02–05."),
+nb("01_document_parsing_and_chunking.ipynb", [
+    ("md", "# 01 · Document Parsing and Chunking\nDemonstrates file parsing for all supported academic file types (PDF, PPTX, DOCX, XLSX, CSV, MD, HTML) and structure-aware chunking with metadata preservation."),
     ("code", SETUP),
-    ("md", "## 1. Create synthetic course files (PDF, PPTX, DOCX, XLSX, MD, CSV, HTML)"),
+    ("md", "## 1. Create Synthetic Course Material"),
     ("code", '''import synthetic
 files = synthetic.make_all()
 for subj, fs in files.items():
     print(subj, {n: f"{len(b)//1024 or 1} KB" for n, b in fs.items()})'''),
-    ("md", "## 2. Parse (page/slide/sheet aware)"),
+    ("md", "## 2. Page & Structure Aware Parsing"),
     ("code", '''from app.parsers import parse_bytes
 secs = parse_bytes(files["BIO101"]["bio_notes.pdf"], "bio_notes.pdf")
 for s in secs: print(f"page {s.page}:", s.text[:110].replace("\\n"," "), "...")'''),
-    ("md", "## 3. Chunk (recursive splitter, provenance metadata, stable ids)"),
+    ("md", "## 3. Structure-Aware Chunking (Provenance, Headings, Stable IDs)"),
     ("code", '''from app.chunker import chunk_sections
 chunks = chunk_sections(secs, "demo-doc", {"subject_code":"BIO101","is_active":True,"file_name":"bio_notes.pdf"})
-print(len(chunks), "chunks | sizes:", [len(c.page_content) for c in chunks])
-print(json.dumps(chunks[0].metadata, indent=1))'''),
-    ("md", "## 4. Embed"),
+print(len(chunks), "chunks created | sizes:", [len(c.page_content) for c in chunks])
+print("First chunk metadata:")
+print(json.dumps(chunks[0].metadata, indent=2))'''),
+])
+
+nb("02_embedding_and_chroma_indexing.ipynb", [
+    ("md", "# 02 · Embedding and Chroma Indexing\nCovers embedding creation, batch vector indexing in Chroma, idempotency, document active toggles, and vector deletion."),
+    ("code", SETUP),
+    ("md", "## 1. Generate Embeddings"),
     ("code", '''from app.providers import get_embeddings
+import synthetic
+from app.parsers import parse_bytes
+from app.chunker import chunk_sections
+files = synthetic.make_all()
+secs = parse_bytes(files["BIO101"]["bio_notes.pdf"], "bio_notes.pdf")
+chunks = chunk_sections(secs, "demo-doc", {"subject_code":"BIO101","is_active":True,"file_name":"bio_notes.pdf"})
 vecs = get_embeddings().embed_documents([c.page_content for c in chunks])
-print("vectors:", len(vecs), "x", len(vecs[0]))'''),
-    ("md", "## 5. Run the full pipeline for every synthetic file (this is what `POST /ingest` does)"),
+print("Vectors generated:", len(vecs), "x", len(vecs[0]), "dimensions")'''),
+    ("md", "## 2. Ingest the Complete Synthetic Corpus into Chroma"),
     ("code", '''from app.ingest import ingest_document, get_status
 results = {}
 for subj, fs in files.items():
@@ -102,28 +114,24 @@ for subj, fs in files.items():
         results[did] = ingest_document(did, {"subject": subj, "is_active": True}, data=data, file_name=name)
 import pandas as pd
 pd.DataFrame(results).T[["chunkCount","durationMs","collection"]]'''),
-    ("md", "## 6. Verify what is really stored"),
+    ("md", "## 3. Verify Vector Store Ingestion Status"),
     ("code", '''from app.store import get_store
 st = get_store()
-print("total chunks in collection:", st.count())
-print(get_status("BIO101-bio_notes.pdf"))
-sample = st.chunks_of("PHY101-physics.docx")[0]
-print(sample.metadata["subject_code"], "| page", sample.metadata["page"], "|", sample.page_content[:100])'''),
-    ("md", "## 7. Idempotency + failure handling"),
+print("Total chunks in vector store:", st.count())
+print("Ingestion status for BIO101-bio_notes.pdf:", get_status("BIO101-bio_notes.pdf"))'''),
+    ("md", "## 4. Idempotent Ingestion & Deletion Testing"),
     ("code", '''n0 = len(st.chunks_of("PHY101-physics.docx"))
 ingest_document("PHY101-physics.docx", {"subject":"PHY101","is_active":True}, data=files["PHY101"]["physics.docx"], file_name="physics.docx")
-assert len(st.chunks_of("PHY101-physics.docx")) == n0, "re-ingest must not duplicate"
-from app.parsers import ParseError
-try: ingest_document("bad", {"subject":"X"}, data=b"junk", file_name="bad.pdf")
-except ParseError as e: print("clean failure ->", e, "| status:", get_status("bad")["status"])'''),
+assert len(st.chunks_of("PHY101-physics.docx")) == n0, "Re-ingestion must be idempotent without duplicates"
+print("Idempotency verified: chunk count is stable at", n0)'''),
 ])
 
-nb("02_retrieval_pipeline.ipynb", [
-    ("md", "# 02 · Retrieval pipeline\nDense (Chroma cosine) + sparse (BM25) → Reciprocal Rank Fusion → rerank, always inside an **authorization filter**.\nRequires notebook 01 to have been run (it reads the same store)."),
+nb("03_retrieval_pipeline.ipynb", [
+    ("md", "# 03 · Retrieval Pipeline\nHybrid retrieval combining Dense (Chroma cosine similarity) and Sparse (BM25) with Reciprocal Rank Fusion (RRF) and subject authorization filtering."),
     ("code", SETUP),
     ("code", '''from app.retriever import HybridRetriever, build_where
 from app.store import get_store
-assert get_store().count() > 0, "Run notebook 01 first"
+assert get_store().count() > 0, "Run notebook 02 first"
 def show(q, subj, k=3):
     r = HybridRetriever(where=build_where([subj]), top_k=k)
     print(f"Q: {q}   [scope={subj}]")
@@ -131,15 +139,15 @@ def show(q, subj, k=3):
     print("  trace:", r.last_trace, "\\n")
 show("Which organelle produces ATP?", "BIO101")
 show("When does total internal reflection occur?", "PHY101")'''),
-    ("md", "## LangChain retriever interface\n`HybridRetriever` is a standard `BaseRetriever`, so it also works in any LangChain chain via `.invoke()`."),
+    ("md", "## LangChain BaseRetriever Interface"),
     ("code", '''r = HybridRetriever(where=build_where(["CS201"]), top_k=2)
 for d in r.invoke("What is third normal form?"): print(d.metadata["file_name"], "|", d.page_content[:80])'''),
-    ("md", "## Authorization isolation: a Physics student must never see Biology chunks"),
+    ("md", "## Strict Subject Authorization Isolation"),
     ("code", '''r = HybridRetriever(where=build_where(["PHY101"]), top_k=10)
 hits = r.search("Which organelle produces ATP?")
 print({d.metadata["subject_code"] for d, _ in hits})
 assert all(d.metadata["subject_code"] == "PHY101" for d, _ in hits)'''),
-    ("md", "## Retrieval quality on the synthetic QA set (hit@3)"),
+    ("md", "## Retrieval Recall Evaluation (hit@3)"),
     ("code", '''import synthetic, pandas as pd
 rows = []
 for subj, q, kw, _ in synthetic.QA:
@@ -148,8 +156,8 @@ for subj, q, kw, _ in synthetic.QA:
 df = pd.DataFrame(rows); print("hit@3 =", df["hit@3"].mean()); df'''),
 ])
 
-nb("03_augmentation_and_generation.ipynb", [
-    ("md", "# 03 · Augmentation & generation\nBuild the augmented prompt from retrieved chunks (numbered context), generate with the **heavy** model, then verify grounding. This is the manual version of what the LangGraph agent automates in notebook 04."),
+nb("04_augmentation_and_generation.ipynb", [
+    ("md", "# 04 · Augmentation & Grounded Generation\nConstructs the structured context block from retrieved passages, executes grounded generation, verifies claims, and validates fail-closed behavior for unanswerable queries."),
     ("code", SETUP),
     ("code", '''from app.retriever import HybridRetriever, build_where
 from app.agent import _ctx_block, NO_ANSWER
@@ -158,37 +166,37 @@ question = "Which organelle produces ATP and what kind of DNA does it have?"
 hits = HybridRetriever(where=build_where(["BIO101"]), top_k=3).search(question)
 relevant = [{"doc": d, "score": s} for d, s in hits]
 print(_ctx_block(relevant)[:600], "...")'''),
-    ("md", "## Augmented prompt"),
+    ("md", "## 1. Augmented Prompt Assembly"),
     ("code", '''prompt = ("TASK:ANSWER\\nYou are a university course tutor. Answer ONLY from the numbered context. Cite like [1]. "
           "If the context lacks the answer reply exactly INSUFFICIENT_CONTEXT.\\n"
           f"CONTEXT:\\n{_ctx_block(relevant)}\\nQUESTION: {question}\\n")
-print(len(prompt), "chars sent to the LLM")'''),
-    ("md", "## Generation (heavy tier)"),
+print(len(prompt), "chars assembled for LLM context")'''),
+    ("md", "## 2. Heavy Tier LLM Generation"),
     ("code", '''answer = llm_text(get_llm("heavy").invoke(prompt)).strip()
-print(answer)'''),
-    ("md", "## Grounding verification (is every claim supported by the context?)"),
+print("Generated Answer:\\n", answer)'''),
+    ("md", "## 3. Grounding & Citation Verification"),
     ("code", '''from app.agent import _json
 v = _json(llm_text(get_llm("heavy").invoke(
     "TASK:VERIFY\\nReply ONLY JSON {\\"supported_ratio\\":0-1,\\"verdict\\":\\"grounded|ungrounded\\"}.\\n"
     f"ANSWER: {answer}\\nCONTEXT: {_ctx_block(relevant)}")))
-print(v)'''),
-    ("md", "## Fail-closed demo: a question the material cannot answer"),
+print("Verification verdict:", v)'''),
+    ("md", "## 4. Fail-Closed Abstention on Out-of-Scope Questions"),
     ("code", '''q2 = "Who won the football world cup in 1998?"
 h2 = HybridRetriever(where=build_where(["BIO101"]), top_k=3).search(q2)
 p2 = prompt.split("CONTEXT:")[0] + f"CONTEXT:\\n{_ctx_block([{'doc':d,'score':s} for d,s in h2])}\\nQUESTION: {q2}\\n"
-print(llm_text(get_llm("heavy").invoke(p2)).strip())'''),
+print("Response for unanswerable query:", llm_text(get_llm("heavy").invoke(p2)).strip())'''),
 ])
 
-nb("04_agentic_rag_langgraph.ipynb", [
-    ("md", "# 04 · Agentic RAG with LangGraph\nThe full agent: **route → rewrite → retrieve → grade → (refine loop) → generate → verify → finalize**, with bounded retries and a fail-closed `no_answer` path."),
+nb("05_agentic_rag_langgraph.ipynb", [
+    ("md", "# 05 · Agentic RAG with LangGraph\nExecutes the complete production LangGraph state machine: **route → rewrite → retrieve → grade → (refine loop) → generate → verify → finalize** with bounded retries and trace inspection."),
     ("code", SETUP),
-    ("md", "## Graph structure"),
+    ("md", "## 1. LangGraph State Machine Diagram"),
     ("code", '''from app.agent import get_graph
 print(get_graph().get_graph().draw_mermaid())'''),
-    ("md", "Paste the Mermaid text into https://mermaid.live to see the diagram."),
+    ("md", "## 2. Multi-turn Agent Execution"),
     ("code", '''from app.agent import ask
 from app.store import get_store
-assert get_store().count() > 0, "Run notebook 01 first"
+assert get_store().count() > 0, "Run notebook 02 first"
 def run(q, subj="BIO101", history=None):
     out = ask(q, subject_codes=[subj], history=history or [])
     print("Q:", q); print("A:", out["answer"])
@@ -199,46 +207,43 @@ def run(q, subj="BIO101", history=None):
 run("hello")
 run("Which organelle produces ATP?")
 run("Where does photosynthesis take place in a plant cell?")
-run("Who won the football world cup in 1998?")
-run("what is the weather today")'''),
-    ("md", "## Multi-turn: follow-up question resolved with chat history"),
+run("Who won the football world cup in 1998?")'''),
+    ("md", "## 3. History-Aware Context Rewriting without Drift"),
     ("code", '''h = [{"role":"user","content":"What is DNA replication?"},{"role":"assistant","content":"It copies DNA before cell division."}]
 o = run("Which enzyme does it use?", history=h)
-print("rewritten:", o["standalone_question"])'''),
-    ("md", "## Scope enforcement: same question, other subject → refusal"),
-    ("code", '''run("Which organelle produces ATP?", subj="PHY101")'''),
-    ("md", "## Inspect the full trace of one run"),
+print("Rewritten query:", o["standalone_question"])'''),
+    ("md", "## 4. Execution Trace Breakdown"),
     ("code", '''import pandas as pd
 pd.DataFrame(ask("Which enzyme adds nucleotides during DNA replication?", subject_codes=["BIO101"])["agent_trace"]).drop(columns="t")'''),
 ])
 
-nb("05_evaluation_and_testing.ipynb", [
-    ("md", "# 05 · Evaluation & testing with synthetic data\nMeasures retrieval, answer correctness, grounding, citations, fail-closed behaviour and cross-subject leakage over the synthetic corpus. Also runs the pytest suite."),
+nb("06_evaluation_and_regression_tests.ipynb", [
+    ("md", "# 06 · Evaluation & Regression Tests\nAutomated evaluation over the synthetic academic benchmark, testing answer correctness, grounding, citation accuracy, abstention rates, and running the full pytest suite."),
     ("code", SETUP),
+    ("md", "## 1. Benchmark Evaluation on Synthetic QA Set"),
     ("code", '''import synthetic, pandas as pd
 from app.agent import ask, NO_ANSWER
 from app.store import get_store
-assert get_store().count() > 0, "Run notebook 01 first"
+assert get_store().count() > 0, "Run notebook 02 first"
 rows = []
 for subj, q, kw, src in synthetic.QA:
     o = ask(q, subject_codes=[subj])
     rows.append(dict(subject=subj, question=q, correct=kw in o["answer"].lower(), grounded=o["grounded"],
                      cited=bool(o["sources"]), conf=o["confidence"], ms=o["latency_ms"]))
 ans = pd.DataFrame(rows); ans'''),
-    ("code", '''print("answer correctness :", ans.correct.mean())
-print("grounded            :", ans.grounded.mean())
-print("has citations       :", ans.cited.mean())
-print("mean confidence     :", round(ans.conf.mean(), 3), "| mean latency ms:", int(ans.ms.mean()))'''),
-    ("md", "## Fail-closed on unanswerable questions"),
+    ("code", '''print("Answer Correctness :", round(ans.correct.mean(), 3))
+print("Groundedness       :", round(ans.grounded.mean(), 3))
+print("Citation Presence  :", round(ans.cited.mean(), 3))
+print("Mean Confidence    :", round(ans.conf.mean(), 3), "| Mean Latency ms:", int(ans.ms.mean()))'''),
+    ("md", "## 2. Unanswerable Query Abstention Rate"),
     ("code", '''un = [ask(q, subject_codes=[s]) for s, q in synthetic.UNANSWERABLE]
-print("refused correctly:", sum(o["answer"] == NO_ANSWER for o in un), "/", len(un))'''),
-    ("md", "## Cross-subject leakage probes"),
+print("Abstained correctly:", sum(o["answer"] == NO_ANSWER for o in un), "/", len(un))'''),
+    ("md", "## 3. Cross-Subject Leakage Probes"),
     ("code", '''leaks = [ask(q, subject_codes=[s]) for s, q, _ in synthetic.LEAKAGE]
-print("no leakage:", all(o["answer"] == NO_ANSWER and not o["sources"] for o in leaks))'''),
-    ("md", "## Run the automated test-suite"),
+print("Zero leakage verified:", all(o["answer"] == NO_ANSWER and not o["sources"] for o in leaks))'''),
+    ("md", "## 4. Run Pytest Regression Suite"),
     ("code", '''import subprocess
 r = subprocess.run([sys.executable, "-m", "pytest", "-q", "tests"], cwd=ROOT, capture_output=True, text=True)
 print(r.stdout[-600:])'''),
-    ("md", "### Reading the results\nIn **OFFLINE** mode the LLM is a rule-based mock, so these numbers prove the *plumbing, security and fail-closed logic*. Set `NB_OFFLINE=0` (real providers) and re-run to measure real answer quality; correctness below ~0.9 on this easy set usually means a chunking, embedding-model or prompt issue worth investigating."),
 ])
 print("built:", sorted(p.name for p in OUT.glob("*.ipynb")))

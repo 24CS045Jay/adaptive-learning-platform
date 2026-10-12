@@ -74,7 +74,12 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       question,
       conversationId,
       masteryLevel: bodyMasteryLevel,
+      learner_level: bodyLearnerLevel,
+      response_language: bodyResponseLanguage,
     } = req.body;
+
+    const learnerLevel = bodyLearnerLevel || bodyMasteryLevel || "intermediate";
+    const responseLanguage = bodyResponseLanguage || "en";
 
     if (!question?.trim()) {
       return res.status(400).json({ error: "question is required." });
@@ -152,7 +157,8 @@ router.post("/ask", softAuthenticate, async (req, res) => {
           subject_id: subject?._id ? String(subject._id) : undefined,
           subject_name: subject?.name || subjectCode,
           mode: req.body.mode || "ask_tutor",
-          learner_level: bodyMasteryLevel || "intermediate",
+          learner_level: learnerLevel,
+          response_language: responseLanguage,
           chat_history: (conversation?.messages || []).slice(-4).map((m) => ({
             role: m.role === "student" ? "user" : "assistant",
             content: m.text || "",
@@ -251,8 +257,12 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       return res.json({
         conversationId: conversation?._id || conversation?.id || String(conversationId || ""),
         answer: agenticResponse.answer,
-        worked_example: null,
-        visual: null,
+        worked_example: agenticResponse.worked_example || null,
+        visual: agenticResponse.visual || null,
+        chart: agenticResponse.chart || null,
+        sections: agenticResponse.sections || null,
+        response_language: responseLanguage,
+        learner_level: learnerLevel,
         escalated: isEscalated,
         confidence: parseFloat(confidence.toFixed(4)),
         grounded: agenticResponse.grounded ?? true,

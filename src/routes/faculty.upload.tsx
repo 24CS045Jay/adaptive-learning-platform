@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Upload, FileText, Presentation, FileType2, X, CheckCircle2, AlertCircle, RefreshCw,
 } from "lucide-react";
@@ -49,29 +49,57 @@ interface SelectedFile {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 function UploadContent() {
-  const { subjects, modules: learningModules, uploadDocument } = useAppData();
+  const { subjects, modules: learningModules, uploadDocument, refreshSubjects } = useAppData();
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<SelectedFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
+  useEffect(() => {
+    refreshSubjects();
+  }, [refreshSubjects]);
+
+  const myId = user?.id ? String(user.id).trim().toLowerCase() : "";
+  const myEmail = user?.email ? String(user.email).trim().toLowerCase() : "";
+  const myName = user?.name ? String(user.name).trim().toLowerCase() : "";
+
+  const facultySubjects = useMemo(() => {
+    if (user?.role === "admin") return subjects;
+    return subjects.filter((s) => {
+      const sFacId = s.facultyId ? String(s.facultyId).trim().toLowerCase() : "";
+      const sFacEmail = s.facultyEmail ? String(s.facultyEmail).trim().toLowerCase() : "";
+      const sFacName = s.faculty ? String(s.faculty).trim().toLowerCase() : "";
+
+      if (sFacId && myId && sFacId === myId) return true;
+      if (sFacEmail && myEmail && sFacEmail === myEmail) return true;
+      if (sFacName && myName && (sFacName === myName || sFacName.includes(myName) || myName.includes(sFacName))) {
+        return true;
+      }
+      return false;
+    });
+  }, [subjects, user, myId, myEmail, myName]);
+
   // Metadata form
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id || "");
+  const [subjectId, setSubjectId] = useState(facultySubjects[0]?.id || "");
   const [moduleId, setModuleId]   = useState("");
   const [topicTag, setTopicTag]   = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
-  const [semester, setSemester]   = useState(String(subjects[0]?.semester || "1"));
+  const [semester, setSemester]   = useState(String(facultySubjects[0]?.semester || "1"));
 
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading]     = useState(false);
 
   useEffect(() => {
-    if (!subjectId && subjects.length > 0) {
-      setSubjectId(subjects[0].id);
-      setSemester(String(subjects[0].semester || "1"));
+    if (facultySubjects.length > 0) {
+      if (!subjectId || !facultySubjects.some((s) => s.id === subjectId)) {
+        setSubjectId(facultySubjects[0].id);
+        setSemester(String(facultySubjects[0].semester || "1"));
+      }
+    } else {
+      setSubjectId("");
     }
-  }, [subjects, subjectId]);
+  }, [facultySubjects, subjectId]);
 
   const availableModules = learningModules.filter((m) => m.subjectId === subjectId);
 
@@ -242,18 +270,29 @@ function UploadContent() {
               <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">Subject</label>
               <select
                 value={subjectId}
+                disabled={facultySubjects.length === 0}
                 onChange={(e) => {
                   setSubjectId(e.target.value);
                   setModuleId("");
-                  const subj = subjects.find((s) => s.id === e.target.value);
+                  const subj = facultySubjects.find((s) => s.id === e.target.value);
                   if (subj) setSemester(String(subj.semester));
                 }}
-                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:border-violet"
+                className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:border-violet disabled:opacity-50"
               >
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                ))}
+                {facultySubjects.length > 0 ? (
+                  facultySubjects.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                  ))
+                ) : (
+                  <option value="">No assigned subjects available</option>
+                )}
               </select>
+              {facultySubjects.length === 0 && (
+                <div className="mt-2 text-xs text-amber-500 flex items-center gap-1.5">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>You cannot upload materials because you have no assigned subjects yet. Please contact an admin.</span>
+                </div>
+              )}
             </div>
 
             {/* ── Module ── */}
@@ -330,7 +369,7 @@ function UploadContent() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !selected || !subjectId}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-hover transition active:scale-[0.99] disabled:opacity-50"
             >
               {loading ? (

@@ -73,6 +73,7 @@ function SubjectsPage() {
     resources,
     users,
     refreshUsers,
+    refreshSubjects,
     addSubject,
     deleteSubject,
     updateSyllabus,
@@ -119,7 +120,8 @@ function SubjectsPage() {
     };
     fetchDirectFaculty();
     refreshUsers();
-  }, [adminUser]);
+    refreshSubjects();
+  }, [adminUser, refreshSubjects, refreshUsers]);
 
   // Merge faculty from AppDataContext users and direct Supabase fetch
   const allFacultyList = useMemo(() => {
@@ -172,16 +174,16 @@ function SubjectsPage() {
   const [newSubjName, setNewSubjName] = useState("");
   const [newSubjCode, setNewSubjCode] = useState("");
   const [newSubjSem, setNewSubjSem] = useState("5");
-  const [newSubjFaculty, setNewSubjFaculty] = useState("");
+  const [newSubjFacultyId, setNewSubjFacultyId] = useState("");
   const [newSubjSyllabus, setNewSubjSyllabus] = useState("");
   const [notificationBanner, setNotificationBanner] = useState<string | null>(null);
 
   // Set default faculty selection when faculty list loads
   useEffect(() => {
-    if (!newSubjFaculty && allFacultyList.length > 0) {
-      setNewSubjFaculty(allFacultyList[0].name);
+    if (!newSubjFacultyId && allFacultyList.length > 0) {
+      setNewSubjFacultyId(allFacultyList[0].id);
     }
-  }, [allFacultyList]);
+  }, [allFacultyList, newSubjFacultyId]);
 
   // Expanded card state
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -221,13 +223,19 @@ function SubjectsPage() {
     e.preventDefault();
     if (!newSubjName.trim() || !newSubjCode.trim()) return;
 
-    const assignedFac = newSubjFaculty.trim() || (allFacultyList[0]?.name ?? "Faculty Member");
+    const targetFac =
+      allFacultyList.find((f) => f.id === newSubjFacultyId) || allFacultyList[0];
+    const assignedFacName = targetFac?.name ?? "Faculty Member";
+    const assignedFacId = targetFac?.id;
+    const assignedFacEmail = targetFac?.email;
 
     addSubject({
       name: newSubjName.trim(),
       code: newSubjCode.trim().toUpperCase(),
       semester: parseInt(newSubjSem, 10),
-      faculty: assignedFac,
+      faculty: assignedFacName,
+      facultyId: assignedFacId,
+      facultyEmail: assignedFacEmail,
       syllabus: newSubjSyllabus.trim(),
     });
 
@@ -235,18 +243,34 @@ function SubjectsPage() {
     setNewSubjCode("");
     setNewSubjSyllabus("");
     setShowAddSubjectModal(false);
-    setNotificationBanner(`Subject "${newSubjName.trim()}" created and assigned to ${assignedFac}!`);
+    setNotificationBanner(`Subject "${newSubjName.trim()}" created and assigned to ${assignedFacName}!`);
     setTimeout(() => setNotificationBanner(null), 4000);
   };
 
   // Handle Changing/Reassigning Faculty for an existing subject
   const handleSaveFacultyAssignment = async (subjectId: string, subjectName: string) => {
     if (!selectedFacultyForSubj) return;
-    const targetFaculty = allFacultyList.find((f) => f.name === selectedFacultyForSubj || f.id === selectedFacultyForSubj);
+    const targetFaculty = allFacultyList.find(
+      (f) =>
+        f.id === selectedFacultyForSubj ||
+        f.email?.toLowerCase() === selectedFacultyForSubj.toLowerCase() ||
+        f.name === selectedFacultyForSubj,
+    );
     const facultyName = targetFaculty ? targetFaculty.name : selectedFacultyForSubj;
     const facultyId = targetFaculty?.id;
 
     await updateSubjectFaculty(subjectId, facultyName, facultyId);
+
+    try {
+      if (facultyId) {
+        await supabase
+          .from("subjects")
+          .update({ faculty_id: facultyId })
+          .eq("id", subjectId);
+      }
+    } catch {}
+
+    await refreshSubjects();
 
     setAssigningFacultySubjId(null);
     setNotificationBanner(`Assigned "${facultyName}" as the faculty for ${subjectName}!`);
@@ -367,18 +391,18 @@ function SubjectsPage() {
                     </span>
                   </label>
                   <select
-                    value={newSubjFaculty}
-                    onChange={(e) => setNewSubjFaculty(e.target.value)}
+                    value={newSubjFacultyId}
+                    onChange={(e) => setNewSubjFacultyId(e.target.value)}
                     className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-xs text-foreground outline-none focus:border-violet font-semibold"
                   >
                     {allFacultyList.length > 0 ? (
                       allFacultyList.map((f) => (
-                        <option key={f.id || f.email} value={f.name}>
-                          {f.name} {f.facultyId ? `(${f.facultyId})` : ""}
+                        <option key={f.id || f.email} value={f.id}>
+                          {f.name} ({f.email})
                         </option>
                       ))
                     ) : (
-                      <option value="Dr. Nisha Shah">Dr. Nisha Shah (Default Faculty)</option>
+                      <option value="">No faculty available</option>
                     )}
                   </select>
                 </div>
@@ -466,8 +490,17 @@ function SubjectsPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setAssigningFacultySubjId(assigningFacultySubjId === s.id ? null : s.id);
-                      setSelectedFacultyForSubj(s.faculty || (allFacultyList[0]?.name ?? ""));
+                      const nextId = assigningFacultySubjId === s.id ? null : s.id;
+                      setAssigningFacultySubjId(nextId);
+                      if (nextId) {
+                        const matched = allFacultyList.find(
+                          (f) =>
+                            f.id === s.facultyId ||
+                            (s.facultyEmail && f.email.toLowerCase() === s.facultyEmail.toLowerCase()) ||
+                            (s.faculty && f.name.toLowerCase() === s.faculty.toLowerCase()),
+                        );
+                        setSelectedFacultyForSubj(matched?.id || allFacultyList[0]?.id || "");
+                      }
                     }}
                     className="flex items-center gap-1.5 rounded-xl border border-violet/30 bg-violet/5 px-3 py-1.5 text-xs font-semibold text-violet hover:bg-violet hover:text-white transition shadow-xs"
                   >
@@ -514,8 +547,8 @@ function SubjectsPage() {
                       className="rounded-xl border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-violet"
                     >
                       {allFacultyList.map((f) => (
-                        <option key={f.id || f.email} value={f.name}>
-                          {f.name} {f.facultyId ? `[${f.facultyId}]` : ""} ({f.email})
+                        <option key={f.id || f.email} value={f.id}>
+                          {f.name} ({f.email})
                         </option>
                       ))}
                     </select>

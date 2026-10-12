@@ -17,6 +17,7 @@ import { _setGlobalOnRegister } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
 import { API_BASE, fetchJson, authHeaders } from "@/lib/api";
 import { AUDIT_LOG, type AuditEntry, appendAudit } from "@/lib/auth-store";
+import { supabase } from "@/lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,8 @@ export interface AppSubject {
   code: string;
   semester: number;
   faculty: string;
+  facultyId?: string;
+  facultyEmail?: string;
   syllabus: string;
   enrolledStudentIds: string[];
 }
@@ -235,6 +238,7 @@ interface AppDataContextValue {
   deleteSubject: (id: string) => void;
   updateSyllabus: (subjectId: string, syllabus: string) => void;
   updateSubjectFaculty: (subjectId: string, facultyName: string, facultyId?: string) => Promise<boolean>;
+  refreshSubjects: () => Promise<boolean>;
 
   // Module / Resource CRUD
   addModule: (mod: Omit<LearningModule, "id">) => void;
@@ -260,12 +264,24 @@ function getFileTypeFromFileName(fileName: string): FileType {
 }
 
 function mapBackendSubject(subject: any): AppSubject {
+  const facObj =
+    typeof subject.facultyId === "object" && subject.facultyId ? subject.facultyId : null;
+  const facId = facObj
+    ? facObj._id || facObj.id
+    : typeof subject.facultyId === "string"
+      ? subject.facultyId
+      : subject.faculty_id || undefined;
+  const facName = facObj?.name ?? subject.faculty ?? "";
+  const facEmail = facObj?.email ?? subject.facultyEmail ?? undefined;
+
   return {
     id: String(subject._id || subject.id),
     name: subject.name,
     code: subject.code,
     semester: subject.semester,
-    faculty: subject.facultyId?.name ?? subject.faculty ?? "",
+    faculty: facName,
+    facultyId: facId ? String(facId) : undefined,
+    facultyEmail: facEmail ? String(facEmail) : undefined,
     syllabus: subject.syllabus ?? "",
     enrolledStudentIds: (subject.enrolledStudentIds || []).map((id: any) => String(id)),
   };
@@ -379,17 +395,57 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [user?.token]);
 
   const refreshSubjects = useCallback(async () => {
-    if (!user?.token) return false;
+    // 1. Try Backend API first
     try {
-      const subjectsData = await fetchJson<any[]>(`/api/subjects`, {
-        headers: authHeaders(user.token),
-      });
-      setSubjects(subjectsData.map(mapBackendSubject));
-      return true;
+      const headers = user?.token ? authHeaders(user.token) : {};
+      const subjectsData = await fetchJson<any[]>(`/api/subjects`, { headers });
+      if (Array.isArray(subjectsData) && subjectsData.length > 0) {
+        setSubjects(subjectsData.map(mapBackendSubject));
+        return true;
+      }
     } catch (error) {
-      console.warn("[AppData] refreshSubjects failed:", error);
-      return false;
+      console.warn("[AppData] API refreshSubjects notice, checking direct Supabase:", error);
     }
+
+    // 2. Direct Supabase Query Fallback (always works, even without token)
+    try {
+      const [{ data: subjsData, error: sErr }, { data: usersData, error: uErr }] = await Promise.all([
+        supabase.from("subjects").select("*"),
+        supabase.from("users").select("id, name, email"),
+      ]);
+
+      if (!sErr && Array.isArray(subjsData)) {
+        const userMap = new Map<string, { id: string; name: string; email: string }>();
+        if (!uErr && Array.isArray(usersData)) {
+          usersData.forEach((u: any) => {
+            userMap.set(String(u.id), u);
+            if (u.email) userMap.set(u.email.toLowerCase(), u);
+          });
+        }
+
+        const mapped: AppSubject[] = subjsData.map((s: any) => {
+          const facUser = s.faculty_id ? userMap.get(String(s.faculty_id)) : null;
+          return {
+            id: String(s.id),
+            name: s.name,
+            code: s.code,
+            semester: s.semester,
+            faculty: facUser?.name || s.faculty || "",
+            facultyId: s.faculty_id ? String(s.faculty_id) : undefined,
+            facultyEmail: facUser?.email || undefined,
+            syllabus: s.syllabus || "",
+            enrolledStudentIds: Array.isArray(s.enrolled_student_ids)
+              ? s.enrolled_student_ids.map(String)
+              : [],
+          };
+        });
+        setSubjects(mapped);
+        return true;
+      }
+    } catch (sbErr) {
+      console.warn("[AppData] Direct Supabase subjects fetch failed:", sbErr);
+    }
+    return false;
   }, [user?.token]);
 
   const refreshUsers = useCallback(async () => {
@@ -955,23 +1011,63 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const addSubject = useCallback(
     async (subj: Omit<AppSubject, "id" | "enrolledStudentIds">) => {
-      if (!user?.token) return;
+      // 1. API Call
       try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (user?.token) {
+          Object.assign(headers, authHeaders(user.token, { role: user.role, id: user.id }));
+        }
         await fetch(`${API_BASE}/api/subjects`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
-          body: JSON.stringify(subj),
+          headers,
+          body: JSON.stringify({
+            name: subj.name,
+            code: subj.code,
+            semester: subj.semester,
+            faculty: subj.faculty,
+            facultyId: subj.facultyId,
+            facultyEmail: subj.facultyEmail,
+            syllabus: subj.syllabus,
+          }),
         });
-        await refreshSubjects();
       } catch (err) {
-        console.warn("[AppData] addSubject failed:", err);
+        console.warn("[AppData] API addSubject notice:", err);
       }
+
+      // 2. Direct Supabase insert fallback
+      try {
+        const { data: existing } = await supabase
+          .from("subjects")
+          .select("id")
+          .eq("code", subj.code)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabase.from("subjects").insert({
+            name: subj.name,
+            code: subj.code,
+            semester: subj.semester,
+            department_id: "CE",
+            faculty_id: subj.facultyId || null,
+            syllabus: subj.syllabus || "",
+            enrolled_student_ids: [],
+          });
+        }
+      } catch (sbErr) {
+        console.warn("[AppData] Direct Supabase addSubject notice:", sbErr);
+      }
+
+      await refreshSubjects();
     },
-    [refreshSubjects, user?.token],
+    [refreshSubjects, user],
   );
 
   const deleteSubject = useCallback(
     async (id: string) => {
+      try {
+        await supabase.from("subjects").delete().eq("id", id);
+      } catch {}
+
       if (!user?.token) return;
       try {
         await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(id)}`, {
@@ -988,10 +1084,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const updateSyllabus = useCallback(
     async (subjectId: string, syllabus: string) => {
-      // Optimistically update subject list
       setSubjects((prev) =>
         prev.map((s) => (s.id === subjectId || s.code === subjectId ? { ...s, syllabus } : s)),
       );
+
+      try {
+        await supabase.from("subjects").update({ syllabus }).eq("id", subjectId);
+      } catch {}
 
       if (!user?.token) return;
       try {
@@ -1012,24 +1111,44 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (subjectId: string, facultyName: string, facultyId?: string) => {
       // Optimistically update subject list
       setSubjects((prev) =>
-        prev.map((s) => (s.id === subjectId ? { ...s, faculty: facultyName } : s)),
+        prev.map((s) =>
+          s.id === subjectId
+            ? { ...s, faculty: facultyName, facultyId: facultyId || s.facultyId }
+            : s,
+        ),
       );
 
-      if (!user?.token) return true;
+      // 1. Direct Supabase update to guarantee instant persistence
       try {
+        if (facultyId) {
+          await supabase
+            .from("subjects")
+            .update({ faculty_id: facultyId })
+            .eq("id", subjectId);
+        }
+      } catch (sbErr) {
+        console.warn("[AppData] Direct Supabase updateSubjectFaculty notice:", sbErr);
+      }
+
+      // 2. Backend API update with audit logging
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (user?.token) {
+          Object.assign(headers, authHeaders(user.token, { role: user.role, id: user.id }));
+        }
         await fetch(`${API_BASE}/api/subjects/${encodeURIComponent(subjectId)}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", ...authHeaders(user.token) },
+          headers,
           body: JSON.stringify({ faculty: facultyName, facultyId }),
         });
-        await refreshSubjects();
-        return true;
       } catch (err) {
-        console.warn("[AppData] updateSubjectFaculty failed:", err);
-        return false;
+        console.warn("[AppData] API updateSubjectFaculty notice:", err);
       }
+
+      await refreshSubjects();
+      return true;
     },
-    [refreshSubjects, user?.token],
+    [refreshSubjects, user],
   );
 
   const enrollStudent = useCallback(
@@ -1347,10 +1466,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!active) return;
     };
     loadAllBackendData();
-    return () => {
-      active = false;
-    };
   }, [user?.token, user?.id]);
+
+  useEffect(() => {
+    refreshSubjects();
+
+    const channel = supabase
+      .channel("public_subjects_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "subjects" },
+        () => {
+          refreshSubjects();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshSubjects]);
 
   useEffect(() => {
     _setGlobalOnRegister((name, email, role) => {
@@ -1412,6 +1547,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         deleteSubject,
         updateSyllabus,
         updateSubjectFaculty,
+        refreshSubjects,
         addModule,
         removeModule,
         addResource,

@@ -86,20 +86,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "AI Tutor · CSPIT CSE RAG Platform" },
+      { title: "EduSense AI · Learn Smarter. Adapt Faster. Achieve More." },
       {
         name: "description",
         content:
-          "AI Tutor is a Retrieval-Augmented Generation platform for CSPIT CSE — grounded answers, quizzes, and study plans from approved course material.",
+          "EduSense AI is an enterprise RAG educational platform — Learn Smarter. Adapt Faster. Achieve More. Grounded answers, topic mastery, and verified course material.",
       },
-      { name: "author", content: "CSPIT CSE" },
-      { property: "og:title", content: "AI Tutor · CSPIT CSE RAG Platform" },
+      { name: "author", content: "EduSense AI" },
+      { property: "og:title", content: "EduSense AI · Learn Smarter. Adapt Faster. Achieve More." },
       {
         property: "og:description",
         content:
-          "Grounded academic tutoring for CSPIT CSE — students, faculty, and admins on one RAG-powered platform.",
+          "Grounded academic tutoring and adaptive learning for students, faculty, and institutions on one unified RAG-powered platform.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: "/assets/edusense-logo.png" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
     ],
@@ -114,6 +115,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       {
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap",
+      },
+      {
+        rel: "stylesheet",
+        href: "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css",
       },
     ],
   }),

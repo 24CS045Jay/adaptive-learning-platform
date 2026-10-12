@@ -59,6 +59,7 @@ class AgentState(TypedDict, total=False):
     department_id: Optional[str]
     document_ids: Optional[List[str]]
     learner_level: str
+    response_language: str
     # working
     intent: str
     standalone: str
@@ -236,9 +237,21 @@ def _ctx_block(rel: List[Dict[str, Any]]) -> str:
 
 
 _LEVEL = {
-    "beginner": "Explain simply with an everyday analogy, define jargon.",
-    "intermediate": "Explain clearly with the key steps.",
-    "advanced": "Be concise and precise; include nuance.",
+    "beginner": "Explain simply with an everyday intuitive analogy, define basic jargon, and focus on fundamental intuition.",
+    "intermediate": "Explain clearly with standard academic rigor, key mechanisms, and practical applications.",
+    "advanced": "Be concise and precise; include mathematical depth, algorithmic complexity, nuances, and edge cases.",
+}
+
+_LANG_NAMES = {
+    "en": "English",
+    "gu": "Gujarati (ગુજરાતી)",
+    "hi": "Hindi (हिन्दी)",
+    "mr": "Marathi (मराठी)",
+    "bn": "Bengali (বাংলা)",
+    "ta": "Tamil (தமிழ்)",
+    "te": "Telugu (తెలుగు)",
+    "es": "Spanish (Español)",
+    "fr": "French (Français)",
 }
 
 
@@ -250,11 +263,41 @@ def generate_node(s: AgentState) -> dict:
         if attempt > 0
         else ""
     )
+    lang = s.get("response_language", "en")
+    lang_inst = ""
+    if lang and lang != "en":
+        lang_name = _LANG_NAMES.get(lang, lang)
+        lang_inst = (
+            f"\nLANGUAGE REQUIREMENT: Formulate your entire educational explanation in {lang_name}. "
+            "Use natural, fluent phrasing. Preserve core technical terms (e.g., 'Overfitting', 'MapReduce', 'Pipeline') "
+            "in English or alongside the translated term (e.g., 'ઓવરફિટિંગ (Overfitting)'). "
+            "Keep code keywords, programming syntax, mathematical equations, and source citation markers like [1] untouched."
+        )
+
+    tutor_guidelines = (
+        "\nTEACHING STRUCTURE & FORMATTING GUIDELINES:\n"
+        "- Structure your explanation clearly with Markdown:\n"
+        "  1. Direct, accessible explanation of the core concept.\n"
+        "  2. Step-by-step breakdown or illustrative mechanism.\n"
+        "  3. Meaningful real-world example.\n"
+        "  4. Visual Representation: If the concept is procedural, relational, algorithmic, or architectural "
+        "(e.g. workflows, lifecycles, trees, state transitions), include a clean ```mermaid diagram. "
+        "If it involves numerical distributions, comparative metrics, or complexity comparisons, include a valid ```json:chart specification:\n"
+        '     ```json:chart\n'
+        '     {"type":"chart","chartType":"bar|line|scatter","title":"...","xLabel":"...","yLabel":"...","data":[{"label":"...","value":10}],"explanation":"..."}\n'
+        '     ```\n'
+        "     Only include a diagram or chart if it genuinely aids pedagogical understanding; do not force one for simple factual queries.\n"
+        "  5. Practical application, common misconceptions, or a short practice question when helpful.\n"
+        "- Format code with syntax language tags (e.g. ```python, ```sql).\n"
+        "- Format mathematical formulas with LaTeX ($inline$ or $$block$$).\n"
+        "- Cite numbered context inline like [1] or [2][3] after the sentences they support."
+    )
+
     prompt = (
-        "TASK:ANSWER\nYou are a university course tutor. Answer the student's question using ONLY the "
+        "TASK:ANSWER\nYou are an expert university AI tutor. Answer the student's question using the "
         "numbered context below. Cite sources inline like [1] or [2][3] after the sentences they support. "
-        "Do not use outside knowledge. If the context does not contain the answer, reply exactly "
-        f"INSUFFICIENT_CONTEXT. {_LEVEL.get(s.get('learner_level','intermediate'), '')}{strict}\n"
+        "Do not invent facts outside the context. If the context does not contain the answer, reply exactly "
+        f"INSUFFICIENT_CONTEXT. {_LEVEL.get(s.get('learner_level','intermediate'), '')}{lang_inst}{tutor_guidelines}{strict}\n"
         f"CONTEXT:\n{_ctx_block(s['relevant'])}\n"
         f"QUESTION: {s['standalone']}\n"
     )
@@ -391,6 +434,7 @@ def ask(
     document_ids: Optional[List[str]] = None,
     history: Optional[List[Dict[str, str]]] = None,
     learner_level: str = "intermediate",
+    response_language: str = "en",
 ) -> Dict[str, Any]:
     t0 = time.time()
     st = get_graph().invoke(
@@ -402,16 +446,30 @@ def ask(
             "department_id": department_id,
             "document_ids": document_ids,
             "learner_level": learner_level,
+            "response_language": response_language,
             "trace": [],
         },
         config={"recursion_limit": 25},
     )
+
+    final_ans = st.get("final", NO_ANSWER)
+
+    # Extract chart data if present in markdown codeblock
+    chart_data = None
+    chart_match = re.search(r"```(?:json:chart|chart)\s*([\s\S]*?)```", final_ans)
+    if chart_match:
+        try:
+            chart_data = json.loads(chart_match.group(1).strip())
+        except Exception:
+            pass
+
     return {
-        "answer": st.get("final", NO_ANSWER),
+        "answer": final_ans,
         "confidence": st.get("confidence", 0.0),
         "grounded": bool(st.get("grounded", False)),
         "intent": st.get("intent", "academic"),
         "sources": st.get("sources", []),
+        "chart": chart_data,
         "retrieval": st.get("retrieval", {"strategy": "hybrid_rrf"}),
         "agent_trace": st.get("trace", []),
         "standalone_question": st.get("standalone"),

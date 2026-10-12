@@ -19,6 +19,6 @@ const nav: NavItem[] = [
 ];
 
 export const Route = createFileRoute("/student")({
-  head: () => ({ meta: [{ title: "Student · AI Tutor" }, { name: "description", content: "Student learning dashboard for AI Tutor." }] }),
+  head: () => ({ meta: [{ title: "Student · EduSense AI" }, { name: "description", content: "Student learning dashboard for EduSense AI — Learn Smarter. Adapt Faster. Achieve More." }] }),
   component: () => <AppShell role="student" nav={nav} />,
 });

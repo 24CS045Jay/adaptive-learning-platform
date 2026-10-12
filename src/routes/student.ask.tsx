@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   ExternalLink,
   Code2,
+  Languages,
+  GraduationCap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -24,6 +26,10 @@ import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
 import { MermaidRenderer } from "@/components/MermaidRenderer";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { ChartRenderer, type ChartSpec } from "@/components/chat/ChartRenderer";
+import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
+import { EducationalActions } from "@/components/chat/EducationalActions";
 
 export const Route = createFileRoute("/student/ask")({
   component: AskTutorPage,
@@ -55,6 +61,8 @@ interface ApiResponse {
   answer: string;
   worked_example?: string | null;
   visual?: VisualData;
+  chart?: ChartSpec | null;
+  sections?: any[] | null;
   escalated: boolean;
   confidence: number;
   sources: SourceChip[];
@@ -64,6 +72,8 @@ interface ApiResponse {
   intent?: string;
   agent_trace?: string[];
   follow_up?: string[];
+  response_language?: string;
+  learner_level?: string;
 }
 
 interface ChatMessage {
@@ -72,6 +82,7 @@ interface ChatMessage {
   text: string;
   worked_example?: string | null;
   visual?: VisualData;
+  chart?: ChartSpec | null;
   timestamp: string;
   escalated?: boolean;
   confidence?: number;
@@ -82,6 +93,8 @@ interface ChatMessage {
   intent?: string;
   agent_trace?: string[];
   follow_up?: string[];
+  response_language?: string;
+  learner_level?: string;
 }
 
 interface ChatSession {
@@ -94,20 +107,55 @@ interface ChatSession {
   messages: ChatMessage[];
 }
 
+// ── Language & Level Constants ────────────────────────────────────────────────
+const LANGUAGES = [
+  { code: "en", name: "English", flag: "🌐" },
+  { code: "gu", name: "ગુજરાતી (Gujarati)", flag: "🇮🇳" },
+  { code: "hi", name: "हिन्दी (Hindi)", flag: "🇮🇳" },
+  { code: "mr", name: "मराठी (Marathi)", flag: "🇮🇳" },
+  { code: "bn", name: "বাংলা (Bengali)", flag: "🇮🇳" },
+  { code: "ta", name: "தமிழ் (Tamil)", flag: "🇮🇳" },
+  { code: "te", name: "తెలుగు (Telugu)", flag: "🇮🇳" },
+  { code: "es", name: "Español (Spanish)", flag: "🇪🇸" },
+  { code: "fr", name: "Français (French)", flag: "🇫🇷" },
+];
+
+const LEARNER_LEVELS = [
+  { id: "beginner", label: "Beginner", icon: "🌱", hint: "Intuitive analogies & simplified fundamentals" },
+  { id: "intermediate", label: "Intermediate", icon: "⚡", hint: "Balanced academic rigor & mechanisms" },
+  { id: "advanced", label: "Advanced", icon: "🔬", hint: "In-depth theory, math rigor & nuances" },
+];
+
 // ── Typing indicator ──────────────────────────────────────────────────────────
 function TypingIndicator() {
-  const dotColors = ["bg-violet", "bg-gold", "bg-success"];
+  const [phase, setPhase] = useState(0);
+  const phases = [
+    "Analyzing question & learning intent…",
+    "Retrieving approved course materials & citations…",
+    "Formulating structured educational explanation…",
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setPhase((p) => (p + 1) % phases.length);
+    }, 2200);
+    return () => clearInterval(timer);
+  }, [phases.length]);
+
   return (
-    <div className="flex max-w-xs items-center gap-3 rounded-2xl border border-violet/20 bg-card px-4 py-3.5 shadow-sm chat-ai-bubble">
-      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-violet/15 ring-1 ring-violet/20">
-        <Sparkles className="h-3.5 w-3.5 text-violet" />
+    <div className="flex max-w-md items-center gap-3.5 rounded-2xl border border-violet/25 bg-card/90 px-4 py-3 shadow-md backdrop-blur-xs chat-ai-bubble">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet/15 ring-1 ring-violet/25 animate-pulse">
+        <Sparkles className="h-4 w-4 text-violet" />
       </div>
-      <div className="flex items-center gap-1.5">
-        {[0, 1, 2].map((i) => (
-          <span key={i} className={cn("typing-dot h-2.5 w-2.5 rounded-full", dotColors[i])} />
-        ))}
+      <div className="space-y-0.5">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-violet animate-bounce" />
+          <span className="h-2 w-2 rounded-full bg-amber-500 animate-bounce [animation-delay:0.2s]" />
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce [animation-delay:0.4s]" />
+          <span className="text-xs font-semibold text-foreground ml-1">AI Tutor thinking</span>
+        </div>
+        <p className="text-[11px] text-muted-foreground italic font-sans">{phases[phase]}</p>
       </div>
-      <span className="text-xs text-muted-foreground italic">Thinking & structuring…</span>
     </div>
   );
 }
@@ -367,6 +415,8 @@ function AskTutorPage() {
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>(firstSubject?.name ?? "");
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
   const [selectedMode, setSelectedMode] = useState<string>("ask_tutor");
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
+  const [learnerLevel, setLearnerLevel] = useState<string>("intermediate");
 
   const [showControls, setShowControls] = useState<boolean>(false);
 
@@ -585,6 +635,8 @@ function AskTutorPage() {
           question: q,
           conversationId: conversationIdToSend,
           mode: selectedMode,
+          response_language: selectedLanguage,
+          learner_level: learnerLevel,
         }),
       });
 
@@ -613,6 +665,7 @@ function AskTutorPage() {
           "The AI Tutor service is currently unreachable. Please make sure the Node backend (port 5000) and the Python RAG service (port 8001) are both running.",
         worked_example: null,
         visual: null,
+        chart: null,
         escalated: true,
         confidence: 0,
         sources: [],
@@ -625,6 +678,7 @@ function AskTutorPage() {
       text: apiResp.answer,
       worked_example: apiResp.worked_example || null,
       visual: apiResp.visual || null,
+      chart: apiResp.chart || null,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       escalated: apiResp.escalated,
       confidence: apiResp.confidence,
@@ -635,6 +689,8 @@ function AskTutorPage() {
       intent: apiResp.intent,
       agent_trace: apiResp.agent_trace,
       follow_up: apiResp.follow_up,
+      response_language: selectedLanguage,
+      learner_level: learnerLevel,
     };
 
     setSessions((prev) =>
@@ -787,15 +843,15 @@ function AskTutorPage() {
         <div className="lg:col-span-3">
           <Card>
             <div className="flex flex-col min-h-[520px]">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3 mb-4">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 mb-4">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet/10 text-violet">
                     <BookOpen className="h-4 w-4" />
                   </div>
                   <select
                     value={selectedSubjectId}
                     onChange={handleSubjectChange}
-                    className="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-bold text-foreground outline-none focus:border-violet transition cursor-pointer"
+                    className="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground outline-none focus:border-violet transition cursor-pointer max-w-[200px] truncate"
                   >
                     {subjects.map((s) => (
                       <option key={s.id} value={s.id}>
@@ -803,10 +859,49 @@ function AskTutorPage() {
                       </option>
                     ))}
                   </select>
+
+                  {/* Multilingual Selector */}
+                  <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1 text-xs">
+                    <Languages className="h-3.5 w-3.5 text-violet shrink-0" />
+                    <select
+                      value={selectedLanguage}
+                      onChange={(e) => setSelectedLanguage(e.target.value)}
+                      className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
+                      title="Select explanation language"
+                    >
+                      {LANGUAGES.map((lang) => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.flag} {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="rounded-full bg-violet/10 px-2.5 py-1 text-violet font-semibold">
-                    Adaptive Conversational RAG ({selectedSubjectCode})
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {/* Learner Level Selector */}
+                  <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-0.5">
+                    {LEARNER_LEVELS.map((lvl) => (
+                      <button
+                        key={lvl.id}
+                        type="button"
+                        onClick={() => setLearnerLevel(lvl.id)}
+                        className={cn(
+                          "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all",
+                          learnerLevel === lvl.id
+                            ? "bg-violet text-white shadow-2xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                        title={lvl.hint}
+                      >
+                        <span>{lvl.icon}</span>
+                        <span className="hidden sm:inline">{lvl.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="rounded-full bg-violet/10 px-2.5 py-1 text-violet font-semibold text-[11px] hidden md:inline">
+                    {selectedSubjectCode}
                   </span>
                 </div>
               </div>
@@ -825,18 +920,23 @@ function AskTutorPage() {
                       Ask the AI Tutor
                     </div>
                     <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                      Ask questions, view worked examples, and explore interactive flowcharts,
-                      concept maps, and comparison charts grounded in course material.
+                      Ask questions in your preferred language and level. Explore LaTeX equations,
+                      rich code blocks, interactive flowcharts, and dynamic charts grounded in course material.
                     </p>
                   </div>
                 ) : (
                   <AnimatePresence initial={false}>
-                    {activeSession.messages.map((msg) => (
+                    {activeSession.messages.map((msg, idx) => (
                       <ChatMessageBubble
                         key={msg.id}
                         msg={msg}
                         onSourceClick={setSelectedSource}
                         onFollowUpClick={(fuText) => handleSend(fuText)}
+                        onRetry={() => {
+                          const userMsgs = activeSession.messages.slice(0, idx).filter((m) => m.role === "user");
+                          const lastUser = userMsgs[userMsgs.length - 1];
+                          if (lastUser) handleSend(lastUser.text);
+                        }}
                       />
                     ))}
                   </AnimatePresence>
@@ -882,9 +982,16 @@ function AskTutorPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  placeholder={`Ask a question about ${selectedSubjectName || "your subject"}…`}
+                  placeholder={`Ask a question about ${selectedSubjectName || "your subject"} (${LANGUAGES.find((l) => l.code === selectedLanguage)?.name || "English"})…`}
                   disabled={isProcessing}
                   className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                />
+                <VoiceInputButton
+                  onTranscript={(transcript) =>
+                    setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
+                  }
+                  language={selectedLanguage}
+                  disabled={isProcessing}
                 />
                 <motion.button
                   type="button"
@@ -892,7 +999,7 @@ function AskTutorPage() {
                   disabled={!input.trim() || isProcessing}
                   whileTap={{ scale: 0.9 }}
                   whileHover={{ boxShadow: "0 0 18px -3px oklch(0.62 0.22 293 / 55%)" }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#9d72f7] to-[#7c3aed] text-white disabled:opacity-40 transition-all"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#9d72f7] to-[#7c3aed] text-white disabled:opacity-40 transition-all shrink-0"
                 >
                   <Send className="h-4 w-4" />
                 </motion.button>
@@ -917,10 +1024,12 @@ function ChatMessageBubble({
   msg,
   onSourceClick,
   onFollowUpClick,
+  onRetry,
 }: {
   msg: ChatMessage;
   onSourceClick: (s: SourceChip) => void;
   onFollowUpClick?: (text: string) => void;
+  onRetry?: () => void;
 }) {
   const [rated, setRated] = useState<"up" | "down" | null>(null);
   const [showCommentBox, setShowCommentBox] = useState(false);
@@ -1029,15 +1138,25 @@ function ChatMessageBubble({
             </div>
           )}
 
-          {/* Main Answer text */}
-          <div
-            className={cn(
-              "text-sm leading-relaxed whitespace-pre-line font-sans",
-              isEscalated ? "text-amber-900 dark:text-amber-100" : "text-foreground",
-            )}
-          >
-            {msg.text}
+          {/* Rich Markdown & LaTeX Mathematics & Code & Visual Presentation */}
+          <div className="text-sm">
+            <MarkdownRenderer
+              content={msg.text}
+              onCitationClick={(num) => {
+                if (msg.sources && msg.sources.length >= num && num > 0) {
+                  onSourceClick(msg.sources[num - 1]);
+                } else if (msg.sources && msg.sources.length > 0) {
+                  onSourceClick(msg.sources[0]);
+                }
+              }}
+            />
           </div>
+
+          {/* Dedicated Chart visualization (if passed in structured field) */}
+          {!isEscalated && msg.chart && <ChartRenderer spec={msg.chart} />}
+
+          {/* Visual Diagram Block */}
+          {!isEscalated && msg.visual && <VisualRenderer visual={msg.visual} />}
 
           {/* Worked Example Block */}
           {!isEscalated && msg.worked_example && (
@@ -1051,14 +1170,11 @@ function ChatMessageBubble({
             </div>
           )}
 
-          {/* Visual Diagram Block */}
-          {!isEscalated && msg.visual && <VisualRenderer visual={msg.visual} />}
-
           {/* Source citation chips */}
           {!isEscalated && msg.sources && msg.sources.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Sources ({msg.sources.length})
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                <BookOpen className="h-3 w-3 text-violet" /> Verified Sources ({msg.sources.length})
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {msg.sources.map((src, i) => (
@@ -1066,6 +1182,16 @@ function ChatMessageBubble({
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Educational Quick Action Chips */}
+          {!isEscalated && (
+            <EducationalActions
+              onAction={(prompt) => onFollowUpClick && onFollowUpClick(prompt)}
+              onCopyAnswer={() => navigator.clipboard.writeText(msg.text)}
+              onRetry={onRetry}
+              isAiMessage={true}
+            />
           )}
 
           {/* Operational agent trace */}

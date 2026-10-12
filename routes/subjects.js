@@ -30,13 +30,62 @@ async function validateFaculty(facultyId, departmentId) {
   }
 }
 
+async function resolveFacultyUserId(facultyId, facultyNameOrEmail) {
+  if (facultyId) {
+    const rawId = String(facultyId).trim();
+    if (rawId && rawId !== "null" && rawId !== "undefined") {
+      const user = await User.findOne({
+        $or: [{ _id: rawId }, { id: rawId }, { email: rawId.toLowerCase() }],
+      });
+      if (user) return user.id || user._id;
+      return rawId;
+    }
+  }
+  if (facultyNameOrEmail) {
+    const term = String(facultyNameOrEmail).trim();
+    if (term && term !== "null" && term !== "undefined") {
+      const user = await User.findOne({
+        $or: [
+          { email: term.toLowerCase() },
+          { name: term },
+          { _id: term },
+          { id: term },
+        ],
+      });
+      if (user) return user.id || user._id;
+    }
+  }
+  return null;
+}
+
+function formatSubjectResponse(s) {
+  if (!s) return s;
+  const obj = typeof s.toObject === "function" ? s.toObject() : { ...s };
+  const facObj = obj.facultyId && typeof obj.facultyId === "object" ? obj.facultyId : null;
+  const facultyName = facObj?.name || obj.faculty || "";
+  const facultyEmail = facObj?.email || obj.facultyEmail || "";
+  const facultyId = facObj
+    ? facObj.id || facObj._id
+    : typeof obj.facultyId === "string"
+      ? obj.facultyId
+      : null;
+
+  return {
+    ...obj,
+    id: String(obj._id || obj.id),
+    faculty: facultyName,
+    facultyEmail: facultyEmail,
+    facultyId: facultyId,
+  };
+}
+
 // GET /api/subjects - list all active subjects with faculty details
 router.get("/", authenticate, async (req, res) => {
   try {
     const subjects = await Subject.find({})
       .populate("facultyId", "name email role departmentId")
       .sort({ code: 1 });
-    return res.json(subjects);
+    return res.json(subjects.map(formatSubjectResponse));
   } catch (error) {
     console.error("[Subject API] GET error:", error);
     return res.status(500).json({ error: "Failed to fetch subjects." });
@@ -51,10 +100,13 @@ router.get("/:id", authenticate, async (req, res) => {
       "name email role departmentId",
     );
     if (!subject && key._id) {
-      subject = await Subject.findById(key._id);
+      subject = await Subject.findById(key._id).populate(
+        "facultyId",
+        "name email role departmentId",
+      );
     }
     if (!subject) return res.status(404).json({ error: "Subject not found." });
-    return res.json(subject);
+    return res.json(formatSubjectResponse(subject));
   } catch (error) {
     return res.status(500).json({ error: "Failed to fetch subject." });
   }
@@ -62,13 +114,13 @@ router.get("/:id", authenticate, async (req, res) => {
 
 router.post("/", authenticate, requireRole("admin", "super_admin"), async (req, res) => {
   try {
-    const { name, code, semester, facultyId, syllabus } = req.body;
+    const { name, code, semester, facultyId, syllabus, faculty } = req.body;
     if (!name || !code || !semester)
       return res.status(400).json({ error: "Name, code, and semester are required." });
 
     const departmentId = req.body.departmentId || req.user?.departmentId || "CE";
     const normalizedCode = code.trim().toUpperCase();
-    
+
     const existing = await Subject.findOne({ code: normalizedCode });
     if (existing) {
       return res
@@ -76,12 +128,14 @@ router.post("/", authenticate, requireRole("admin", "super_admin"), async (req, 
         .json({ error: `Subject with code '${normalizedCode}' already exists.` });
     }
 
+    const resolvedFacultyId = await resolveFacultyUserId(facultyId, faculty);
+
     const subject = await Subject.create({
       name: name.trim(),
       code: normalizedCode,
       semester: Number(semester),
       departmentId,
-      facultyId: facultyId || null,
+      facultyId: resolvedFacultyId,
       syllabus: syllabus || "",
       enrolledStudentIds: [],
     });
@@ -89,10 +143,20 @@ router.post("/", authenticate, requireRole("admin", "super_admin"), async (req, 
     await AuditLog.create({
       actorId: req.user.id || req.user._id,
       action: "CREATE_SUBJECT",
-      details: { subjectId: subject.id || subject._id, code: subject.code, departmentId },
+      details: {
+        subjectId: subject.id || subject._id,
+        code: subject.code,
+        departmentId,
+        facultyId: resolvedFacultyId,
+      },
     }).catch(() => {});
 
-    return res.status(201).json(subject);
+    const createdWithFaculty = await Subject.findById(subject.id || subject._id).populate(
+      "facultyId",
+      "name email role departmentId",
+    );
+
+    return res.status(201).json(formatSubjectResponse(createdWithFaculty || subject));
   } catch (error) {
     console.error("[Subject Error] Create error:", error);
     return res.status(500).json({ error: "Failed to create subject." });
@@ -113,16 +177,22 @@ router.put("/:id", authenticate, requireRole("admin", "super_admin", "faculty"),
     if (name) updates.name = name.trim();
     if (code) updates.code = code.trim().toUpperCase();
     if (semester != null) updates.semester = Number(semester);
-    if (facultyId !== undefined) updates.facultyId = facultyId || null;
     if (syllabus !== undefined) updates.syllabus = syllabus;
-    if (faculty !== undefined && !updates.facultyId) {
-      // If faculty name string was supplied, resolve faculty ID if possible
-      const facUser = await User.findOne({ name: faculty });
-      if (facUser) updates.facultyId = facUser.id || facUser._id;
+
+    if (facultyId !== undefined || faculty !== undefined) {
+      const resolved = await resolveFacultyUserId(facultyId, faculty);
+      updates.facultyId = resolved;
     }
 
     const updated = await Subject.findByIdAndUpdate(target.id || target._id, updates);
-    return res.json(updated || { ...target, ...updates });
+    const updatedWithFaculty = await Subject.findById(target.id || target._id).populate(
+      "facultyId",
+      "name email role departmentId",
+    );
+
+    return res.json(
+      formatSubjectResponse(updatedWithFaculty || updated || { ...target, ...updates }),
+    );
   } catch (error) {
     console.error("[Subject API] Update error:", error);
     return res.status(500).json({ error: "Failed to update subject." });
