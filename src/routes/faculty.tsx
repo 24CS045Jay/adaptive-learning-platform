@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   LayoutDashboard, Upload, FileText, MessagesSquare, BarChart3,
-  ListChecks, AlertTriangle, Megaphone, UserCircle, BookOpen, Network,
+  ListChecks, AlertTriangle, Megaphone, UserCircle, BookOpen, Network, Video,
 } from "lucide-react";
 import { AppShell, type NavItem } from "@/components/app-shell";
 
 const nav: NavItem[] = [
   { to: "/faculty", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/faculty/meetings", label: "Faculty Connect", icon: Video },
   { to: "/faculty/subjects", label: "My Subjects", icon: BookOpen },
   { to: "/faculty/discussion", label: "Discussions", icon: MessagesSquare },
   { to: "/faculty/knowledge-graph", label: "Knowledge Graph", icon: Network },

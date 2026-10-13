@@ -27,6 +27,7 @@ interface MeetingSlot {
   subjectCode: string;
   subjectName: string;
   topic: string;
+  description?: string;
   date: string;
   startTime: string;
   endTime: string;
@@ -34,6 +35,7 @@ interface MeetingSlot {
   capacity: number;
   bookedCount: number;
   locationType: string;
+  audienceType?: string;
   notes?: string;
 }
 
@@ -52,6 +54,8 @@ interface MeetingBooking {
   teamsJoinUrl?: string | null;
   teamsMeetingId?: string | null;
   facultyNotes?: string | null;
+  rejectionReason?: string | null;
+  cancellationReason?: string | null;
   createdAt: string;
 }
 
@@ -73,7 +77,7 @@ export function StudentMeetingScheduler() {
   const fetchSlots = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/meetings/available-slots`, {
-        headers: authHeaders(token, { role: user?.role, id: user?.id }),
+        headers: authHeaders(token, { role: user?.role, id: user?.id, departmentId: user?.departmentId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -87,7 +91,7 @@ export function StudentMeetingScheduler() {
   const fetchBookings = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/meetings/student/bookings`, {
-        headers: authHeaders(token, { role: user?.role, id: user?.id }),
+        headers: authHeaders(token, { role: user?.role, id: user?.id, departmentId: user?.departmentId }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -117,17 +121,21 @@ export function StudentMeetingScheduler() {
 
     setSubmitting(true);
     try {
+      // Idempotency key per submission to prevent duplicates on retry
+      const idempotencyKey = `bk_${bookingSlot.id}_${user?.id}_${Date.now()}`;
+
       const res = await fetch(`${API_BASE}/api/meetings/bookings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...authHeaders(token, { role: user?.role, id: user?.id }),
+          ...authHeaders(token, { role: user?.role, id: user?.id, departmentId: user?.departmentId }),
         },
         body: JSON.stringify({
           slotId: bookingSlot.id,
           topic: topic.trim(),
           doubtDescription: doubtDesc.trim(),
           meetingType: "one_on_one",
+          idempotencyKey,
         }),
       });
 
@@ -156,7 +164,7 @@ export function StudentMeetingScheduler() {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
-          ...authHeaders(token, { role: user?.role, id: user?.id }),
+          ...authHeaders(token, { role: user?.role, id: user?.id, departmentId: user?.departmentId }),
         },
         body: JSON.stringify({ reason: "Student requested cancellation" }),
       });
@@ -181,7 +189,7 @@ export function StudentMeetingScheduler() {
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet/10 text-violet">
               <Video className="h-4 w-4" />
             </span>
-            <h3 className="text-lg font-bold text-foreground">Faculty Doubt Sessions</h3>
+            <h3 className="text-lg font-bold text-foreground">Faculty Connect Doubt Sessions</h3>
             <span className="rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold text-blue-500 uppercase tracking-wider">
               Microsoft Teams
             </span>
@@ -199,7 +207,7 @@ export function StudentMeetingScheduler() {
                 "rounded-lg px-3.5 py-1.5 transition-all",
                 activeTab === "my_bookings"
                   ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               My Sessions ({bookings.length})
@@ -210,7 +218,7 @@ export function StudentMeetingScheduler() {
                 "rounded-lg px-3.5 py-1.5 transition-all",
                 activeTab === "available"
                   ? "bg-card text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               Browse Faculty Slots ({slots.length})
@@ -266,7 +274,7 @@ export function StudentMeetingScheduler() {
                               isRequested && "bg-amber-500/15 text-amber-500 border border-amber-500/20",
                               b.status === "completed" && "bg-blue-500/15 text-blue-500",
                               b.status === "cancelled" && "bg-muted text-muted-foreground",
-                              b.status === "rejected" && "bg-rose-500/15 text-rose-500"
+                              b.status === "rejected" && "bg-rose-500/15 text-rose-500",
                             )}
                           >
                             {b.status === "approved" ? "Confirmed" : b.status}
@@ -289,13 +297,31 @@ export function StudentMeetingScheduler() {
                           </span>
                           <span>·</span>
                           <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" /> {startTime.toLocaleDateString(undefined, { month: "short", day: "numeric", weekday: "short" })}
+                            <Calendar className="h-3 w-3" />{" "}
+                            {startTime.toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              weekday: "short",
+                            })}
                           </span>
                           <span>·</span>
                           <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" /> {startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ({b.durationMinutes} min)
+                            <Clock className="h-3 w-3" />{" "}
+                            {startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (
+                            {b.durationMinutes} min)
                           </span>
                         </div>
+
+                        {b.rejectionReason && (
+                          <p className="mt-2 text-[11px] text-rose-500">
+                            <strong>Reason:</strong> {b.rejectionReason}
+                          </p>
+                        )}
+                        {b.cancellationReason && (
+                          <p className="mt-2 text-[11px] text-muted-foreground italic">
+                            Cancelled: {b.cancellationReason}
+                          </p>
+                        )}
                       </div>
 
                       {/* Action buttons */}
@@ -367,19 +393,28 @@ export function StudentMeetingScheduler() {
                         </div>
 
                         <h4 className="mt-2 text-sm font-bold text-foreground">{s.topic}</h4>
-                        <p className="mt-0.5 text-xs text-muted-foreground flex items-center gap-1.5">
+                        {s.description && (
+                          <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{s.description}</p>
+                        )}
+
+                        <p className="mt-1 text-xs text-muted-foreground flex items-center gap-1.5">
                           <User className="h-3 w-3 text-muted-foreground" /> {s.facultyName}
                         </p>
 
                         <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3.5 w-3.5 text-violet" />
-                            {startTime.toLocaleDateString(undefined, { month: "short", day: "numeric", weekday: "short" })}
+                            {startTime.toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                              weekday: "short",
+                            })}
                           </span>
                           <span>·</span>
                           <span className="flex items-center gap-1">
                             <Clock className="h-3.5 w-3.5 text-violet" />
-                            {startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ({s.durationMinutes}m)
+                            {startTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} (
+                            {s.durationMinutes}m)
                           </span>
                         </div>
 

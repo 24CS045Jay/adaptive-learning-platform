@@ -12,6 +12,7 @@
     "build": "cross-env NITRO_PRESET=vercel vite build",
     "build:dev": "cross-env NITRO_PRESET=vercel vite build --mode development",
     "preview": "vite preview",
+    "test": "node --test tests/*.test.js",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
