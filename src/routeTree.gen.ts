@@ -35,6 +35,7 @@ import { Route as FacultyDiscussionRouteImport } from './routes/faculty.discussi
 import { Route as FacultyDocumentsRouteImport } from './routes/faculty.documents'
 import { Route as FacultyEscalationsRouteImport } from './routes/faculty.escalations'
 import { Route as FacultyKnowledgeGraphRouteImport } from './routes/faculty.knowledge-graph'
+import { Route as FacultyMeetingsRouteImport } from './routes/faculty.meetings'
 import { Route as FacultyProfileRouteImport } from './routes/faculty.profile'
 import { Route as FacultyQueriesRouteImport } from './routes/faculty.queries'
 import { Route as FacultyQuizzesRouteImport } from './routes/faculty.quizzes'
@@ -46,6 +47,7 @@ import { Route as StudentAskRouteImport } from './routes/student.ask'
 import { Route as StudentBookmarksRouteImport } from './routes/student.bookmarks'
 import { Route as StudentConceptMapRouteImport } from './routes/student.concept-map'
 import { Route as StudentDiscussionRouteImport } from './routes/student.discussion'
+import { Route as StudentMeetingsRouteImport } from './routes/student.meetings'
 import { Route as StudentPlannerRouteImport } from './routes/student.planner'
 import { Route as StudentProfileRouteImport } from './routes/student.profile'
 import { Route as StudentQuizzesRouteImport } from './routes/student.quizzes'
@@ -182,6 +184,11 @@ const FacultyKnowledgeGraphRoute = FacultyKnowledgeGraphRouteImport.update({
   path: '/knowledge-graph',
   getParentRoute: () => FacultyRoute,
 } as any)
+const FacultyMeetingsRoute = FacultyMeetingsRouteImport.update({
+  id: '/meetings',
+  path: '/meetings',
+  getParentRoute: () => FacultyRoute,
+} as any)
 const FacultyProfileRoute = FacultyProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -237,6 +244,11 @@ const StudentDiscussionRoute = StudentDiscussionRouteImport.update({
   path: '/discussion',
   getParentRoute: () => StudentRoute,
 } as any)
+const StudentMeetingsRoute = StudentMeetingsRouteImport.update({
+  id: '/meetings',
+  path: '/meetings',
+  getParentRoute: () => StudentRoute,
+} as any)
 const StudentPlannerRoute = StudentPlannerRouteImport.update({
   id: '/planner',
   path: '/planner',
@@ -288,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
+  '/faculty/meetings': typeof FacultyMeetingsRoute
   '/faculty/profile': typeof FacultyProfileRoute
   '/faculty/queries': typeof FacultyQueriesRoute
   '/faculty/quizzes': typeof FacultyQuizzesRoute
@@ -298,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/student/bookmarks': typeof StudentBookmarksRoute
   '/student/concept-map': typeof StudentConceptMapRoute
   '/student/discussion': typeof StudentDiscussionRoute
+  '/student/meetings': typeof StudentMeetingsRoute
   '/student/planner': typeof StudentPlannerRoute
   '/student/profile': typeof StudentProfileRoute
   '/student/quizzes': typeof StudentQuizzesRoute
@@ -329,6 +343,7 @@ export interface FileRoutesByTo {
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
+  '/faculty/meetings': typeof FacultyMeetingsRoute
   '/faculty/profile': typeof FacultyProfileRoute
   '/faculty/queries': typeof FacultyQueriesRoute
   '/faculty/quizzes': typeof FacultyQuizzesRoute
@@ -339,6 +354,7 @@ export interface FileRoutesByTo {
   '/student/bookmarks': typeof StudentBookmarksRoute
   '/student/concept-map': typeof StudentConceptMapRoute
   '/student/discussion': typeof StudentDiscussionRoute
+  '/student/meetings': typeof StudentMeetingsRoute
   '/student/planner': typeof StudentPlannerRoute
   '/student/profile': typeof StudentProfileRoute
   '/student/quizzes': typeof StudentQuizzesRoute
@@ -374,6 +390,7 @@ export interface FileRoutesById {
   '/faculty/documents': typeof FacultyDocumentsRoute
   '/faculty/escalations': typeof FacultyEscalationsRoute
   '/faculty/knowledge-graph': typeof FacultyKnowledgeGraphRoute
+  '/faculty/meetings': typeof FacultyMeetingsRoute
   '/faculty/profile': typeof FacultyProfileRoute
   '/faculty/queries': typeof FacultyQueriesRoute
   '/faculty/quizzes': typeof FacultyQuizzesRoute
@@ -384,6 +401,7 @@ export interface FileRoutesById {
   '/student/bookmarks': typeof StudentBookmarksRoute
   '/student/concept-map': typeof StudentConceptMapRoute
   '/student/discussion': typeof StudentDiscussionRoute
+  '/student/meetings': typeof StudentMeetingsRoute
   '/student/planner': typeof StudentPlannerRoute
   '/student/profile': typeof StudentProfileRoute
   '/student/quizzes': typeof StudentQuizzesRoute
@@ -420,6 +438,7 @@ export interface FileRouteTypes {
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
+    | '/faculty/meetings'
     | '/faculty/profile'
     | '/faculty/queries'
     | '/faculty/quizzes'
@@ -430,6 +449,7 @@ export interface FileRouteTypes {
     | '/student/bookmarks'
     | '/student/concept-map'
     | '/student/discussion'
+    | '/student/meetings'
     | '/student/planner'
     | '/student/profile'
     | '/student/quizzes'
@@ -461,6 +481,7 @@ export interface FileRouteTypes {
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
+    | '/faculty/meetings'
     | '/faculty/profile'
     | '/faculty/queries'
     | '/faculty/quizzes'
@@ -471,6 +492,7 @@ export interface FileRouteTypes {
     | '/student/bookmarks'
     | '/student/concept-map'
     | '/student/discussion'
+    | '/student/meetings'
     | '/student/planner'
     | '/student/profile'
     | '/student/quizzes'
@@ -505,6 +527,7 @@ export interface FileRouteTypes {
     | '/faculty/documents'
     | '/faculty/escalations'
     | '/faculty/knowledge-graph'
+    | '/faculty/meetings'
     | '/faculty/profile'
     | '/faculty/queries'
     | '/faculty/quizzes'
@@ -515,6 +538,7 @@ export interface FileRouteTypes {
     | '/student/bookmarks'
     | '/student/concept-map'
     | '/student/discussion'
+    | '/student/meetings'
     | '/student/planner'
     | '/student/profile'
     | '/student/quizzes'
@@ -718,6 +742,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FacultyKnowledgeGraphRouteImport
       parentRoute: typeof FacultyRoute
     }
+    '/faculty/meetings': {
+      id: '/faculty/meetings'
+      path: '/meetings'
+      fullPath: '/faculty/meetings'
+      preLoaderRoute: typeof FacultyMeetingsRouteImport
+      parentRoute: typeof FacultyRoute
+    }
     '/faculty/profile': {
       id: '/faculty/profile'
       path: '/profile'
@@ -793,6 +824,13 @@ declare module '@tanstack/react-router' {
       path: '/discussion'
       fullPath: '/student/discussion'
       preLoaderRoute: typeof StudentDiscussionRouteImport
+      parentRoute: typeof StudentRoute
+    }
+    '/student/meetings': {
+      id: '/student/meetings'
+      path: '/meetings'
+      fullPath: '/student/meetings'
+      preLoaderRoute: typeof StudentMeetingsRouteImport
       parentRoute: typeof StudentRoute
     }
     '/student/planner': {
@@ -886,6 +924,7 @@ interface FacultyRouteChildren {
   FacultyDocumentsRoute: typeof FacultyDocumentsRoute
   FacultyEscalationsRoute: typeof FacultyEscalationsRoute
   FacultyKnowledgeGraphRoute: typeof FacultyKnowledgeGraphRoute
+  FacultyMeetingsRoute: typeof FacultyMeetingsRoute
   FacultyProfileRoute: typeof FacultyProfileRoute
   FacultyQueriesRoute: typeof FacultyQueriesRoute
   FacultyQuizzesRoute: typeof FacultyQuizzesRoute
@@ -901,6 +940,7 @@ const FacultyRouteChildren: FacultyRouteChildren = {
   FacultyDocumentsRoute: FacultyDocumentsRoute,
   FacultyEscalationsRoute: FacultyEscalationsRoute,
   FacultyKnowledgeGraphRoute: FacultyKnowledgeGraphRoute,
+  FacultyMeetingsRoute: FacultyMeetingsRoute,
   FacultyProfileRoute: FacultyProfileRoute,
   FacultyQueriesRoute: FacultyQueriesRoute,
   FacultyQuizzesRoute: FacultyQuizzesRoute,
@@ -918,6 +958,7 @@ interface StudentRouteChildren {
   StudentBookmarksRoute: typeof StudentBookmarksRoute
   StudentConceptMapRoute: typeof StudentConceptMapRoute
   StudentDiscussionRoute: typeof StudentDiscussionRoute
+  StudentMeetingsRoute: typeof StudentMeetingsRoute
   StudentPlannerRoute: typeof StudentPlannerRoute
   StudentProfileRoute: typeof StudentProfileRoute
   StudentQuizzesRoute: typeof StudentQuizzesRoute
@@ -931,6 +972,7 @@ const StudentRouteChildren: StudentRouteChildren = {
   StudentBookmarksRoute: StudentBookmarksRoute,
   StudentConceptMapRoute: StudentConceptMapRoute,
   StudentDiscussionRoute: StudentDiscussionRoute,
+  StudentMeetingsRoute: StudentMeetingsRoute,
   StudentPlannerRoute: StudentPlannerRoute,
   StudentProfileRoute: StudentProfileRoute,
   StudentQuizzesRoute: StudentQuizzesRoute,

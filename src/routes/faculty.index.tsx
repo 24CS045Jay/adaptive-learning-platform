@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Upload, MessagesSquare, Sparkles } from "lucide-react";
+import { Upload, MessagesSquare, Sparkles, Video } from "lucide-react";
 import { motion } from "framer-motion";
 import { StatCard, ActionCard, Card, EmptyState, Pill } from "@/components/app-shell";
 import { WelcomeHero } from "@/components/welcome-hero";
@@ -104,15 +104,18 @@ function FacultyDashboard() {
       </div>
 
       {/* Quick Action Cards — with color strip + arrow on hover */}
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+        <Link to="/faculty/meetings">
+          <ActionCard icon={Video}          title="Faculty Connect"         description="Schedule Teams sessions & office hours." color="indigo" />
+        </Link>
         <Link to="/faculty/upload">
           <ActionCard icon={Upload}         title="Upload Content"          description="Add PDFs, slides, or notes for approval." color="indigo" />
         </Link>
         <Link to="/faculty/escalations">
-          <ActionCard icon={MessagesSquare} title="Review Student Queries"  description="See what students are asking the tutor."   color="amber" />
+          <ActionCard icon={MessagesSquare} title="Review Queries"          description="See what students are asking the tutor."   color="amber" />
         </Link>
         <Link to="/faculty/quizzes">
-          <ActionCard icon={Sparkles}       title="Generate a Quiz"         description="Auto-generate questions from a document."  color="green" />
+          <ActionCard icon={Sparkles}       title="Generate Quiz"           description="Auto-generate questions from a document."  color="green" />
         </Link>
       </div>
 
