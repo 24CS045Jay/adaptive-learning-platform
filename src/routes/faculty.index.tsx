@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Upload, MessagesSquare, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { StatCard, ActionCard, Card, EmptyState, Pill } from "@/components/app-shell";
@@ -7,6 +8,8 @@ import { useAppData } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import { BookOpen, AlertCircle, FileText, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+import { FacultyMeetingManager } from "@/components/meetings/FacultyMeetingManager";
 
 export const Route = createFileRoute("/faculty/")(
   { component: FacultyDashboard }
@@ -31,33 +34,50 @@ function relTime(idx: number) {
 }
 
 function FacultyDashboard() {
-  const { documents, queries, escalations, subjects } = useAppData();
+  const { documents, queries, escalations, subjects, refreshSubjects } = useAppData();
   const { user } = useAuth();
 
-  const myEmail = user?.email?.toLowerCase() ?? "faculty@charusat.edu.in";
-  const myName  = user?.name ?? "Dr. Nisha Shah";
+  useEffect(() => {
+    refreshSubjects();
+  }, [refreshSubjects]);
 
-  const myDocs = documents.filter((d) => {
-    const isOwner = d.uploadedBy.toLowerCase() === myEmail || d.uploadedByName.toLowerCase() === myName.toLowerCase();
-    if (myEmail === "faculty@charusat.edu.in") return isOwner || d.uploadedBy === "faculty@charusat.edu.in";
-    return isOwner;
-  });
+  const myId = user?.id ? String(user.id).trim().toLowerCase() : "";
+  const myEmail = user?.email ? String(user.email).trim().toLowerCase() : "";
+  const myName  = user?.name ? String(user.name).trim().toLowerCase() : "";
 
   const mySubjects = subjects.filter((s) => {
-    if (myEmail === "faculty@charusat.edu.in") return s.faculty === "Dr. Nisha Shah";
-    return s.faculty.toLowerCase().includes(myName.toLowerCase()) || myDocs.some((d) => d.subjectId === s.id);
+    const sFacId = s.facultyId ? String(s.facultyId).trim().toLowerCase() : "";
+    const sFacEmail = s.facultyEmail ? String(s.facultyEmail).trim().toLowerCase() : "";
+    const sFacName = s.faculty ? String(s.faculty).trim().toLowerCase() : "";
+
+    if (sFacId && myId && sFacId === myId) return true;
+    if (sFacEmail && myEmail && sFacEmail === myEmail) return true;
+    if (sFacName && myName && (sFacName === myName || sFacName.includes(myName) || myName.includes(sFacName))) {
+      return true;
+    }
+    return false;
   });
 
-  const displaySubjectsCount = mySubjects.length > 0 ? mySubjects.length : subjects.length;
+  const mySubjectIds = new Set(mySubjects.map((s) => s.id));
+
+  const myDocs = documents.filter((d) => {
+    const isOwner =
+      d.uploadedBy.toLowerCase() === myEmail ||
+      d.uploadedByName.toLowerCase() === myName.toLowerCase() ||
+      (d as any).uploaderId === myId;
+    return isOwner || mySubjectIds.has(d.subjectId);
+  });
+
+  const displaySubjectsCount = mySubjects.length;
   const pendingCount = myDocs.filter((d) => d.status === "pending").length;
-  const totalPending = documents.filter((d) => d.status === "pending").length;
+  const totalPending = myDocs.filter((d) => d.status === "pending").length;
   const openEscal    = escalations.filter((e) => e.status === "open").length;
 
   return (
     <div>
       <WelcomeHero
         name={myName.split(" ")[0]}
-        subtitle={`Managing ${displaySubjectsCount} CSE subjects. Here’s what’s happening in your classes.`}
+        subtitle={`Managing ${displaySubjectsCount} assigned subject${displaySubjectsCount === 1 ? "" : "s"}. Here’s what’s happening in your classes.`}
         note={["Teach", "Guide", "Inspire"]}
         tagline={["Great teaching", "shapes brighter", "futures!"]}
       />
@@ -94,6 +114,11 @@ function FacultyDashboard() {
         <Link to="/faculty/quizzes">
           <ActionCard icon={Sparkles}       title="Generate a Quiz"         description="Auto-generate questions from a document."  color="green" />
         </Link>
+      </div>
+
+      {/* Microsoft Teams Office Hours & Meeting Management */}
+      <div className="mt-6">
+        <FacultyMeetingManager />
       </div>
 
       {/* Activity Feed */}

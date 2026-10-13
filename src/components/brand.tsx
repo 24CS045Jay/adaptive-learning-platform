@@ -3,47 +3,65 @@ import { useId } from "react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 
-/** Gradient graduation-cap mark used in the logo lockup. */
-export function CapMark({ className }: { className?: string }) {
-  const gid = useId().replace(/:/g, "");
+/** Official EduSense AI Brand Emblem */
+export function EduSenseMark({ className, size = "md" }: { className?: string; size?: "xs" | "sm" | "md" | "lg" | "xl" }) {
+  const sizeClass = {
+    xs: "h-7 w-7",
+    sm: "h-9 w-9",
+    md: "h-11 w-11",
+    lg: "h-14 w-14",
+    xl: "h-20 w-20",
+  }[size];
+
   return (
-    <svg viewBox="0 0 64 56" className={cn("h-9 w-9 drop-shadow-[0_6px_10px_rgba(99,70,240,.45)]", className)} aria-hidden>
-      <defs>
-        <linearGradient id={`${gid}a`} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#8f7cff" />
-          <stop offset="1" stopColor="#5b3fe0" />
-        </linearGradient>
-        <linearGradient id={`${gid}b`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#6e56f5" />
-          <stop offset="1" stopColor="#4b30cf" />
-        </linearGradient>
-      </defs>
-      <path d="M32 4 2 18l30 14 30-14z" fill={`url(#${gid}a)`} />
-      <path d="M14 27v12c0 5 8 10 18 10s18-5 18-10V27L32 35z" fill={`url(#${gid}b)`} />
-      <path d="M32 18 55 28v14" stroke="#c4b5fd" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-      <circle cx="55" cy="44" r="3" fill="#a78bfa" />
-    </svg>
+    <img
+      src="/assets/edusense-logo.png"
+      alt="EduSense AI"
+      draggable={false}
+      className={cn(
+        "object-contain rounded-full shadow-sm drop-shadow-[0_4px_12px_rgba(20,40,90,0.25)] select-none transition-transform hover:scale-105 duration-200",
+        sizeClass,
+        className,
+      )}
+    />
   );
 }
 
+/** Legacy alias for backwards compatibility */
+export const CapMark = EduSenseMark;
+
 export function Logo({
-  subtitle = "Smart Study Assistant",
+  subtitle = "Learn Smarter. Adapt Faster. Achieve More.",
   size = "md",
+  showSubtitle = true,
   className,
 }: {
   subtitle?: string;
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  showSubtitle?: boolean;
   className?: string;
 }) {
-  const t = size === "lg" ? "text-[1.7rem]" : size === "sm" ? "text-lg" : "text-2xl";
+  const titleSize = {
+    xs: "text-base font-bold",
+    sm: "text-lg font-bold",
+    md: "text-xl font-extrabold",
+    lg: "text-2xl font-black",
+    xl: "text-3xl font-black",
+  }[size];
+
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <CapMark className={size === "lg" ? "h-11 w-11" : size === "sm" ? "h-8 w-8" : "h-10 w-10"} />
+      <EduSenseMark size={size} />
       <div className="leading-tight">
-        <div className={cn("font-extrabold tracking-tight text-foreground", t)}>
-          AI <span className="text-violet">Tutor</span>
+        <div className={cn("tracking-tight flex items-center gap-1 text-foreground", titleSize)}>
+          <span className="text-slate-900 dark:text-white">EduSense</span>
+          <span className="bg-gradient-to-r from-amber-600 via-orange-500 to-amber-700 bg-clip-text text-transparent">AI</span>
         </div>
-        {subtitle && <div className="text-[11px] font-medium text-muted-foreground">{subtitle}</div>}
+        {showSubtitle && subtitle && (
+          <div className="text-[10.5px] font-medium tracking-tight text-muted-foreground line-clamp-1">
+            {subtitle}
+          </div>
+        )}
       </div>
     </div>
   );

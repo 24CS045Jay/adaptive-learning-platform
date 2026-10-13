@@ -482,16 +482,24 @@ function StudentDashboard() {
           <Link to="/student/ask">
             <ActionCard
               icon={MessageCircle}
-              title="Ask the AI Tutor"
-              description="Get grounded answers from your course material."
+              title="Ask EduSense AI"
+              description="Get grounded answers with syllabus citations."
               color="indigo"
+            />
+          </Link>
+          <Link to="/student/planner">
+            <ActionCard
+              icon={BookOpen}
+              title="Teams Doubt Session"
+              description="Book Microsoft Teams office hours with faculty."
+              color="teal"
             />
           </Link>
           <Link to="/student/quizzes">
             <ActionCard
               icon={ListChecks}
-              title="Take a Quiz"
-              description="Self-assess and build your mastery score."
+              title="Adaptive Practice & Quizzes"
+              description="Target your weak topics & boost mastery score."
               color="amber"
             />
           </Link>

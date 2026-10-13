@@ -29,12 +29,12 @@ import { Logo, Sparkle, ThemeToggle } from "@/components/brand";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Sign in · AI Tutor" },
+      { title: "Sign in · EduSense AI" },
       {
         name: "description",
-        content: "Sign in to AI Tutor — grounded academic tutoring for CSPIT CSE.",
+        content: "Sign in to EduSense AI — Learn Smarter. Adapt Faster. Achieve More.",
       },
-      { property: "og:title", content: "Sign in · AI Tutor" },
+      { property: "og:title", content: "Sign in · EduSense AI" },
     ],
   }),
   component: LoginPage,
@@ -146,10 +146,10 @@ function LoginPage() {
                 </svg>
               </span>
             </h1>
-            <p className="mt-5 max-w-sm text-lg leading-snug text-muted-foreground">
-              Learn smarter, ask deeper, and
+            <p className="mt-5 max-w-sm text-lg leading-snug text-muted-foreground font-medium">
+              Learn Smarter. Adapt Faster.
               <br />
-              grow faster with AI.
+              Achieve More.
             </p>
 
             <div className="mt-7 space-y-3">

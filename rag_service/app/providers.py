@@ -104,21 +104,23 @@ def get_embeddings(force_reload: bool = False) -> Embeddings:
         return _emb_cache
     p = s.embedding_provider
     if p == "gemini":
-        if not s.gemini_key:
+        clean_gemini = [k.strip() for k in s.gemini_key.split(",") if k.strip()]
+        if not clean_gemini:
             raise RuntimeError("EMBEDDING_PROVIDER=gemini but GEMINI_API_KEY is empty")
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
         _emb_cache = GoogleGenerativeAIEmbeddings(
             model=f"models/{s.gemini_embedding_model.replace('models/', '')}",
-            google_api_key=s.gemini_key,
+            google_api_key=clean_gemini[0],
             output_dimensionality=s.gemini_embedding_dim,
         )
     elif p == "openai":
-        if not s.openai_key:
+        clean_openai = [k.strip() for k in s.openai_key.split(",") if k.strip()]
+        if not clean_openai:
             raise RuntimeError("EMBEDDING_PROVIDER=openai but OPENAI_API_KEY is empty")
         from langchain_openai import OpenAIEmbeddings
 
-        _emb_cache = OpenAIEmbeddings(model=s.openai_embedding_model, api_key=s.openai_key)
+        _emb_cache = OpenAIEmbeddings(model=s.openai_embedding_model, api_key=clean_openai[0])
     elif p == "local":
         from langchain_community.embeddings import HuggingFaceEmbeddings
 
@@ -162,8 +164,9 @@ def _mock_reply(prompt: str) -> str:
         q = prompt.split("QUESTION:", 1)[-1].split("\n")[0].strip()
         return json.dumps({"standalone": q, "sub_queries": [q]})
     if "TASK:GRADE" in prompt:
-        q = prompt.split("QUESTION:", 1)[-1].split("PASSAGES:")[0]
-        qt = set(tokenize(q))
+        q_part = prompt.split("QUESTION:", 1)[-1].split("PASSAGES:")[0]
+        q_clean = re.sub(r"ORIGINAL_QUESTION:.*", "", q_part, flags=re.S).strip()
+        qt = set(tokenize(q_clean))
         grades = []
         for m in re.finditer(r"\[P(\d+)\](.*?)(?=\n\[P\d+\]|\Z)", prompt.split("PASSAGES:", 1)[-1], re.S):
             pt = set(tokenize(m.group(2)))
@@ -195,43 +198,61 @@ def _mock_reply(prompt: str) -> str:
     return "OK"
 
 
-def _build(provider: str, tier: str):
+def _build_models(provider: str, tier: str) -> list:
     s = get_settings()
     heavy = tier == "heavy"
+    results = []
     if provider == "gemini" and s.gemini_key:
         from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(
-            model=s.gemini_heavy if heavy else s.gemini_light,
-            google_api_key=s.gemini_key,
-            temperature=0.2 if heavy else 0.0,
-            max_output_tokens=2048 if heavy else 512,
-            timeout=40,
-            max_retries=1,
-        )
-    if provider == "groq" and s.groq_key:
+        keys = [k.strip() for k in s.gemini_key.split(",") if k.strip()]
+        for k in keys:
+            results.append(
+                ChatGoogleGenerativeAI(
+                    model=s.gemini_heavy if heavy else s.gemini_light,
+                    google_api_key=k,
+                    temperature=0.2 if heavy else 0.0,
+                    max_output_tokens=2048 if heavy else 512,
+                    timeout=40,
+                    max_retries=1,
+                )
+            )
+    elif provider == "groq" and s.groq_key:
         from langchain_groq import ChatGroq
 
-        return ChatGroq(
-            model=s.groq_heavy if heavy else s.groq_light,
-            api_key=s.groq_key,
-            temperature=0.2 if heavy else 0.0,
-            max_tokens=2048 if heavy else 512,
-            timeout=40,
-            max_retries=1,
-        )
-    if provider == "openai" and s.openai_key:
+        keys = [k.strip() for k in s.groq_key.split(",") if k.strip()]
+        for k in keys:
+            results.append(
+                ChatGroq(
+                    model=s.groq_heavy if heavy else s.groq_light,
+                    api_key=k,
+                    temperature=0.2 if heavy else 0.0,
+                    max_tokens=2048 if heavy else 512,
+                    timeout=40,
+                    max_retries=1,
+                )
+            )
+    elif provider == "openai" and s.openai_key:
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
-            model=s.openai_heavy if heavy else s.openai_light,
-            api_key=s.openai_key,
-            temperature=0.2 if heavy else 0.0,
-            max_tokens=2048 if heavy else 512,
-            timeout=40,
-            max_retries=1,
-        )
-    return None
+        keys = [k.strip() for k in s.openai_key.split(",") if k.strip()]
+        for k in keys:
+            results.append(
+                ChatOpenAI(
+                    model=s.openai_heavy if heavy else s.openai_light,
+                    api_key=k,
+                    temperature=0.2 if heavy else 0.0,
+                    max_tokens=2048 if heavy else 512,
+                    timeout=40,
+                    max_retries=1,
+                )
+            )
+    return results
+
+
+def _build(provider: str, tier: str):
+    models = _build_models(provider, tier)
+    return models[0] if models else None
 
 
 _llm_cache: dict[str, Any] = {}
@@ -247,7 +268,9 @@ def get_llm(tier: str = "heavy", force_reload: bool = False):
     if s.offline:
         _llm_cache[tier] = MockChatModel()
         return _llm_cache[tier]
-    models = [m for m in (_build(p, tier) for p in s.provider_order) if m is not None]
+    models = []
+    for p in s.provider_order:
+        models.extend(_build_models(p, tier))
     if not models:
         raise RuntimeError(
             "No LLM available. Set at least one of GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY in .env"

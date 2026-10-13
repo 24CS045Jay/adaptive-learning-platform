@@ -28,18 +28,20 @@ import {
   X,
 } from "lucide-react";
 import { Logo, Sparkle, ThemeToggle } from "@/components/brand";
+import { ProductDemoModal } from "@/components/video/ProductDemoModal";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "AI Tutor · Your Personal AI Study Partner" },
+      { title: "EduSense AI · Learn Smarter. Adapt Faster. Achieve More." },
       {
         name: "description",
         content:
-          "AI Tutor is a RAG-powered study partner for CSPIT CSE — clear explanations, summaries, quizzes and personalised learning from your own syllabus.",
+          "EduSense AI is an enterprise RAG educational platform — Learn Smarter. Adapt Faster. Achieve More. Grounded answers, topic mastery, and verified course material.",
       },
-      { property: "og:title", content: "AI Tutor · Your Personal AI Study Partner" },
+      { property: "og:title", content: "EduSense AI · Learn Smarter. Adapt Faster. Achieve More." },
+      { property: "og:image", content: "/assets/edusense-logo.png" },
     ],
   }),
   component: LandingPage,
@@ -163,12 +165,12 @@ function LandingPage() {
               transition={{ delay: 0.05 }}
               className="mt-5 text-[2.9rem] font-extrabold leading-[1.05] tracking-tight sm:text-[3.7rem] lg:text-[4.1rem]"
             >
-              Your Personal
+              Learn Smarter.
               <br />
-              <span className="gradient-word">AI Study Partner</span>
+              <span className="gradient-word">Adapt Faster.</span>
             </motion.h1>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="mt-5 max-w-md text-lg leading-relaxed text-muted-foreground">
-              Learn smarter, faster and deeper with AI-powered explanations, summaries, practice questions and more.
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="mt-5 max-w-md text-lg leading-relaxed text-muted-foreground font-medium">
+              Achieve More with EduSense AI — grounded syllabus intelligence, verifiable academic citations, adaptive topic mastery, and direct faculty collaboration.
             </motion.p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Link to="/login" className="btn-pill !px-8 !py-3.5 text-base">
@@ -442,33 +444,13 @@ function LandingPage() {
           </div>
         </div>
         <footer className="mx-auto mt-10 flex max-w-[1320px] flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-          <Logo size="sm" subtitle="" />
-          <span>© {new Date().getFullYear()} AI Tutor · CSPIT CSE · RAG-powered learning platform</span>
+          <Logo size="sm" subtitle="Learn Smarter. Adapt Faster. Achieve More." />
+          <span>© {new Date().getFullYear()} EduSense AI · Learn Smarter. Adapt Faster. Achieve More.</span>
         </footer>
       </section>
 
       {/* ───────── DEMO MODAL ───────── */}
-      {demo && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setDemo(false)}>
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-lg rounded-[2rem] border border-border bg-card p-8 shadow-2xl">
-            <button onClick={() => setDemo(false)} aria-label="Close" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground">
-              <X className="h-4 w-4" />
-            </button>
-            <h3 className="text-2xl font-extrabold">
-              Try the <span className="gradient-word">live demo</span>
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground">Demo accounts are pre-filled on the sign-in page — pick a role and click Login to explore every portal.</p>
-            <div className="mt-6 grid grid-cols-3 gap-3 text-center text-sm font-bold">
-              {["Student", "Faculty", "Admin"].map((r) => (
-                <div key={r} className="rounded-2xl bg-violet/10 py-3 text-violet">{r}</div>
-              ))}
-            </div>
-            <Link to="/login" className="btn-pill mt-6 w-full">
-              Open sign in <ArrowRight className="h-4 w-4" />
-            </Link>
-          </motion.div>
-        </div>
-      )}
+      <ProductDemoModal isOpen={demo} onClose={() => setDemo(false)} />
     </div>
   );
 }

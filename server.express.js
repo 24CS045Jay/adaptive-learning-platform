@@ -19,6 +19,9 @@ import feedbackRoutes from "./routes/feedback.js";
 import conceptGraphRoutes from "./routes/concept-graph.js";
 import analyticsRoutes from "./routes/analytics.js";
 import conversationRoutes from "./routes/conversations.js";
+import meetingRoutes from "./routes/meetings.js";
+import adaptiveRoutes from "./routes/adaptive.js";
+import { authLimiter, tutorLimiter, uploadLimiter, meetingLimiter } from "./middleware/rate-limiter.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +70,15 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+  next();
+});
+
 // Serve uploaded documents statically
 app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
 
@@ -74,25 +86,46 @@ app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")
 app.get("/", (req, res) => {
   res.json({
     status: "online",
-    service: "AI Tutor Express API Backend",
+    service: "EduSense AI Express API Gateway",
+    tagline: "Learn Smarter. Adapt Faster. Achieve More.",
     health: "/api/health",
+    ready: "/api/ready",
     frontend: "http://localhost:8080",
     rag_service: configuredRagServiceUrl,
     timestamp: new Date().toISOString(),
   });
 });
 
-// Healthcheck
+// Healthcheck & Readiness
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "AI Tutor API Backend (Supabase)", timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    service: "EduSense AI Platform Backend",
+    rag_service: configuredRagServiceUrl,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get("/api/ready", (req, res) => {
+  res.json({
+    ready: true,
+    service: "EduSense AI",
+    subsystems: {
+      auth: "ready",
+      rag_gateway: "ready",
+      teams_meetings: "ready",
+      adaptive_engine: "ready",
+    },
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // REST API Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/subjects", subjectRoutes);
 app.use("/api/documents", documentRoutes);
-app.use("/api/tutor", tutorRoutes);
+app.use("/api/tutor", tutorLimiter, tutorRoutes);
 app.use("/api/quizzes", quizRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/escalations", escalationRoutes);
@@ -104,12 +137,15 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/concept-graph", conceptGraphRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/conversations", conversationRoutes);
+app.use("/api/meetings", meetingLimiter, meetingRoutes);
+app.use("/api/adaptive", adaptiveRoutes);
 
-// Global Error Handler
+// Global Error Handler — sanitized to prevent credential/stack exposure
 app.use((err, req, res, next) => {
-  console.error("[Express Error Handler]:", err);
-  res.status(err.status || 500).json({
-    error: err.message || "Internal Server Error",
+  console.error("[EduSense AI Error Handler]:", err.message || err);
+  const status = err.status || 500;
+  res.status(status).json({
+    error: status === 500 ? "Internal Server Error" : (err.message || "An unexpected error occurred"),
   });
 });
 

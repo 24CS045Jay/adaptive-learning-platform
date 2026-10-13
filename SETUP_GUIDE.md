@@ -49,7 +49,7 @@ Run `00 → 05` in order. They share one store, so 01 (ingest) feeds 02–05.
 
 ## 5. Run the whole app
 ```bash
-npm run dev:full                # or: cd rag_service && python -m uvicorn app.main:app --port 8001
+npm run dev                 # or: cd rag_service && python -m uvicorn app.main:app --port 8001
 ```
 Faculty uploads a file → Express stores it and calls `POST /ingest` with the file URL → Python parses, chunks,
 embeds, writes to Chroma → student asks a question → Express calls `POST /query` → LangGraph agent answers

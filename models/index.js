@@ -21,3 +21,6 @@ export const Feedback = createSupabaseModel("feedbacks");
 export const ConceptNode = createSupabaseModel("concept_nodes");
 export const ConceptEdge = createSupabaseModel("concept_edges");
 export const Conversation = createSupabaseModel("conversations");
+export const MeetingSlot = createSupabaseModel("meeting_slots");
+export const MeetingBooking = createSupabaseModel("meeting_bookings");
+export const LearnerPreference = createSupabaseModel("learner_preferences");
