@@ -135,7 +135,25 @@ router.get("/config", (req, res) => {
 // ── 2. GET /api/ai-faculty/subjects ───────────────────────────────────────────
 router.get("/subjects", requireStudentOrUser, async (req, res) => {
   try {
-    const subjects = await Subject.find().lean ? await Subject.find().lean() : await Subject.find();
+    const rawStudentId = req.user?.id || req.user?._id;
+    const studentEmail = req.user?.email ? String(req.user.email).toLowerCase() : "";
+
+    let subjects = await Subject.find();
+
+    if (req.user && (req.user.role === "student" || !req.user.role) && rawStudentId && rawStudentId !== "guest-student") {
+      subjects = (subjects || []).filter((s) => {
+        const list = Array.isArray(s.enrolledStudentIds)
+          ? s.enrolledStudentIds
+          : typeof s.enrolledStudentIds === "string"
+          ? JSON.parse(s.enrolledStudentIds || "[]")
+          : [];
+        return list.some((item) => {
+          const clean = String(item).toLowerCase();
+          return clean === String(rawStudentId).toLowerCase() || (studentEmail && clean === studentEmail);
+        });
+      });
+    }
+
     const result = (subjects || []).map((s) => ({
       id: s._id || s.id,
       code: s.code,
@@ -146,15 +164,7 @@ router.get("/subjects", requireStudentOrUser, async (req, res) => {
     return res.json({ subjects: result });
   } catch (err) {
     console.warn("[AI Faculty] Fetch subjects warning:", err.message);
-    return res.json({
-      subjects: [
-        { id: "CSUC301", code: "CSUC301", name: "Data Structures & Algorithms", department: "CSE", semester: 3 },
-        { id: "CSUC401", code: "CSUC401", name: "Database Management Systems", department: "CSE", semester: 4 },
-        { id: "CSUC501", code: "CSUC501", name: "Operating Systems", department: "CSE", semester: 5 },
-        { id: "CSUC601", code: "CSUC601", name: "Computer Networks", department: "CSE", semester: 6 },
-        { id: "CSUC701", code: "CSUC701", name: "Machine Learning & AI", department: "CSE", semester: 7 },
-      ],
-    });
+    return res.json({ subjects: [] });
   }
 });
 
@@ -390,6 +400,35 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
         subject = await Subject.findById(subjectId);
         if (subject?.code) subjectCode = subject.code;
       } catch {}
+    } else if (bodySubjectCode) {
+      try {
+        subject = await Subject.findOne({ code: String(bodySubjectCode).toUpperCase() });
+      } catch {}
+    }
+
+    // Enforce student subject enrollment access control
+    if (req.user && (req.user.role === "student" || !req.user.role)) {
+      const studentIdentifier = String(req.user.id || req.user._id || "");
+      const studentEmail = req.user.email ? String(req.user.email).toLowerCase() : "";
+      if (subject) {
+        const enrolledList = Array.isArray(subject.enrolledStudentIds)
+          ? subject.enrolledStudentIds
+          : typeof subject.enrolledStudentIds === "string"
+          ? JSON.parse(subject.enrolledStudentIds || "[]")
+          : [];
+
+        const isEnrolled = enrolledList.some((id) => {
+          const clean = String(id).toLowerCase();
+          return clean === studentIdentifier.toLowerCase() || (studentEmail && clean === studentEmail);
+        });
+
+        if (!isEnrolled) {
+          return res.status(403).json({
+            error: `Enrollment required: You are not enrolled in ${subject.name || subjectCode}. Please enroll in this subject from your Dashboard Course Catalog to access AI Faculty live tutoring.`,
+            requiresEnrollment: true,
+          });
+        }
+      }
     }
 
     // Step A: Load recent conversation messages
@@ -575,7 +614,44 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
 router.post("/tavus/session", requireStudentOrUser, async (req, res) => {
   try {
     dotenv.config({ override: true });
-    const { subjectName = "Computer Science", language_code = "en-IN" } = req.body;
+    const { subjectName = "Computer Science", subjectCode = "", subjectId = "", language_code = "en-IN" } = req.body;
+
+    // Enforce student subject enrollment access control
+    if (req.user && (req.user.role === "student" || !req.user.role)) {
+      const studentIdentifier = String(req.user.id || req.user._id || "");
+      const studentEmail = req.user.email ? String(req.user.email).toLowerCase() : "";
+
+      let subject = null;
+      if (subjectId) {
+        try { subject = await Subject.findById(subjectId); } catch {}
+      }
+      if (!subject && subjectCode) {
+        try { subject = await Subject.findOne({ code: String(subjectCode).toUpperCase() }); } catch {}
+      }
+      if (!subject && subjectName && subjectName !== "Computer Science") {
+        try { subject = await Subject.findOne({ name: new RegExp(subjectName, "i") }); } catch {}
+      }
+
+      if (subject) {
+        const enrolledList = Array.isArray(subject.enrolledStudentIds)
+          ? subject.enrolledStudentIds
+          : typeof subject.enrolledStudentIds === "string"
+          ? JSON.parse(subject.enrolledStudentIds || "[]")
+          : [];
+
+        const isEnrolled = enrolledList.some((id) => {
+          const clean = String(id).toLowerCase();
+          return clean === studentIdentifier.toLowerCase() || (studentEmail && clean === studentEmail);
+        });
+
+        if (!isEnrolled) {
+          return res.status(403).json({
+            error: `Enrollment required: You are not enrolled in ${subject.name}. Please enroll from your Dashboard Course Catalog to start a live AI Faculty video call.`,
+            requiresEnrollment: true,
+          });
+        }
+      }
+    }
 
     const apiKey = (process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").trim();
     const personaId = (process.env.TAVUS_PERSONA_ID || TAVUS_PERSONA_ID || "peba358b8e8a").trim();

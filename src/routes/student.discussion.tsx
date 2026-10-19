@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   MessageSquare, ThumbsUp, Plus, CheckCircle2, Tag, Search,
-  CornerDownRight, User, ShieldCheck, Send,
+  CornerDownRight, User, ShieldCheck, Send, Lock,
 } from "lucide-react";
 import { PageHeader, Card, Pill, PrimaryButton } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
@@ -17,23 +17,48 @@ function StudentDiscussionPage() {
   const { discussions, subjects, addDiscussionPost, addDiscussionAnswer, upvotePost } = useAppData();
   const { user } = useAuth();
 
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = (user as any)?.studentId ? String((user as any).studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name.toLowerCase()));
+  const enrolledSubjectCodes = new Set(enrolledSubjects.map((s) => (s.code || "").toLowerCase()));
+
   const [selectedSubject, setSelectedSubject] = useState<string>("all");
   const [searchTerm, setSearchTerm]           = useState<string>("");
   const [showNewPostModal, setShowNewPostModal] = useState<boolean>(false);
 
   // New Post Form state
   const [postTitle, setPostTitle]     = useState("");
-  const [postSubject, setPostSubject] = useState(subjects[0]?.name ?? "Big Data Analytics");
+  const [postSubject, setPostSubject] = useState(enrolledSubjects[0]?.name ?? "");
   const [postContent, setPostContent] = useState("");
-  const [postTags, setPostTags]       = useState("MapReduce, HDFS");
+  const [postTags, setPostTags]       = useState("General, Doubts");
 
   // Active answer input per post
   const [answerInput, setAnswerInput] = useState<Record<string, string>>({});
 
   const currentUserRole = user?.role === "faculty" ? "Faculty" : "Student";
-  const currentUserName = user?.name ?? "Aarav Patel";
+  const currentUserName = user?.name ?? "Student";
 
   const filteredDiscussions = discussions.filter((p) => {
+    const pSubj = (p.subjectName || "").toLowerCase();
+    // Only show posts belonging to enrolled subjects
+    if (!enrolledSubjectNames.has(pSubj) && !enrolledSubjectCodes.has(pSubj)) {
+      return false;
+    }
     if (selectedSubject !== "all" && p.subjectName !== selectedSubject) return false;
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
@@ -50,12 +75,14 @@ function StudentDiscussionPage() {
     e.preventDefault();
     if (!postTitle.trim() || !postContent.trim()) return;
 
+    const subjectToUse = postSubject || enrolledSubjects[0]?.name || "General";
+
     addDiscussionPost({
       title: postTitle.trim(),
       content: postContent.trim(),
       author: currentUserName,
       authorRole: currentUserRole,
-      subjectName: postSubject,
+      subjectName: subjectToUse,
       tags: postTags.split(",").map((t) => t.trim()).filter(Boolean),
     });
 
@@ -71,6 +98,36 @@ function StudentDiscussionPage() {
     addDiscussionAnswer(postId, text, currentUserName, currentUserRole);
     setAnswerInput((prev) => ({ ...prev, [postId]: "" }));
   };
+
+  if (enrolledSubjects.length === 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Peer-to-Peer Discussion Forums"
+          subtitle="Ask questions, share insights, upvote answers, and get verified faculty responses."
+        />
+        <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto my-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mb-4">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="font-serif text-xl font-bold text-foreground">
+            Discussions Locked — 0 Subjects Enrolled
+          </h2>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            You are not currently enrolled in any subjects. Discussion forums are organized by enrolled course cohorts. Please enroll in a subject to join classroom discussions and peer study groups.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+            >
+              Browse Course Catalog & Enroll →
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -103,9 +160,9 @@ function StudentDiscussionPage() {
             onChange={(e) => setSelectedSubject(e.target.value)}
             className="rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-violet"
           >
-            <option value="all">All Subjects</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.name}>{s.name}</option>
+            <option value="all">All Enrolled Subjects</option>
+            {enrolledSubjects.map((s) => (
+              <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
             ))}
           </select>
         </div>
@@ -234,12 +291,12 @@ function StudentDiscussionPage() {
                   Target Subject
                 </label>
                 <select
-                  value={postSubject}
+                  value={postSubject || enrolledSubjects[0]?.name || ""}
                   onChange={(e) => setPostSubject(e.target.value)}
                   className="w-full rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm outline-none focus:border-violet font-medium"
                 >
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
+                  {enrolledSubjects.map((s) => (
+                    <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
                   ))}
                 </select>
               </div>

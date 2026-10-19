@@ -1,12 +1,13 @@
 import { useState } from "react";
 import {
   Network, BookOpen, Star, AlertCircle, Sparkles, FileText,
-  HelpCircle, ArrowRight, Layers, CheckCircle2,
+  HelpCircle, ArrowRight, Layers, CheckCircle2, Lock,
 } from "lucide-react";
 import { PageHeader, Card, Pill } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
+import { useAuth } from "@/lib/auth";
 import type { ConceptNode } from "@/lib/mock-data";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 const MASTERY_COLORS: Record<ConceptNode["mastery"], { bg: string; text: string; label: string }> = {
@@ -29,16 +30,80 @@ const DOMAIN_COLORS: Record<string, string> = {
 
 export function ConceptGraphView() {
   const { conceptNodes, conceptEdges, subjects, documents } = useAppData();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  const isStudent = user?.role === "student";
+
+  const isEnrolled = (s: any) => {
+    if (!isStudent) return true;
+    const myId = user?.id || "";
+    const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+    const myStudentId = (user as any)?.studentId ? String((user as any).studentId).toLowerCase() : "";
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const availableSubjects = isStudent ? subjects.filter(isEnrolled) : subjects;
+  const enrolledSubjectIds = new Set(availableSubjects.map((s) => s.id));
+  const enrolledSubjectNames = new Set(availableSubjects.map((s) => s.name.toLowerCase()));
+  const enrolledSubjectCodes = new Set(availableSubjects.map((s) => (s.code || "").toLowerCase()));
 
   const [selectedSubject, setSelectedSubject] = useState<string>("all");
   const [selectedNodeId, setSelectedNodeId]   = useState<string | null>("mapreduce");
 
-  const filteredNodes = selectedSubject === "all"
-    ? conceptNodes
-    : conceptNodes.filter((n) => n.subjectId === selectedSubject);
+  // If student is enrolled in 0 subjects, lock the view
+  if (isStudent && availableSubjects.length === 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Interactive Knowledge Graph & Concept Map"
+          subtitle="Visual relationship map connecting CSE topics across subjects, prerequisite dependencies, and mastery status."
+        />
+        <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto my-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mb-4">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="font-serif text-xl font-bold text-foreground">
+            Concept Map Locked — 0 Subjects Enrolled
+          </h2>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            You are not currently enrolled in any subjects. The visual knowledge graph and prerequisite maps are dynamically populated from your enrolled courses. Please enroll in a subject to unlock the concept map.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+            >
+              Browse Course Catalog & Enroll →
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
-  const selectedNode = conceptNodes.find((n) => n.id === selectedNodeId) ?? conceptNodes[0];
+  const baseNodes = isStudent
+    ? conceptNodes.filter(
+        (n) =>
+          enrolledSubjectIds.has(n.subjectId) ||
+          enrolledSubjectNames.has((n.subjectName || "").toLowerCase()) ||
+          enrolledSubjectCodes.has((n.subjectName || "").toLowerCase())
+      )
+    : conceptNodes;
+
+  const filteredNodes = selectedSubject === "all"
+    ? baseNodes
+    : baseNodes.filter((n) => n.subjectId === selectedSubject);
+
+  const selectedNode = baseNodes.find((n) => n.id === selectedNodeId) ?? baseNodes[0];
 
   const connectedEdges = conceptEdges.filter(
     (e) => e.source === selectedNode?.id || e.target === selectedNode?.id
@@ -64,9 +129,11 @@ export function ConceptGraphView() {
               onChange={(e) => setSelectedSubject(e.target.value)}
               className="rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-violet font-medium"
             >
-              <option value="all">All Subjects (Platform Graph)</option>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              <option value="all">
+                {isStudent ? "All Enrolled Subjects" : "All Subjects (Platform Graph)"}
+              </option>
+              {availableSubjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
               ))}
             </select>
           </div>
@@ -109,8 +176,8 @@ export function ConceptGraphView() {
 
                 {/* Render Edges */}
                 {conceptEdges.map((e) => {
-                  const srcNode = conceptNodes.find((n) => n.id === e.source);
-                  const tgtNode = conceptNodes.find((n) => n.id === e.target);
+                  const srcNode = baseNodes.find((n) => n.id === e.source);
+                  const tgtNode = baseNodes.find((n) => n.id === e.target);
                   if (!srcNode || !tgtNode) return null;
 
                   const isConnected = selectedNode?.id === e.source || selectedNode?.id === e.target;
@@ -250,9 +317,9 @@ export function ConceptGraphView() {
                   </div>
                   <div className="space-y-2">
                     {connectedEdges.map((e) => {
-                      const isSource = e.source === selectedNode.id;
+                      const isSource = e.source === selectedNode?.id;
                       const otherId = isSource ? e.target : e.source;
-                      const otherNode = conceptNodes.find((n) => n.id === otherId);
+                      const otherNode = baseNodes.find((n) => n.id === otherId);
                       return (
                         <div key={e.id} className="flex items-center justify-between rounded-xl border border-border bg-card p-2.5 text-xs">
                           <div>

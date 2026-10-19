@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { API_BASE, authHeaders } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
 interface MeetingSlot {
@@ -61,13 +62,41 @@ interface MeetingBooking {
 
 export function StudentMeetingScheduler() {
   const { user } = useAuth();
+  const { subjects } = useAppData();
   const token = localStorage.getItem("token") || "";
+
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = (user as any)?.studentId ? String((user as any).studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectCodes = new Set(enrolledSubjects.map((s) => (s.code || "").toLowerCase()));
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name.toLowerCase()));
 
   const [activeTab, setActiveTab] = useState<"available" | "my_bookings">("my_bookings");
   const [slots, setSlots] = useState<MeetingSlot[]>([]);
   const [bookings, setBookings] = useState<MeetingBooking[]>([]);
   const [loading, setLoading] = useState(false);
   const [bookingSlot, setBookingSlot] = useState<MeetingSlot | null>(null);
+
+  const filteredSlots = slots.filter((s) => {
+    if (!s.subjectCode) return false;
+    const code = s.subjectCode.toLowerCase();
+    const name = (s.subjectName || "").toLowerCase();
+    return enrolledSubjectCodes.has(code) || enrolledSubjectNames.has(name);
+  });
 
   // Form state
   const [topic, setTopic] = useState("");
@@ -363,17 +392,21 @@ export function StudentMeetingScheduler() {
           </div>
         ) : (
           <div>
-            {slots.length === 0 ? (
+            {filteredSlots.length === 0 ? (
               <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/80 py-12 text-center">
                 <Calendar className="h-10 w-10 text-muted-foreground/60 mb-3" />
-                <h4 className="text-sm font-semibold text-foreground">No upcoming slots available</h4>
+                <h4 className="text-sm font-semibold text-foreground">
+                  {enrolledSubjects.length === 0 ? "No enrolled subjects" : "No upcoming slots available"}
+                </h4>
                 <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                  Check back soon or post a doubt in the subject discussion forum to request faculty office hours.
+                  {enrolledSubjects.length === 0
+                    ? "Enroll in course subjects from your Dashboard to see available faculty office hour slots."
+                    : "Check back soon or post a doubt in the subject discussion forum to request faculty office hours."}
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {slots.map((s) => {
+                {filteredSlots.map((s) => {
                   const startTime = new Date(s.startTime);
                   const spotsLeft = (s.capacity || 1) - (s.bookedCount || 0);
 

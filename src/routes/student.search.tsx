@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Search, FileText, Presentation, FileType2, Eye, BookOpen, Layers } from "lucide-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Search, FileText, Presentation, FileType2, Eye, BookOpen, Layers, Lock } from "lucide-react";
 import { useState } from "react";
 import { PageHeader, Card, Pill, EmptyState } from "@/components/app-shell";
 import { useAppData, type AppDocument } from "@/lib/app-data-context";
+import { useAuth } from "@/lib/auth";
 import { DocumentViewerModal } from "@/components/document-viewer-modal";
 import type { FileType } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -31,17 +32,40 @@ const FILE_COLORS: Record<FileType, string> = {
 
 function SearchNotes() {
   const { documents, subjects } = useAppData();
+  const { user } = useAuth();
   const [q, setQ] = useState("");
   const [selectedSubject, setSelectedSubject] = useState("all");
   const [viewPdfDoc, setViewPdfDoc] = useState<AppDocument | null>(null);
 
-  const approvedDocs = documents.filter((d) => d.status === "approved");
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = user?.studentId ? String(user.studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectIds = new Set(enrolledSubjects.map((s) => s.id));
+
+  // Only allow notes from subjects the student has enrolled in
+  const approvedDocs = documents.filter(
+    (d) => d.status === "approved" && enrolledSubjectIds.has(d.subjectId)
+  );
 
   const results = approvedDocs.filter((d) => {
     if (selectedSubject !== "all" && d.subjectId !== selectedSubject) return false;
     if (q.trim()) {
       const term = q.toLowerCase();
-      const subj = subjects.find((s) => s.id === d.subjectId);
+      const subj = enrolledSubjects.find((s) => s.id === d.subjectId);
       return (
         d.name.toLowerCase().includes(term) ||
         (d.topicTag && d.topicTag.toLowerCase().includes(term)) ||
@@ -56,63 +80,87 @@ function SearchNotes() {
     <div>
       <PageHeader
         title="Search Indexed Notes & Course Slides"
-        subtitle="Search across all approved, vector-indexed course materials and lecture slides."
+        subtitle="Search across approved course materials and lecture slides for your enrolled subjects."
       />
 
-      {/* Search Input Bar */}
-      <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-xs">
-        <Search className="h-5 w-5 text-muted-foreground shrink-0" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by keyword, topic (#MapReduce), document title, or course..."
-          className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        {q && (
-          <button
-            type="button"
-            onClick={() => setQ("")}
-            className="text-xs text-muted-foreground hover:text-foreground font-medium"
-          >
-            Clear
-          </button>
-        )}
-      </div>
+      {enrolledSubjects.length === 0 ? (
+        <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto my-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mb-4">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="font-serif text-xl font-bold text-foreground">
+            Course Notes Locked — 0 Subjects Enrolled
+          </h2>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            You are not currently enrolled in any subjects. To search and view approved lecture slides, syllabus materials, and course documents, please enroll in your subjects from the Course Catalog.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+            >
+              Browse Course Catalog & Enroll →
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <>
+          {/* Search Input Bar */}
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-xs">
+            <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search by keyword, topic (#MapReduce), document title, or course..."
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="text-xs text-muted-foreground hover:text-foreground font-medium"
+              >
+                Clear
+              </button>
+            )}
+          </div>
 
-      {/* Subject Filter Pills */}
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground font-medium mr-1">Subject Filter:</span>
-        <button
-          type="button"
-          onClick={() => setSelectedSubject("all")}
-          className={cn(
-            "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-            selectedSubject === "all"
-              ? "bg-violet text-white shadow-xs"
-              : "bg-card border border-border text-muted-foreground hover:text-foreground"
-          )}
-        >
-          All Subjects ({approvedDocs.length})
-        </button>
-        {subjects.map((s) => {
-          const count = approvedDocs.filter((d) => d.subjectId === s.id).length;
-          return (
+          {/* Subject Filter Pills */}
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium mr-1">Subject Filter:</span>
             <button
-              key={s.id}
               type="button"
-              onClick={() => setSelectedSubject(s.id)}
+              onClick={() => setSelectedSubject("all")}
               className={cn(
                 "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-                selectedSubject === s.id
+                selectedSubject === "all"
                   ? "bg-violet text-white shadow-xs"
                   : "bg-card border border-border text-muted-foreground hover:text-foreground"
               )}
             >
-              {s.name} ({count})
+              All Enrolled Subjects ({approvedDocs.length})
             </button>
-          );
-        })}
-      </div>
+            {enrolledSubjects.map((s) => {
+              const count = approvedDocs.filter((d) => d.subjectId === s.id).length;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSelectedSubject(s.id)}
+                  className={cn(
+                    "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+                    selectedSubject === s.id
+                      ? "bg-violet text-white shadow-xs"
+                      : "bg-card border border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {s.name} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Results List */}
       <Card>

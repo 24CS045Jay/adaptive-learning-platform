@@ -234,11 +234,13 @@ async function updateEnrollment(req, res, operation) {
     );
   }
 
-  const updatedSubject = await Subject.findByIdAndUpdate(subject.id || subject._id, {
-    enrolledStudentIds: updatedList,
-  });
+  const updatedSubject = await Subject.findByIdAndUpdate(
+    subject.id || subject._id,
+    { enrolledStudentIds: updatedList },
+    { new: true }
+  );
 
-  return res.json(updatedSubject || { ...subject, enrolledStudentIds: updatedList });
+  return res.json(formatSubjectResponse(updatedSubject || { ...subject, enrolledStudentIds: updatedList }));
 }
 
 router.post("/:id/enroll", authenticate, (req, res) =>

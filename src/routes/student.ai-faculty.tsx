@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Mic,
@@ -30,6 +30,7 @@ import {
   Volume2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
 import { toast } from "sonner";
@@ -82,17 +83,47 @@ const SUGGESTED_QUESTIONS = [
 
 function AiFacultyPage() {
   const { user } = useAuth();
+  const { subjects: allSubjects } = useAppData();
 
-  // Subject and language
-  const [subjects, setSubjects] = useState<FacultySubject[]>([
-    { id: "CSE203", code: "CSE203", name: "Machine Learning", department: "CSE", semester: 5 },
-    { id: "CSUC501", code: "CSUC501", name: "Operating Systems", department: "CSE", semester: 5 },
-    { id: "CSUC301", code: "CSUC301", name: "Data Structures & Algorithms", department: "CSE", semester: 3 },
-    { id: "CSUC401", code: "CSUC401", name: "Database Management Systems", department: "CSE", semester: 4 },
-  ]);
-  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>("CSE203");
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = user?.studentId ? String(user.studentId).toLowerCase() : "";
+
+  const isEnrolled = useCallback((s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  }, [myId, myEmail, myStudentId]);
+
+  const enrolledSubjects = allSubjects.filter(isEnrolled);
+
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(
+    enrolledSubjects[0]?.code ?? ""
+  );
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en-IN");
-  const [currentTopic, setCurrentTopic] = useState<string>("Introduction to RAG");
+  const [currentTopic, setCurrentTopic] = useState<string>(
+    enrolledSubjects[0] ? `Core Syllabus: ${enrolledSubjects[0].name}` : "Course Curriculum"
+  );
+
+  // Synchronize selected subject when enrollments load or change
+  useEffect(() => {
+    if (enrolledSubjects.length > 0) {
+      const currentValid = enrolledSubjects.find((s) => s.code === selectedSubjectCode);
+      if (!currentValid) {
+        setSelectedSubjectCode(enrolledSubjects[0].code);
+        setCurrentTopic(`Core Syllabus: ${enrolledSubjects[0].name}`);
+      }
+    } else {
+      setSelectedSubjectCode("");
+      setCurrentTopic("No Subject Enrolled");
+    }
+  }, [enrolledSubjects, selectedSubjectCode]);
 
   // Call & Video State
   const [isLiveSessionActive, setIsLiveSessionActive] = useState<boolean>(false);
@@ -108,38 +139,22 @@ function AiFacultyPage() {
   const [interimTranscript, setInterimTranscript] = useState<string>("");
   const recognitionRef = useRef<any>(null);
 
-  // Initial persistent storage key
-  const storageKey = `edusense_transcript_${selectedSubjectCode}`;
+  // Persistent storage key scoped to current user and subject
+  const storageKey = user?.id
+    ? `edusense_transcript_${user.id}_${selectedSubjectCode || "none"}`
+    : `edusense_transcript_guest_${selectedSubjectCode || "none"}`;
 
-  // Chat & Transcript State
+  // Chat & Transcript State - Starts empty for first-time students
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    if (typeof window === "undefined" || !selectedSubjectCode) return [];
     try {
-      const saved = localStorage.getItem(`edusense_transcript_CSE203`);
+      const key = user?.id
+        ? `edusense_transcript_${user.id}_${selectedSubjectCode}`
+        : `edusense_transcript_guest_${selectedSubjectCode}`;
+      const saved = localStorage.getItem(key);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return [
-      {
-        id: "welcome-1",
-        role: "student",
-        text: "Can you explain what is RAG in simple words?",
-        timestamp: "10:24 AM",
-        type: "voice",
-      },
-      {
-        id: "welcome-2",
-        role: "faculty",
-        text: `Sure! **RAG (Retrieval-Augmented Generation)** is a technique where the AI first retrieves relevant information from your course material or knowledge base, and then uses that information to generate a grounded and accurate answer.\n\nIn simple words, it's like giving the AI access to your study material before it answers your question.`,
-        timestamp: "10:24 AM",
-        type: "voice",
-        showDiagram: true,
-        sources: [
-          {
-            fileName: "RAG in Adaptive Education.pdf",
-            snippet: "Unit 3: Grounded Language Models and Vector Search in CSE.",
-          },
-        ],
-      },
-    ];
+    return [];
   });
 
   const [inputText, setInputText] = useState<string>("");
@@ -150,30 +165,32 @@ function AiFacultyPage() {
 
   // Save transcript on changes
   useEffect(() => {
+    if (!selectedSubjectCode) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(messages));
     } catch {}
-  }, [messages, storageKey]);
+  }, [messages, storageKey, selectedSubjectCode]);
 
-  // Load subject-specific transcript when subject changes
+  // Load subject-specific transcript when subject or user changes
   useEffect(() => {
+    if (!selectedSubjectCode) {
+      setMessages([]);
+      return;
+    }
     try {
-      const saved = localStorage.getItem(`edusense_transcript_${selectedSubjectCode}`);
+      const key = user?.id
+        ? `edusense_transcript_${user.id}_${selectedSubjectCode}`
+        : `edusense_transcript_guest_${selectedSubjectCode}`;
+      const saved = localStorage.getItem(key);
       if (saved) {
         setMessages(JSON.parse(saved));
       } else {
-        setMessages([
-          {
-            id: `init-${Date.now()}`,
-            role: "faculty",
-            text: `Hello! I am JARVIS, your AI Faculty for **${selectedSubjectCode}**. Ready to study together? What questions or doubts do you have?`,
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            type: "system",
-          },
-        ]);
+        setMessages([]);
       }
-    } catch {}
-  }, [selectedSubjectCode]);
+    } catch {
+      setMessages([]);
+    }
+  }, [selectedSubjectCode, user?.id]);
 
   // Auto-scroll transcript container
   useEffect(() => {
@@ -182,25 +199,7 @@ function AiFacultyPage() {
     }
   }, [messages, interimTranscript, isSending]);
 
-  // Load available subjects
-  useEffect(() => {
-    async function loadSubjects() {
-      try {
-        const res = await fetch(`${API_BASE}/api/ai-faculty/subjects`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.subjects) && data.subjects.length > 0) {
-            setSubjects(data.subjects);
-          }
-        }
-      } catch (err) {
-        console.warn("[AI Faculty] Could not load subjects:", err);
-      }
-    }
-    loadSubjects();
-  }, []);
-
-  const selectedSubject = subjects.find((s) => s.code === selectedSubjectCode) || subjects[0];
+  const selectedSubject = enrolledSubjects.find((s) => s.code === selectedSubjectCode) || enrolledSubjects[0];
 
   // ── Browser Web Speech Recognition (Live Microphone Transcription) ─────────
   const startSpeechRecognition = useCallback(() => {
@@ -531,6 +530,32 @@ function AiFacultyPage() {
 
     toast.success("Meeting transcript downloaded successfully!");
   };
+
+  if (enrolledSubjects.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl py-16 px-4 text-center">
+        <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 shadow-md">
+            <Sparkles className="h-8 w-8" />
+          </div>
+          <h2 className="font-serif text-2xl font-bold text-slate-900 dark:text-white">
+            AI Faculty — Subject Enrollment Required
+          </h2>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+            You are not currently enrolled in any subjects. JARVIS AI Faculty requires enrollment in your semester subjects to access curriculum knowledge bases, vector embeddings, and real-time interactive teaching.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-blue-700 transition cursor-pointer"
+            >
+              Browse Course Catalog & Enroll →
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12 font-sans text-slate-800 dark:text-slate-100">
@@ -1021,10 +1046,17 @@ function AiFacultyPage() {
                 <span className="text-slate-400">Subject</span>
                 <select
                   value={selectedSubjectCode}
-                  onChange={(e) => setSelectedSubjectCode(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-slate-200 bg-blue-50/50 p-2 text-xs font-semibold text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-300"
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setSelectedSubjectCode(code);
+                    const sub = enrolledSubjects.find((s) => s.code === code);
+                    if (sub) {
+                      setCurrentTopic(`Core Syllabus: ${sub.name}`);
+                    }
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-blue-50/50 p-2 text-xs font-semibold text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-blue-300 cursor-pointer"
                 >
-                  {subjects.map((sub) => (
+                  {enrolledSubjects.map((sub) => (
                     <option key={sub.code} value={sub.code}>
                       {sub.code} – {sub.name}
                     </option>

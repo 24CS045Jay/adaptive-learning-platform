@@ -50,25 +50,13 @@ function isValidId(id) {
 router.get("/", softAuthenticate, async (req, res) => {
   try {
     const rawStudentId = req.user?.id || req.user?._id || null;
-    const filter = {};
-
-    if (rawStudentId && isValidId(String(rawStudentId))) {
-      filter.studentId = String(rawStudentId);
+    if (!rawStudentId || !isValidId(String(rawStudentId))) {
+      return res.json([]);
     }
 
-    let conversations = await Conversation.find(filter)
+    const conversations = await Conversation.find({ studentId: String(rawStudentId) })
       .populate("subjectId", "name code")
       .sort({ updatedAt: -1 });
-
-    // Fallback if older rows have null studentId
-    if ((!conversations || conversations.length === 0) && rawStudentId) {
-      conversations = await Conversation.find({})
-        .populate("subjectId", "name code")
-        .sort({ updatedAt: -1 });
-      conversations = (conversations || []).filter(
-        (c) => !c.studentId || String(c.studentId) === String(rawStudentId)
-      );
-    }
 
     const result = (conversations || []).map((c) => ({
       _id: c._id || c.id,

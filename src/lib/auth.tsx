@@ -36,6 +36,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (role: Role, email: string, password: string) => Promise<LoginResult>;
   loginWithGoogle: (role: Role, email?: string, name?: string) => LoginResult;
+  signInWithGoogleOAuth: (role?: Role) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
   sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }> | { ok: boolean; error?: string };
   sendOtp: (email: string, name?: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
@@ -354,9 +355,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return { ok: true };
         }
         return { ok: false, error: data.error || "Failed to send reset link." };
-      } catch {
-        const ok = requestPasswordReset(email);
-        return ok ? { ok: true } : { ok: false, error: "No account found with this email." };
+      } catch (err: any) {
+        console.error("[sendPasswordReset] Network error:", err);
+        return {
+          ok: false,
+          error: `Could not connect to backend server at ${API_BASE}. If Render is waking from sleep, please wait 30 seconds and try again.`,
+        };
       }
     },
     [],
@@ -394,7 +398,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return { ok: false, error: data.error || "Failed to send verification email." };
       } catch (err: any) {
-        return { ok: true, message: "Verification code sent." };
+        console.error("[sendOtp] Network error:", err);
+        return {
+          ok: false,
+          error: `Could not connect to backend API at ${API_BASE}. If Render is waking from sleep, please wait 30 seconds and try again.`,
+        };
       }
     },
     [],
