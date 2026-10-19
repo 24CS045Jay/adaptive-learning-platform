@@ -5,6 +5,8 @@ import { PageHeader, Card, Pill } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
 import { cn } from "@/lib/utils";
 
+import { useAuth } from "@/lib/auth";
+
 export const Route = createFileRoute("/student/announcements")({
   head: () => ({
     meta: [
@@ -17,10 +19,38 @@ export const Route = createFileRoute("/student/announcements")({
 
 function Announcements() {
   const { announcements, subjects } = useAppData();
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedScope, setSelectedScope] = useState("all");
 
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = (user as any)?.studentId ? String((user as any).studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name.toLowerCase()));
+  const enrolledSubjectCodes = new Set(enrolledSubjects.map((s) => (s.code || "").toLowerCase()));
+
   const filtered = announcements.filter((a) => {
+    const scope = (a.scope || "").toLowerCase();
+    const isInstitution = !a.scope || scope === "all" || scope === "institution" || scope === "general";
+    const isEnrolledScope = enrolledSubjectNames.has(scope) || enrolledSubjectCodes.has(scope);
+
+    // Only allow institution or enrolled subjects
+    if (!isInstitution && !isEnrolledScope) return false;
+
     if (selectedScope !== "all" && a.scope !== selectedScope) return false;
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
@@ -37,7 +67,7 @@ function Announcements() {
     <div className="space-y-6">
       <PageHeader
         title="Official Announcements"
-        subtitle={`Stay informed with institution-wide notices and subject broadcasts (${announcements.length} total).`}
+        subtitle={`Stay informed with institution-wide notices and subject broadcasts (${filtered.length} visible).`}
       />
 
       {/* Filter and Search Bar */}
@@ -61,7 +91,7 @@ function Announcements() {
           >
             <option value="all">All Scopes</option>
             <option value="Institution">Institution-wide</option>
-            {subjects.map((s) => (
+            {enrolledSubjects.map((s) => (
               <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
             ))}
           </select>

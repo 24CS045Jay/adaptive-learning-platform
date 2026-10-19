@@ -7,6 +7,27 @@ import { sendVerificationOtpEmail, sendPasswordResetEmail } from "../lib/mailer.
 
 const router = express.Router();
 
+/**
+ * Diagnostic status endpoint for Brevo email configuration.
+ * Safe to expose: masks API key and provides diagnostic checks for deployed environments.
+ */
+router.get("/email-status", (req, res) => {
+  const apiKey = (process.env.BREVO_API_KEY || "").trim();
+  const senderEmail = (process.env.BREVO_SENDER_EMAIL || process.env.SMTP_USER || "ladvajay15@gmail.com").trim();
+  const senderName = (process.env.BREVO_SENDER_NAME || process.env.EMAIL_FROM || "Edusense AI").trim();
+
+  res.json({
+    service: "Brevo Transactional Email Service",
+    configured: Boolean(apiKey && apiKey.startsWith("xkeysib-")),
+    keyLength: apiKey.length,
+    keyPrefix: apiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : "not_configured",
+    senderEmail,
+    senderName,
+    frontendUrl: process.env.FRONTEND_URL || "not_configured",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // In-memory OTP storage with 10-minute expiration
 // Key: clean email, Value: { code: string, expiresAt: number, name: string }
 const otpStore = new Map();

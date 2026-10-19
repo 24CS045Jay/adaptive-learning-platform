@@ -284,7 +284,20 @@ function mapBackendSubject(subject: any): AppSubject {
     facultyId: facId ? String(facId) : undefined,
     facultyEmail: facEmail ? String(facEmail) : undefined,
     syllabus: subject.syllabus ?? "",
-    enrolledStudentIds: (subject.enrolledStudentIds || []).map((id: any) => String(id)),
+    enrolledStudentIds: Array.isArray(subject.enrolledStudentIds)
+      ? subject.enrolledStudentIds.map((id: any) => String(id))
+      : typeof subject.enrolledStudentIds === "string"
+      ? (() => {
+          try {
+            const parsed = JSON.parse(subject.enrolledStudentIds);
+            return Array.isArray(parsed) ? parsed.map(String) : [];
+          } catch {
+            return [];
+          }
+        })()
+      : Array.isArray(subject.enrolled_student_ids)
+      ? subject.enrolled_student_ids.map(String)
+      : [],
   };
 }
 

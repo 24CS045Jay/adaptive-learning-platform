@@ -166,7 +166,13 @@ function StreakFlame() {
 }
 
 /* ── Upcoming Quizzes ── */
-function UpcomingQuizzes({ subjects, quizzes }: { subjects: any[]; quizzes: any[] }) {
+function UpcomingQuizzes({
+  enrolledSubjects,
+  quizzes,
+}: {
+  enrolledSubjects: any[];
+  quizzes: any[];
+}) {
   const SUBJECT_ICONS: Record<string, string> = {
     "Big Data Analytics": "📊",
     "Machine Learning": "🤖",
@@ -174,29 +180,33 @@ function UpcomingQuizzes({ subjects, quizzes }: { subjects: any[]; quizzes: any[
     Cybersecurity: "🔒",
   };
 
-  const activeQuizzes = quizzes && quizzes.length > 0
-    ? quizzes.slice(0, 4).map((q, i) => ({
-        id: q.id,
-        title: q.title,
-        subject: q.subjectName || "Course Assessment",
-        due: i === 0 ? "Due Today" : i === 1 ? "Due Tomorrow" : `Due in ${i + 2} days`,
-        urgency: i === 0 ? "urgent" : i === 1 ? "soon" : "normal",
-        icon: SUBJECT_ICONS[q.subjectName] ?? "📝",
-      }))
-    : subjects.slice(0, 3).map((s, i) => ({
-        id: s.id,
-        title: `${s.name} Assessment`,
-        subject: s.name,
-        due: i === 0 ? "Available Now" : `Due in ${i + 2} days`,
-        urgency: i === 0 ? "urgent" : "normal",
-        icon: SUBJECT_ICONS[s.name] ?? "📚",
-      }));
+  const enrolledSubjectIds = new Set(enrolledSubjects.map((s) => s.id));
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name?.toLowerCase()));
+
+  const enrolledQuizzes = (quizzes || []).filter((q) => {
+    if (q.subjectId && enrolledSubjectIds.has(q.subjectId)) return true;
+    if (q.subjectName && enrolledSubjectNames.has(q.subjectName.toLowerCase())) return true;
+    return false;
+  });
+
+  const activeQuizzes = enrolledQuizzes.slice(0, 4).map((q, i) => ({
+    id: q.id,
+    title: q.title,
+    subject: q.subjectName || "Course Assessment",
+    due: i === 0 ? "Due Today" : i === 1 ? "Due Tomorrow" : `Due in ${i + 2} days`,
+    urgency: i === 0 ? "urgent" : i === 1 ? "soon" : "normal",
+    icon: SUBJECT_ICONS[q.subjectName] ?? "📝",
+  }));
 
   return (
     <Card title="Upcoming & Published Quizzes">
-      {activeQuizzes.length === 0 ? (
+      {enrolledSubjects.length === 0 ? (
         <div className="py-6 text-center text-xs text-muted-foreground">
-          No upcoming quizzes yet. Quizzes created by faculty will appear here.
+          0 subjects enrolled. Enroll in subjects from the Course Catalog below to unlock upcoming course assessments.
+        </div>
+      ) : activeQuizzes.length === 0 ? (
+        <div className="py-6 text-center text-xs text-muted-foreground">
+          No upcoming quizzes published yet for your enrolled subjects.
         </div>
       ) : (
         <ul className="space-y-2">
@@ -304,12 +314,15 @@ function StudentDashboard() {
   const myStudentId = user?.studentId || "";
 
   const isEnrolled = (s: any) => {
-    const list = s.enrolledStudentIds || [];
-    return (
-      list.includes(myId) ||
-      list.includes(myEmail) ||
-      (myStudentId && list.includes(myStudentId))
-    );
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail.toLowerCase() || (myStudentId && clean === myStudentId.toLowerCase());
+    });
   };
 
   const handleToggleEnroll = async (subjectId: string) => {
@@ -588,7 +601,7 @@ function StudentDashboard() {
           </div>
         </Card>
 
-        <UpcomingQuizzes subjects={subjects} quizzes={quizzes} />
+        <UpcomingQuizzes enrolledSubjects={subjects.filter(isEnrolled)} quizzes={quizzes} />
       </div>
 
       {/* ── Row 3: Enrolled Subjects & Modules (Strict Access Control) ── */}

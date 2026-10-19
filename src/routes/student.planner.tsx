@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Sparkles, Target, Check, Trophy, Plus, MessageCircle } from "lucide-react";
+import { Sparkles, Target, Check, Trophy, Plus, MessageCircle, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageHeader, Card, Pill, PrimaryButton } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 import { StudentMeetingScheduler } from "@/components/meetings/StudentMeetingScheduler";
@@ -123,14 +124,39 @@ function PriorityBadge({ priority }: { priority: "high" | "medium" | "low" }) {
 
 function Planner() {
   const { subjects } = useAppData();
+  const { user } = useAuth();
+
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = user?.studentId ? String(user.studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name.toLowerCase()));
+
   const [items, setItems] = useState<TopicRemediation[]>(() => {
     try {
-      const saved = localStorage.getItem("ai_tutor_study_planner_tasks");
-      return saved ? JSON.parse(saved) : INITIAL_REMEDIATIONS;
+      const key = user?.id ? `ai_tutor_study_planner_tasks_${user.id}` : "ai_tutor_study_planner_tasks_guest";
+      const saved = localStorage.getItem(key);
+      if (saved) return JSON.parse(saved);
+      return INITIAL_REMEDIATIONS;
     } catch {
       return INITIAL_REMEDIATIONS;
     }
   });
+
+  const visibleItems = items.filter((i) => enrolledSubjectNames.has(i.subject.toLowerCase()));
 
   const [mainTab, setMainTab] = useState<"targets" | "adaptive" | "meetings">("targets");
   const [inspectItem, setInspectItem] = useState<TopicRemediation | null>(null);
@@ -139,21 +165,22 @@ function Planner() {
 
   // New Target Modal State
   const [newTopic, setNewTopic] = useState("");
-  const [newSubject, setNewSubject] = useState(subjects[0]?.name ?? "Big Data Analytics");
+  const [newSubject, setNewSubject] = useState(enrolledSubjects[0]?.name ?? "");
   const [newReason, setNewReason] = useState("");
   const [newPriority, setNewPriority] = useState<"high" | "medium" | "low">("high");
   const [newEst, setNewEst] = useState(15);
 
-  const pendingCount = items.filter((i) => i.status === "pending").length;
-  const completedCount = items.filter((i) => i.status === "completed").length;
-  const totalCount = Math.max(items.length, 1);
+  const pendingCount = visibleItems.filter((i) => i.status === "pending").length;
+  const completedCount = visibleItems.filter((i) => i.status === "completed").length;
+  const totalCount = Math.max(visibleItems.length, 1);
   const progressPct = Math.round((completedCount / totalCount) * 100);
-  const isAllDone = completedCount === items.length && items.length > 0;
+  const isAllDone = completedCount === visibleItems.length && visibleItems.length > 0;
 
   const saveItems = (updated: TopicRemediation[]) => {
     setItems(updated);
     try {
-      localStorage.setItem("ai_tutor_study_planner_tasks", JSON.stringify(updated));
+      const key = user?.id ? `ai_tutor_study_planner_tasks_${user.id}` : "ai_tutor_study_planner_tasks_guest";
+      localStorage.setItem(key, JSON.stringify(updated));
     } catch {}
   };
 
@@ -172,15 +199,16 @@ function Planner() {
     e.preventDefault();
     if (!newTopic.trim()) return;
 
+    const targetSubject = newSubject || enrolledSubjects[0]?.name || "General";
     const newTask: TopicRemediation = {
       topic: newTopic.trim(),
-      subject: newSubject,
+      subject: targetSubject,
       reason: newReason.trim() || "Targeted for midterm revision",
       status: "pending",
       priority: newPriority,
       estMinutes: Number(newEst) || 15,
       summary: {
-        keyConcept: `Core principles and architecture of ${newTopic.trim()} for ${newSubject}.`,
+        keyConcept: `Core principles and architecture of ${newTopic.trim()} for ${targetSubject}.`,
         formulasOrCode: "Key algorithmic rules and execution conditions defined in lecture slides.",
         commonPitfall: "Review previous quiz misconceptions and unit learning outcomes.",
       },
@@ -199,7 +227,7 @@ function Planner() {
         subtitle="Adaptive syllabus revision, diagnostic mastery tracking, and faculty Microsoft Teams office hours."
         action={
           <div className="flex items-center gap-2">
-            {mainTab === "targets" && (
+            {mainTab === "targets" && enrolledSubjects.length > 0 && (
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
@@ -269,54 +297,75 @@ function Planner() {
 
       {mainTab === "targets" && (
         <>
+          {enrolledSubjects.length === 0 ? (
+            <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto my-8">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mb-4">
+                <Lock className="h-7 w-7" />
+              </div>
+              <h2 className="font-serif text-xl font-bold text-foreground">
+                Study Planner Locked — 0 Subjects Enrolled
+              </h2>
+              <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+                You are not currently enrolled in any subjects. Study targets, remediation tracks, and faculty office hours adapt to your enrolled subjects. Please enroll in your semester courses to unlock the planner.
+              </p>
+              <div className="mt-6 flex justify-center">
+                <Link
+                  to="/student"
+                  className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+                >
+                  Browse Course Catalog & Enroll →
+                </Link>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Progress Card */}
+              <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-xs">
+                <div className="mb-3 flex items-center justify-between text-sm">
+                  <span className="font-semibold text-foreground flex items-center gap-2">
+                    {isAllDone && <Trophy className="h-4 w-4 text-amber-500" />}
+                    {isAllDone ? "🎉 All scheduled topics mastered!" : `${completedCount} of ${visibleItems.length} topics mastered`}
+                  </span>
+                  <span className={cn("font-bold text-base tabular-nums", isAllDone ? "text-success" : "text-violet")}>
+                    {progressPct}%
+                  </span>
+                </div>
+                <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPct}%` }}
+                    transition={{ duration: 0.7, ease: "easeOut" }}
+                    className={cn("h-full rounded-full bg-gradient-to-r from-violet to-emerald-500")}
+                  />
+                </div>
+                <div className="mt-2 flex gap-4 text-[11px] text-muted-foreground">
+                  <span>{completedCount} completed</span>
+                  <span>·</span>
+                  <span>{pendingCount} remaining</span>
+                  <span>·</span>
+                  <span>~{visibleItems.filter((i) => i.status === "pending").reduce((a, i) => a + i.estMinutes, 0)} min to go</span>
+                </div>
+              </div>
 
-      {/* Progress Card */}
-      <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-xs">
-        <div className="mb-3 flex items-center justify-between text-sm">
-          <span className="font-semibold text-foreground flex items-center gap-2">
-            {isAllDone && <Trophy className="h-4 w-4 text-amber-500" />}
-            {isAllDone ? "🎉 All scheduled topics mastered!" : `${completedCount} of ${items.length} topics mastered`}
-          </span>
-          <span className={cn("font-bold text-base tabular-nums", isAllDone ? "text-success" : "text-violet")}>
-            {progressPct}%
-          </span>
-        </div>
-        <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className={cn("h-full rounded-full bg-gradient-to-r from-violet to-emerald-500")}
-          />
-        </div>
-        <div className="mt-2 flex gap-4 text-[11px] text-muted-foreground">
-          <span>{completedCount} completed</span>
-          <span>·</span>
-          <span>{pendingCount} remaining</span>
-          <span>·</span>
-          <span>~{items.filter((i) => i.status === "pending").reduce((a, i) => a + i.estMinutes, 0)} min to go</span>
-        </div>
-      </div>
+              {/* Stat mini-cards */}
+              <div className="mb-6 grid grid-cols-3 gap-4">
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Needs Revision</div>
+                  <div className="mt-2 text-2xl font-bold text-amber-500 tabular-nums">{pendingCount} Topics</div>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Revised & Mastered</div>
+                  <div className="mt-2 text-2xl font-bold text-green-500 tabular-nums">{completedCount} Topics</div>
+                </div>
+                <div className="rounded-2xl border border-border bg-card p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remediation Mastery</div>
+                  <div className="mt-2 text-2xl font-bold text-violet tabular-nums">{progressPct}%</div>
+                </div>
+              </div>
 
-      {/* Stat mini-cards */}
-      <div className="mb-6 grid grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Needs Revision</div>
-          <div className="mt-2 text-2xl font-bold text-amber-500 tabular-nums">{pendingCount} Topics</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Revised & Mastered</div>
-          <div className="mt-2 text-2xl font-bold text-green-500 tabular-nums">{completedCount} Topics</div>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Remediation Mastery</div>
-          <div className="mt-2 text-2xl font-bold text-violet tabular-nums">{progressPct}%</div>
-        </div>
-      </div>
-
-      <Card>
-        <div className="space-y-3">
-          {items.map((item) => (
+              <Card>
+                <div className="space-y-3">
+                  {visibleItems.map((item) => (
             <motion.div
               key={item.topic}
               layout
@@ -395,6 +444,8 @@ function Planner() {
           ))}
         </div>
       </Card>
+      </>
+      )}
 
       {/* AI Summary Modal */}
       <AnimatePresence>
@@ -497,11 +548,11 @@ function Planner() {
                   Subject
                 </label>
                 <select
-                  value={newSubject}
+                  value={newSubject || enrolledSubjects[0]?.name || ""}
                   onChange={(e) => setNewSubject(e.target.value)}
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-violet"
                 >
-                  {subjects.map((s) => (
+                  {enrolledSubjects.map((s) => (
                     <option key={s.id} value={s.name}>
                       {s.name} ({s.code})
                     </option>

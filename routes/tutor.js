@@ -48,7 +48,7 @@ function softAuthenticate(req, res, next) {
     const token = authHeader.slice(7);
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = { id: decoded.id, role: decoded.role, name: decoded.name };
+      req.user = { id: decoded.id, role: decoded.role, name: decoded.name, email: decoded.email };
       return next();
     } catch {
       // Simulated or expired token — fall through to header fallback
@@ -57,8 +57,9 @@ function softAuthenticate(req, res, next) {
 
   const userId = req.headers["x-user-id"];
   const userRole = req.headers["x-user-role"] || "student";
+  const userEmail = req.headers["x-user-email"] || "";
   if (userId) {
-    req.user = { id: userId, role: userRole };
+    req.user = { id: userId, role: userRole, email: userEmail };
     return next();
   }
 
@@ -117,6 +118,31 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       }
     }
     if (!subjectCode) subjectCode = "CSUC301";
+
+    // Enforce student subject enrollment access control
+    if (req.user && (req.user.role === "student" || !req.user.role)) {
+      const studentIdentifier = String(req.user.id || req.user._id || "");
+      const studentEmail = req.user.email ? String(req.user.email).toLowerCase() : "";
+      const enrolledList = Array.isArray(subject?.enrolledStudentIds)
+        ? subject.enrolledStudentIds
+        : typeof subject?.enrolledStudentIds === "string"
+        ? JSON.parse(subject.enrolledStudentIds || "[]")
+        : [];
+
+      const isEnrolled = enrolledList.some((id) => {
+        const clean = String(id).toLowerCase();
+        return clean === studentIdentifier.toLowerCase() || (studentEmail && clean === studentEmail);
+      });
+
+      if (!isEnrolled && subject) {
+        return res.status(403).json({
+          error: "Enrollment required: You are not enrolled in this subject. Please enroll in this subject from your Dashboard Course Catalog to access AI Tutor study help.",
+          requiresEnrollment: true,
+          subjectId: subject._id || subject.id,
+          subjectName: subject.name,
+        });
+      }
+    }
 
     // Load existing Conversation if conversationId is provided
     let conversation = null;

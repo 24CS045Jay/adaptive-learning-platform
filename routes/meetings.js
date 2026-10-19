@@ -516,7 +516,37 @@ router.get("/available-slots", async (req, res) => {
     const { subjectCode } = req.query;
     const now = new Date();
 
-    const allSlots = await MeetingSlot.find({ status: "active" });
+    let allSlots = await MeetingSlot.find({ status: "active" });
+
+    // Filter by student enrollment if requester is a student
+    if (req.user && req.user.role === "student") {
+      const studentIdStr = String(req.user.id || req.user._id || "");
+      const studentEmail = req.user.email ? String(req.user.email).toLowerCase() : "";
+      const subjects = await Subject.find({});
+      const enrolledCodes = new Set();
+      for (const subj of subjects || []) {
+        let list = [];
+        try {
+          list = Array.isArray(subj.enrolledStudentIds)
+            ? subj.enrolledStudentIds
+            : typeof subj.enrolledStudentIds === "string"
+            ? JSON.parse(subj.enrolledStudentIds || "[]")
+            : [];
+        } catch {}
+        const isEnrolled = list.some((id) => {
+          const clean = String(id).toLowerCase();
+          return clean === studentIdStr.toLowerCase() || clean === studentEmail;
+        });
+        if (isEnrolled && subj.code) {
+          enrolledCodes.add(subj.code.toLowerCase());
+        }
+      }
+
+      allSlots = (allSlots || []).filter((slot) => {
+        if (!slot.subjectCode) return false;
+        return enrolledCodes.has(slot.subjectCode.toLowerCase());
+      });
+    }
 
     // Filter slots: future, open capacity, and permitted for this student
     const available = (allSlots || []).filter((slot) => {
@@ -620,6 +650,33 @@ router.post("/bookings", requireRole("student"), async (req, res) => {
     } else if (slot.audienceType === "department") {
       if (slot.departmentId && slot.departmentId !== studentDept && req.user.role !== "super_admin") {
         return res.status(403).json({ error: "This session is restricted to another department." });
+      }
+    }
+
+    // Verify subject enrollment for student
+    if (slot.subjectCode) {
+      const subject = await Subject.findOne({
+        code: { $regex: new RegExp(`^${slot.subjectCode.trim()}$`, "i") },
+      });
+      if (subject) {
+        let enrolledList = [];
+        try {
+          enrolledList = Array.isArray(subject.enrolledStudentIds)
+            ? subject.enrolledStudentIds
+            : typeof subject.enrolledStudentIds === "string"
+            ? JSON.parse(subject.enrolledStudentIds || "[]")
+            : [];
+        } catch {}
+        const isEnrolled = enrolledList.some((id) => {
+          const clean = String(id).toLowerCase();
+          return clean === String(studentId).toLowerCase() || clean === studentEmail.toLowerCase();
+        });
+        if (!isEnrolled) {
+          return res.status(403).json({
+            error: `Enrollment required: You are not enrolled in ${slot.subjectCode}. Please enroll in this course from your Dashboard to book faculty doubt sessions.`,
+            requiresEnrollment: true,
+          });
+        }
       }
     }
 

@@ -514,7 +514,7 @@ function AskTutorPage() {
   };
 
   const enrolledSubjects = subjects.filter(isEnrolled);
-  const firstSubject = enrolledSubjects[0] || subjects[0];
+  const firstSubject = enrolledSubjects[0] || null;
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(firstSubject?.id ?? "");
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>(firstSubject?.name ?? "");
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
@@ -522,6 +522,22 @@ function AskTutorPage() {
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
   const [learnerLevel, setLearnerLevel] = useState<string>("developing");
   const [learnerProfile, setLearnerProfile] = useState<any>(null);
+
+  // Synchronize active subject with enrolled subjects
+  useEffect(() => {
+    if (enrolledSubjects.length > 0) {
+      const currentValid = enrolledSubjects.find((s) => s.id === selectedSubjectId);
+      if (!currentValid) {
+        setSelectedSubjectId(enrolledSubjects[0].id);
+        setSelectedSubjectName(enrolledSubjects[0].name);
+        setSelectedSubjectCode(enrolledSubjects[0].code);
+      }
+    } else {
+      setSelectedSubjectId("");
+      setSelectedSubjectName("");
+      setSelectedSubjectCode("");
+    }
+  }, [enrolledSubjects, selectedSubjectId]);
 
   useEffect(() => {
     fetch("/api/adaptive/profile")
@@ -563,11 +579,15 @@ function AskTutorPage() {
 
   const [showControls, setShowControls] = useState<boolean>(false);
 
+  const userSessionStorageKey = user?.id
+    ? `ai_tutor_chat_sessions_user_${user.id}`
+    : "ai_tutor_chat_sessions_guest";
+
   const makeDefaultSession = (): ChatSession => ({
-    id: "sess_1",
+    id: `sess_${Date.now()}`,
     title: "New Conversation",
-    subject: selectedSubjectName,
-    subjectId: selectedSubjectId,
+    subject: selectedSubjectName || (firstSubject?.name ?? "General"),
+    subjectId: selectedSubjectId || (firstSubject?.id ?? ""),
     createdAt: "Today",
     messages: [],
   });
@@ -575,8 +595,12 @@ function AskTutorPage() {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     if (typeof window === "undefined") return [makeDefaultSession()];
     try {
-      const saved = localStorage.getItem("ai_tutor_chat_sessions_v3");
-      if (saved) return JSON.parse(saved);
+      const key = user?.id ? `ai_tutor_chat_sessions_user_${user.id}` : "ai_tutor_chat_sessions_guest";
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
     return [makeDefaultSession()];
   });
@@ -588,9 +612,30 @@ function AskTutorPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Switch sessions safely when authenticated user changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const key = user?.id ? `ai_tutor_chat_sessions_user_${user.id}` : "ai_tutor_chat_sessions_guest";
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSessions(parsed);
+          setActiveSessionId(parsed[0].id);
+          return;
+        }
+      }
+    } catch {}
+    const fresh = makeDefaultSession();
+    setSessions([fresh]);
+    setActiveSessionId(fresh.id);
+  }, [user?.id]);
+
   // Load past conversations from MongoDB/Supabase backend
   useEffect(() => {
     async function fetchServerConversations() {
+      if (!user?.id) return;
       try {
         const res = await fetch(`${API_BASE}/api/conversations`, {
           headers: {
@@ -627,10 +672,10 @@ function AskTutorPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      localStorage.setItem("ai_tutor_chat_sessions_v3", JSON.stringify(sessions));
+      localStorage.setItem(userSessionStorageKey, JSON.stringify(sessions));
     } catch {}
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [sessions]);
+  }, [sessions, userSessionStorageKey]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
 
@@ -944,9 +989,9 @@ function AskTutorPage() {
                 onChange={handleSubjectChange}
                 className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-violet transition"
               >
-                {(enrolledSubjects.length > 0 ? enrolledSubjects : subjects).map((s) => (
+                {enrolledSubjects.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} ({s.code}) {isEnrolled(s) ? "✓ Enrolled" : "(Not Enrolled)"}
+                    {s.name} ({s.code}) ✓ Enrolled
                   </option>
                 ))}
               </select>
@@ -974,7 +1019,8 @@ function AskTutorPage() {
             <button
               type="button"
               onClick={createNewSession}
-              className="flex items-center gap-1 rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition"
+              disabled={enrolledSubjects.length === 0}
+              className="flex items-center gap-1 rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition disabled:opacity-40"
             >
               <Plus className="h-3.5 w-3.5" /> New
             </button>
@@ -1026,23 +1072,42 @@ function AskTutorPage() {
         {/* Chat area */}
         <div className="lg:col-span-3">
           <Card>
-            <div className="flex flex-col min-h-[520px]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 mb-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet/10 text-violet">
-                    <BookOpen className="h-4 w-4" />
-                  </div>
-                  <select
-                    value={selectedSubjectId}
-                    onChange={handleSubjectChange}
-                    className="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground outline-none focus:border-violet transition cursor-pointer max-w-[200px] truncate"
-                  >
-                    {subjects.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.code})
-                      </option>
-                    ))}
-                  </select>
+            {enrolledSubjects.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center px-4 min-h-[460px]">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 shadow-md">
+                  <GraduationCap className="h-8 w-8" />
+                </div>
+                <h3 className="font-serif text-2xl font-bold text-foreground">
+                  AI Tutor Locked — 0 Subjects Enrolled
+                </h3>
+                <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
+                  The AI Tutor grounds its explanations, LaTeX derivations, worked examples, and interactive diagrams in your enrolled university curriculum. Please enroll in your semester subjects in the Course Catalog to start chatting.
+                </p>
+                <Link
+                  to="/student"
+                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+                >
+                  Browse Course Catalog & Enroll →
+                </Link>
+              </div>
+            ) : (
+              <div className="flex flex-col min-h-[520px]">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 mb-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet/10 text-violet">
+                      <BookOpen className="h-4 w-4" />
+                    </div>
+                    <select
+                      value={selectedSubjectId}
+                      onChange={handleSubjectChange}
+                      className="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground outline-none focus:border-violet transition cursor-pointer max-w-[200px] truncate"
+                    >
+                      {enrolledSubjects.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.code})
+                        </option>
+                      ))}
+                    </select>
 
                   {/* Multilingual Selector */}
                   <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1 text-xs">
@@ -1209,6 +1274,7 @@ function AskTutorPage() {
                 </motion.button>
               </div>
             </div>
+          )}
           </Card>
         </div>
       </div>

@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Bookmark, Download, FileText, Plus, Trash2, CheckCircle2, Edit3, Sparkles } from "lucide-react";
+import { Bookmark, Download, FileText, Plus, Trash2, CheckCircle2, Edit3, Sparkles, Lock } from "lucide-react";
 import { PageHeader, Card, Pill, PrimaryButton, EmptyState } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
+import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/student/bookmarks")({
@@ -24,30 +25,35 @@ interface BookmarkItem {
   notes?: string;
 }
 
-const DEFAULT_INITIAL_BOOKMARKS: BookmarkItem[] = [
-  {
-    id: "bm_1",
-    question: "Explain the Shuffle and Sort phase in Hadoop MapReduce with partition hash modulo.",
-    answer: "In Hadoop MapReduce, intermediate mapper outputs are partitioned using hash(key) % numReducers and sorted locally in memory before being transferred across worker nodes to designated reducers.",
-    subject: "Big Data Analytics",
-    date: "2026-10-04",
-    notes: "Crucial for exam Unit 2. Remember that Combiners run locally on mappers to reduce network traffic.",
-  },
-  {
-    id: "bm_2",
-    question: "Difference between L1 (Lasso) and L2 (Ridge) Regularization formulas.",
-    answer: "L1 adds the sum of absolute weights penalty (Loss = MSE + λ ∑|w|), driving irrelevant feature weights to exact zero (sparsity). L2 adds squared weights (Loss = MSE + λ ∑w²), shrinking weights smoothly without zeroing them out.",
-    subject: "Machine Learning",
-    date: "2026-10-05",
-    notes: "L1 for feature selection, L2 for preventing large exploding weights.",
-  },
-];
-
 function Bookmarks() {
   const { subjects, bookmarks: contextBookmarks, addBookmark, updateBookmarkNote, removeBookmark } = useAppData();
+  const { user } = useAuth();
 
-  const items: BookmarkItem[] =
-    contextBookmarks && contextBookmarks.length > 0 ? contextBookmarks : DEFAULT_INITIAL_BOOKMARKS;
+  const myId = user?.id || "";
+  const myEmail = user?.email ? String(user.email).toLowerCase() : "";
+  const myStudentId = (user as any)?.studentId ? String((user as any).studentId).toLowerCase() : "";
+
+  const isEnrolled = (s: any) => {
+    const list: string[] = Array.isArray(s.enrolledStudentIds)
+      ? s.enrolledStudentIds
+      : typeof s.enrolledStudentIds === "string"
+      ? JSON.parse(s.enrolledStudentIds || "[]")
+      : [];
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId);
+    });
+  };
+
+  const enrolledSubjects = subjects.filter(isEnrolled);
+  const enrolledSubjectNames = new Set(enrolledSubjects.map((s) => s.name.toLowerCase()));
+  const enrolledSubjectCodes = new Set(enrolledSubjects.map((s) => (s.code || "").toLowerCase()));
+
+  // Only take bookmarks that belong to enrolled subjects
+  const allEnrolledBookmarks: BookmarkItem[] = (contextBookmarks || []).filter((b) => {
+    const s = (b.subject || "").toLowerCase();
+    return enrolledSubjectNames.has(s) || enrolledSubjectCodes.has(s);
+  });
 
   const [selectedSubject, setSelectedSubject] = useState("all");
   const [editingItem, setEditingItem]         = useState<BookmarkItem | null>(null);
@@ -55,13 +61,13 @@ function Bookmarks() {
   const [showAddModal, setShowAddModal]       = useState(false);
   const [newQuestion, setNewQuestion]         = useState("");
   const [newAnswer, setNewAnswer]             = useState("");
-  const [newSubject, setNewSubject]           = useState(subjects[0]?.name ?? "Big Data Analytics");
+  const [newSubject, setNewSubject]           = useState(enrolledSubjects[0]?.name ?? "");
   const [newNote, setNewNote]                 = useState("");
   const [exportBanner, setExportBanner]       = useState(false);
 
   const filtered = selectedSubject === "all"
-    ? items
-    : items.filter((b) => b.subject === selectedSubject);
+    ? allEnrolledBookmarks
+    : allEnrolledBookmarks.filter((b) => b.subject.toLowerCase() === selectedSubject.toLowerCase());
 
   const handleSaveNote = () => {
     if (!editingItem) return;
@@ -74,10 +80,12 @@ function Bookmarks() {
     e.preventDefault();
     if (!newQuestion.trim() || !newAnswer.trim()) return;
 
+    const targetSubject = newSubject || enrolledSubjects[0]?.name || "General";
+
     addBookmark({
       question: newQuestion.trim(),
       answer: newAnswer.trim(),
-      subject: newSubject,
+      subject: targetSubject,
       notes: newNote.trim() || undefined,
     });
 
@@ -113,6 +121,36 @@ function Bookmarks() {
     setExportBanner(true);
     setTimeout(() => setExportBanner(false), 3000);
   };
+
+  if (enrolledSubjects.length === 0) {
+    return (
+      <div>
+        <PageHeader
+          title="Personal Study Notebook & Bookmarks"
+          subtitle="Saved AI Tutor answers, formula citations, and personal notes for quick exam revision."
+        />
+        <Card className="border-amber-500/30 bg-amber-500/5 p-8 text-center max-w-xl mx-auto my-8">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 mb-4">
+            <Lock className="h-7 w-7" />
+          </div>
+          <h2 className="font-serif text-xl font-bold text-foreground">
+            Study Notebook Locked — 0 Subjects Enrolled
+          </h2>
+          <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
+            You are not currently enrolled in any subjects. Study bookmarks, AI formula clips, and revision notebooks are linked to your enrolled courses. Please enroll in a subject to start building your personal notebook.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <Link
+              to="/student"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
+            >
+              Browse Course Catalog & Enroll →
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -159,10 +197,10 @@ function Bookmarks() {
               : "bg-card border border-border text-muted-foreground hover:text-foreground"
           )}
         >
-          All Subjects ({items.length})
+          All Enrolled ({allEnrolledBookmarks.length})
         </button>
-        {subjects.map((s) => {
-          const count = items.filter((b) => b.subject === s.name).length;
+        {enrolledSubjects.map((s) => {
+          const count = allEnrolledBookmarks.filter((b) => b.subject.toLowerCase() === s.name.toLowerCase()).length;
           return (
             <button
               key={s.id}
@@ -311,11 +349,11 @@ function Bookmarks() {
                   Subject
                 </label>
                 <select
-                  value={newSubject}
+                  value={newSubject || enrolledSubjects[0]?.name || ""}
                   onChange={(e) => setNewSubject(e.target.value)}
                   className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:border-violet"
                 >
-                  {subjects.map((s) => (
+                  {enrolledSubjects.map((s) => (
                     <option key={s.id} value={s.name}>
                       {s.name} ({s.code})
                     </option>
