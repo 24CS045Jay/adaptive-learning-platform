@@ -21,6 +21,7 @@ import analyticsRoutes from "./routes/analytics.js";
 import conversationRoutes from "./routes/conversations.js";
 import meetingRoutes from "./routes/meetings.js";
 import adaptiveRoutes from "./routes/adaptive.js";
+import aiFacultyRoutes from "./routes/ai-faculty.js";
 import { authLimiter, tutorLimiter, uploadLimiter, meetingLimiter } from "./middleware/rate-limiter.js";
 
 const app = express();
@@ -139,6 +140,7 @@ app.use("/api/analytics", analyticsRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/meetings", meetingLimiter, meetingRoutes);
 app.use("/api/adaptive", adaptiveRoutes);
+app.use("/api/ai-faculty", tutorLimiter, aiFacultyRoutes);
 
 // Global Error Handler — sanitized to prevent credential/stack exposure
 app.use((err, req, res, next) => {

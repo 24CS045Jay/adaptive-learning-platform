@@ -143,10 +143,11 @@ export interface StudentRiskProfile {
   studentName: string;
   email: string;
   subject: string;
-  trend: "Improving" | "Stable" | "Declining";
+  trend: "Improving" | "Stable" | "Declining" | "New";
   risk: "Low" | "Medium" | "High";
   scorePct: number;
   weakTopicCount: number;
+  hasAttempts?: boolean;
 }
 
 // ─── Context Value Interface ──────────────────────────────────────────────────

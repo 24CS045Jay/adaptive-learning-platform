@@ -16,6 +16,7 @@ import {
   Conversation,
   TopicMastery,
 } from "../models/index.js";
+import { generateRecommendationsForStudent } from "../lib/recommendation-engine.js";
 
 const router = express.Router();
 
@@ -138,6 +139,27 @@ router.post("/ask", softAuthenticate, async (req, res) => {
       }
     }
 
+    // Fetch or construct authentic learner knowledge profile
+    let activeLearnerProfile = req.body.learner_profile || null;
+    if (!activeLearnerProfile && studentId) {
+      try {
+        const rows = await TopicMastery.find({ user_id: String(studentId) });
+        const demonstrated = (rows || []).filter((r) => (Number(r.score) || 0) >= 75).map((r) => r.topic);
+        const needing = (rows || []).filter((r) => (Number(r.score) || 0) < 65).map((r) => r.topic);
+        activeLearnerProfile = {
+          student_id: String(studentId),
+          estimated_mastery_level: learnerLevel === "intermediate" ? "developing" : learnerLevel,
+          concepts_demonstrated: demonstrated,
+          concepts_needing_practice: needing,
+          preferred_explanation_depth: learnerLevel === "intermediate" ? "developing" : learnerLevel,
+          preferred_language: responseLanguage,
+          preferred_teaching_mode: req.body.mode || "ask_tutor",
+        };
+      } catch {
+        // non-fatal
+      }
+    }
+
     // Step 2: Query Python RAG service
     let ragResults = [];
     let ragError = null;
@@ -159,6 +181,7 @@ router.post("/ask", softAuthenticate, async (req, res) => {
           mode: req.body.mode || "ask_tutor",
           learner_level: learnerLevel,
           response_language: responseLanguage,
+          learner_profile: activeLearnerProfile,
           chat_history: (conversation?.messages || []).slice(-4).map((m) => ({
             role: m.role === "student" ? "user" : "assistant",
             content: m.text || "",
@@ -177,7 +200,7 @@ router.post("/ask", softAuthenticate, async (req, res) => {
           question: question.trim(),
           topK: 5,
         }),
-        signal: AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (ragRes.ok) {
@@ -254,6 +277,20 @@ router.post("/ask", softAuthenticate, async (req, res) => {
         confidence: confidence,
       }).catch((e) => console.warn("[RagInteractionLog] write failed:", e.message));
 
+      // Generate targeted next step recommendation
+      let recommendedNextStep = null;
+      if (studentId) {
+        try {
+          const recs = await generateRecommendationsForStudent(String(studentId), {
+            courseId: subject?._id || subject?.id,
+            limit: 1,
+          });
+          if (recs && recs.length > 0) recommendedNextStep = recs[0];
+        } catch (e) {
+          console.warn("[Ask Tutor] Recommendation generation notice:", e.message);
+        }
+      }
+
       return res.json({
         conversationId: conversation?._id || conversation?.id || String(conversationId || ""),
         answer: agenticResponse.answer,
@@ -280,7 +317,11 @@ router.post("/ask", softAuthenticate, async (req, res) => {
           return String(t);
         }),
         tool_used: agenticResponse.tool_used || null,
+        understanding_check: agenticResponse.understanding_check || null,
+        learning_intent: agenticResponse.learning_intent || null,
+        learner_profile: agenticResponse.learner_profile || activeLearnerProfile,
         follow_up: agenticResponse.follow_up || [],
+        recommended_next_step: recommendedNextStep,
         provider: "agentic_rag",
       });
     }

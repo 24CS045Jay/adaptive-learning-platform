@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96" width="100%" height="100%" fill="none">
+  <!-- Crisp White Background Canvas -->
+  <rect width="100%" height="100%" fill="#ffffff" rx="12" />
+
+  <defs>
+    <!-- Emblem Gradients -->
+    <linearGradient id="cap-dark-top" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+
+    <linearGradient id="cap-dark-base" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+
+    <linearGradient id="tassel-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <linearGradient id="wing-dark-l1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#4f46e5" />
+    </linearGradient>
+
+    <linearGradient id="wing-dark-l2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+
+    <linearGradient id="wing-dark-r1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+
+    <linearGradient id="wing-dark-r2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+
+    <linearGradient id="spark-dark-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fffbeb" />
+      <stop offset="30%" stop-color="#fde047" />
+      <stop offset="70%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <linearGradient id="ai-text-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <filter id="ai-spark-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#f59e0b" flood-opacity="0.65" />
+    </filter>
+
+    <filter id="emblem-card-depth" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#4f46e5" flood-opacity="0.18" />
+    </filter>
+  </defs>
+
+  <!-- EMBLEM WITH DEPTH ON WHITE BACKGROUND -->
+  <g transform="translate(14, 4) scale(0.85)" filter="url(#emblem-card-depth)">
+    <!-- Cap Under-band -->
+    <path d="M 40 33 L 40 44 C 40 50, 80 50, 80 44 L 80 33 Z" fill="url(#cap-dark-base)" opacity="0.95" />
+    <path d="M 40 44 C 40 52, 80 52, 80 44" stroke="#818cf8" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.8" />
+
+    <!-- Cap Diamond Rhombus -->
+    <path d="M 60 14 L 98 29 L 60 44 L 22 29 Z" fill="url(#cap-dark-top)" />
+    <path d="M 60 14 L 98 29 L 60 26 Z" fill="#ffffff" opacity="0.25" />
+    <path d="M 22 29 L 60 14 L 60 44 Z" fill="#ffffff" opacity="0.12" />
+
+    <!-- Button & Tassel -->
+    <ellipse cx="60" cy="29" rx="3.5" ry="2" fill="#fde047" />
+    <path d="M 60 29 C 76 29, 92 34, 94 42 L 94 54" stroke="url(#tassel-dark)" stroke-width="2.2" stroke-linecap="round" fill="none" />
+    <circle cx="94" cy="54" r="2.8" fill="#f59e0b" />
+
+    <!-- Open Book Pages / Wings -->
+    <path d="M 60 102 C 48 94, 20 86, 12 68 C 16 66, 26 66, 36 71 C 46 76, 56 86, 60 102 Z" fill="url(#wing-dark-l1)" />
+    <path d="M 60 98 C 50 88, 28 80, 22 62 C 27 60, 38 61, 48 67 C 54 71, 58 82, 60 98 Z" fill="url(#wing-dark-l2)" />
+
+    <path d="M 60 102 C 72 94, 100 86, 108 68 C 104 66, 94 66, 84 71 C 74 76, 64 86, 60 102 Z" fill="url(#wing-dark-r1)" />
+    <path d="M 60 98 C 70 88, 92 80, 98 62 C 93 60, 82 61, 72 67 C 66 71, 62 82, 60 98 Z" fill="url(#wing-dark-r2)" />
+
+    <!-- AI Intelligence Spark -->
+    <path d="M 60 38 C 60 50, 64 54, 78 58 C 64 62, 60 66, 60 78 C 60 66, 56 62, 42 58 C 56 54, 60 50, 60 38 Z" fill="url(#spark-dark-grad)" filter="url(#ai-spark-glow)" />
+    <circle cx="60" cy="58" r="3.2" fill="#ffffff" />
+  </g>
+
+  <!-- TYPOGRAPHY LOCKUP OPTIMIZED FOR WHITE BACKGROUND -->
+  <g transform="translate(122, 0)">
+    <!-- "EduSense" in Deep Slate Navy -->
+    <text x="0" y="52" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="38" font-weight="800" letter-spacing="-0.03em" fill="#0f172a">
+      EduSense
+    </text>
+
+    <!-- "AI" in Radiant Sunset Gradient -->
+    <text x="178" y="52" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="38" font-weight="900" letter-spacing="-0.01em" fill="url(#ai-text-grad)">
+      AI
+    </text>
+
+    <!-- Subtitle: "ADAPTIVE INTELLIGENCE PLATFORM" in Slate-600 -->
+    <text x="2" y="74" font-family="'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12.5" font-weight="600" letter-spacing="0.08em" fill="#475569">
+      ADAPTIVE INTELLIGENCE PLATFORM
+    </text>
+  </g>
+</svg>

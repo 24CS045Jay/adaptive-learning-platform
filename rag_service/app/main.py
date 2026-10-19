@@ -7,6 +7,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
@@ -68,6 +69,7 @@ class QueryRequest(BaseModel):
     mode: str = "ask_tutor"
     learner_level: str = "intermediate"
     response_language: str = "en"
+    learner_profile: Optional[Dict[str, Any]] = None
     chat_history: List[ChatMsg] = Field(default_factory=list)
     security_context: SecurityContext = Field(default_factory=SecurityContext)
     model_config = {"extra": "allow"}
@@ -165,14 +167,17 @@ def query(req: QueryRequest) -> dict:
             history=hist,
             learner_level=req.learner_level,
             response_language=req.response_language,
+            mode=req.mode,
+            learner_profile=req.learner_profile,
         )
     except LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except Exception as e:
         log.exception("query failed")
         raise HTTPException(500, f"Query failed: {str(e)[:300]}")
-    out.update(mode=req.mode, tool_used=None, follow_up=[])
+    out.setdefault("follow_up", [])
     return out
+
 
 
 @app.post("/delete-document", dependencies=[Depends(auth)])
@@ -209,3 +214,123 @@ def doc_status(doc_id: str) -> dict:
 def set_active(doc_id: str, body: Dict[str, bool]) -> dict:
     n = get_store().set_active(doc_id, bool(body.get("is_active", True)))
     return {"document_id": doc_id, "updated_chunks": n}
+
+
+class RollbackRequest(BaseModel):
+    target_version_id: str
+
+
+@app.get("/documents/{doc_id}/versions", dependencies=[Depends(auth)])
+def doc_versions(doc_id: str) -> dict:
+    from app.versioning import get_version_registry
+    return get_version_registry().get_document_history(doc_id)
+
+
+@app.post("/documents/{doc_id}/rollback", dependencies=[Depends(auth)])
+def doc_rollback(doc_id: str, req: RollbackRequest) -> dict:
+    from app.versioning import get_version_registry
+    try:
+        ver = get_version_registry().rollback(doc_id, req.target_version_id)
+        get_store().set_active_version(doc_id, req.target_version_id)
+        return {
+            "document_id": doc_id,
+            "active_version_id": ver.version_id,
+            "version_number": ver.version_number,
+            "status": ver.status,
+            "message": f"Successfully rolled back to version {ver.version_number} ({ver.version_id})",
+        }
+    except Exception as e:
+        raise HTTPException(400, f"Rollback failed: {str(e)}")
+
+
+@app.get("/evaluate/benchmark", dependencies=[Depends(auth)])
+def eval_benchmark(k: int = 5, samples: int = 15) -> dict:
+    from app.evaluation.evaluator import RAGEvaluator
+    evaluator = RAGEvaluator()
+    return evaluator.evaluate_retrieval(k=k, max_samples=samples)
+
+
+# ------------------------------------------------------------------ Feature I: Adaptive Learning Endpoints
+class UpdateMasteryRequest(BaseModel):
+    student_id: str
+    topic: str
+    evidence_type: str = "quiz"
+    score: float
+    detail: str = ""
+    current_profile: Optional[Dict[str, Any]] = None
+
+
+@app.post("/adaptive/update-mastery", dependencies=[Depends(auth)])
+def update_mastery(req: UpdateMasteryRequest) -> dict:
+    from app.learner_adaptive import LearnerKnowledgeProfile, update_learner_profile_mastery
+    prof = LearnerKnowledgeProfile.from_dict(req.current_profile, student_id=req.student_id)
+    updated = update_learner_profile_mastery(
+        prof,
+        topic=req.topic,
+        evidence_type=req.evidence_type,
+        score=req.score,
+        detail=req.detail,
+    )
+    return {
+        "student_id": req.student_id,
+        "updated_profile": updated.to_dict(),
+    }
+
+
+class EvaluateCheckRequest(BaseModel):
+    student_id: str
+    question: str
+    student_answer: str
+    concept: str = ""
+    current_profile: Optional[Dict[str, Any]] = None
+
+
+@app.post("/adaptive/evaluate-check", dependencies=[Depends(auth)])
+def evaluate_check(req: EvaluateCheckRequest) -> dict:
+    from app.learner_adaptive import LearnerKnowledgeProfile, update_learner_profile_mastery
+    from app.providers import get_llm, llm_text
+
+    eval_prompt = (
+        "TASK:EVALUATE_CONCEPT_CHECK\n"
+        "Evaluate the student's answer to the formative concept check question.\n"
+        f"QUESTION: {req.question}\n"
+        f"STUDENT ANSWER: {req.student_answer}\n"
+        f"CONCEPT: {req.concept or 'Course Concept'}\n\n"
+        "Score the answer from 0 to 100 based on conceptual correctness and understanding.\n"
+        "Provide constructive pedagogical feedback in 2-3 sentences.\n"
+        'Reply ONLY JSON: {"score": 85, "correct": true, "feedback": "..."}'
+    )
+    score = 75.0
+    correct = True
+    feedback = "Good effort on explaining this concept!"
+    try:
+        raw = llm_text(get_llm("light").invoke(eval_prompt))
+        text = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.M).strip()
+        m = re.search(r"\{.*\}", text, re.S)
+        if m:
+            data = json.loads(m.group(0))
+            score = float(data.get("score", 75.0))
+            correct = bool(data.get("correct", score >= 70.0))
+            feedback = data.get("feedback", feedback)
+    except Exception as e:
+        log.warning("Evaluate check LLM error: %s", e)
+
+    prof = LearnerKnowledgeProfile.from_dict(req.current_profile, student_id=req.student_id)
+    updated = update_learner_profile_mastery(
+        prof,
+        topic=req.concept or "Understanding Check",
+        evidence_type="understanding_check",
+        score=score,
+        detail=f"Check: {req.question[:60]} -> {'Correct' if correct else 'Review needed'}",
+    )
+
+    return {
+        "student_id": req.student_id,
+        "score": score,
+        "correct": correct,
+        "feedback": feedback,
+        "updated_profile": updated.to_dict(),
+    }
+
+
+

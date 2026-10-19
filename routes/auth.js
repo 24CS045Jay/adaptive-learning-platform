@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User, AuditLog } from "../models/index.js";
 import { authenticate, JWT_SECRET } from "../middleware/auth.js";
-import { sendVerificationOtpEmail } from "../lib/mailer.js";
+import { sendVerificationOtpEmail, sendPasswordResetEmail } from "../lib/mailer.js";
 
 const router = express.Router();
 
@@ -102,14 +102,23 @@ router.post("/send-otp", async (req, res) => {
 
     console.log(`[OTP] Generated 6-digit code for ${cleanEmail}: ${otpCode}`);
 
-    // Send email via Gmail SMTP
+    // Send email via Brevo Transactional Email API over HTTPS
     const mailRes = await sendVerificationOtpEmail(cleanEmail, otpCode, name || "Student");
+
+    if (!mailRes.success) {
+      // Failed email delivery does not falsely report that an email was sent
+      return res.status(502).json({
+        ok: false,
+        error: mailRes.error || "Failed to deliver verification email. Please try again later.",
+        emailSent: false,
+      });
+    }
 
     return res.json({
       ok: true,
       message: `A 6-digit verification code has been sent to ${cleanEmail}.`,
       expiresInSeconds: 600,
-      emailSent: mailRes.success,
+      emailSent: true,
     });
   } catch (error) {
     console.error("[Auth Error] Send OTP error:", error);
@@ -185,5 +194,116 @@ router.post("/register", async (req, res) => {
 });
 
 router.get("/me", authenticate, async (req, res) => res.json({ user: req.user }));
+
+// ─── FORGOT PASSWORD (REQUEST RESET LINK) ────────────────────────────────────
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "Email is required to request a password reset." });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ email: cleanEmail });
+
+    // For security against user enumeration, return a generic message even if user not found
+    if (!user) {
+      return res.json({
+        ok: true,
+        message: "If an account with this email exists, a password reset link has been sent.",
+        emailSent: true,
+      });
+    }
+
+    // Generate a temporary 15-minute reset token signed with JWT_SECRET
+    const resetToken = jwt.sign(
+      {
+        id: user.id || user._id,
+        email: user.email,
+        purpose: "password_reset",
+      },
+      JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/$/, "");
+    const resetUrl = `${frontendUrl}/login?resetToken=${resetToken}&email=${encodeURIComponent(user.email)}`;
+
+    const mailRes = await sendPasswordResetEmail({
+      toEmail: user.email,
+      userName: user.name || "Student",
+      resetUrl,
+    });
+
+    if (!mailRes.success) {
+      return res.status(502).json({
+        ok: false,
+        error: mailRes.error || "Failed to deliver password reset email. Please try again later.",
+        emailSent: false,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "If an account with this email exists, a password reset link has been sent.",
+      emailSent: true,
+    });
+  } catch (error) {
+    console.error("[Auth Error] Forgot password error:", error);
+    return res.status(500).json({ error: error.message || "Failed to process password reset request." });
+  }
+});
+
+// ─── RESET PASSWORD (CONFIRM WITH TOKEN) ──────────────────────────────────────
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: "Token and new password are required." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters long." });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (jwtErr) {
+      return res.status(400).json({ error: "Invalid or expired password reset link. Please request a new one." });
+    }
+
+    if (decoded.purpose !== "password_reset" || !decoded.id) {
+      return res.status(400).json({ error: "Invalid password reset token." });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ error: "User account no longer exists." });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
+    await User.findByIdAndUpdate(decoded.id, {
+      passwordHash,
+      mustChangePassword: false,
+    });
+
+    try {
+      await AuditLog.create({
+        actorId: user.id || user._id,
+        action: "PASSWORD_RESET",
+        details: { email: user.email, ip: req.ip },
+      });
+    } catch {}
+
+    return res.json({
+      ok: true,
+      message: "Password has been successfully reset. You can now log in with your new password.",
+    });
+  } catch (error) {
+    console.error("[Auth Error] Reset password error:", error);
+    return res.status(500).json({ error: error.message || "Failed to reset password." });
+  }
+});
 
 export default router;

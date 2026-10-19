@@ -215,58 +215,60 @@ export function AdaptiveMasteryCard({ onAskTutorTopic }: { onAskTutorTopic?: (to
           </div>
 
           <div className="space-y-3">
-            {masteries.map((m) => {
-              const isWeak = m.score < 60 || m.masteryLabel === "weak";
-              const isMastered = m.score >= 80 || m.masteryLabel === "mastered";
+            {masteries.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-muted-foreground">
+                <Brain className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+                <p className="font-semibold text-foreground">No Topic Mastery Evaluated Yet</p>
+                <p className="mt-1">
+                  Complete assessment quizzes or practice activities to generate your topic-level understanding estimates.
+                </p>
+              </div>
+            ) : (
+              masteries.map((m) => {
+                const isWeak = m.score < 60 || m.masteryLabel === "weak";
+                const isMastered = m.score >= 80 || m.masteryLabel === "mastered";
 
-              return (
-                <div
-                  key={m.id}
-                  className="rounded-xl border border-border/80 bg-background/50 p-3.5 transition hover:bg-card hover:border-violet/30"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {m.subjectCode}
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-xl border border-border/80 bg-background/50 p-3.5 transition hover:bg-card hover:border-violet/30"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                          {m.subjectCode || "COURSE"}
+                        </span>
+                        <h5 className="text-xs font-bold text-foreground truncate">{m.topic}</h5>
+                      </div>
+
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0",
+                          isWeak && "bg-rose-500/15 text-rose-500",
+                          isMastered && "bg-emerald-500/15 text-emerald-500",
+                          !isWeak && !isMastered && "bg-amber-500/15 text-amber-500"
+                        )}
+                      >
+                        {m.score}% · {m.masteryLabel}
                       </span>
-                      <h5 className="text-xs font-bold text-foreground truncate">{m.topic}</h5>
                     </div>
 
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0",
-                        isWeak && "bg-rose-500/15 text-rose-500",
-                        isMastered && "bg-emerald-500/15 text-emerald-500",
-                        !isWeak && !isMastered && "bg-amber-500/15 text-amber-500"
-                      )}
-                    >
-                      {m.score}% · {m.masteryLabel}
-                    </span>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all duration-500",
-                        isWeak && "bg-rose-500",
-                        isMastered && "bg-emerald-500",
-                        !isWeak && !isMastered && "bg-amber-500"
-                      )}
-                      style={{ width: `${m.score}%` }}
-                    />
-                  </div>
-
-                  {/* Prerequisites or Weak spots note */}
-                  {m.weakSubtopics && m.weakSubtopics.length > 0 && (
-                    <div className="mt-2 text-[11px] text-rose-500/90 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3 shrink-0" />
-                      <span className="truncate">Struggled on: {m.weakSubtopics.join(", ")}</span>
+                    {/* Progress bar */}
+                    <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          isWeak && "bg-rose-500",
+                          isMastered && "bg-emerald-500",
+                          !isWeak && !isMastered && "bg-amber-500"
+                        )}
+                        style={{ width: `${m.score}%` }}
+                      />
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -282,7 +284,16 @@ export function AdaptiveMasteryCard({ onAskTutorTopic }: { onAskTutorTopic?: (to
             </div>
 
             <div className="mt-3 space-y-3">
-              {recommendations.slice(0, 3).map((rec, i) => (
+              {recommendations.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border/80 p-5 text-center text-xs text-muted-foreground">
+                  <Sparkles className="mx-auto h-6 w-6 text-amber-500/50 mb-1.5" />
+                  <p className="font-semibold text-foreground">Awaiting Assessment Signals</p>
+                  <p className="mt-1 text-[11px]">
+                    Once you complete a quiz, personalized practice steps will appear here.
+                  </p>
+                </div>
+              ) : (
+                recommendations.slice(0, 3).map((rec, i) => (
                 <div
                   key={i}
                   className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs transition hover:border-amber-500/40"
@@ -315,7 +326,8 @@ export function AdaptiveMasteryCard({ onAskTutorTopic }: { onAskTutorTopic?: (to
                     </button>
                   </div>
                 </div>
-              ))}
+              ))
+              )}
             </div>
           </div>
 

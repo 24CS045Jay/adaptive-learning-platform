@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="100%" height="100%" fill="none">
+  <defs>
+    <!-- Background Squircle Glow -->
+    <radialGradient id="emblem-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6c4ff0" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#6c4ff0" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Gradients -->
+    <linearGradient id="cap-grad-top" x1="20%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6" />
+      <stop offset="50%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#3b82f6" />
+    </linearGradient>
+
+    <linearGradient id="cap-grad-base" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+
+    <linearGradient id="tassel-grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <linearGradient id="wing-left-outer" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#4f46e5" />
+    </linearGradient>
+
+    <linearGradient id="wing-left-inner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa" />
+      <stop offset="100%" stop-color="#6366f1" />
+    </linearGradient>
+
+    <linearGradient id="wing-right-outer" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+
+    <linearGradient id="wing-right-inner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+
+    <linearGradient id="spark-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fffbeb" />
+      <stop offset="30%" stop-color="#fde047" />
+      <stop offset="70%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+
+    <!-- Filters -->
+    <filter id="spark-shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#f59e0b" flood-opacity="0.6" />
+    </filter>
+
+    <filter id="emblem-depth" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <g filter="url(#emblem-depth)">
+    <!-- Base Glow behind AI spark -->
+    <circle cx="60" cy="58" r="32" fill="url(#emblem-glow)" />
+
+    <!-- ACADEMIC CAP (TOP) -->
+    <!-- Cap Under-band / Skull base -->
+    <path d="M 40 33 L 40 44 C 40 50, 80 50, 80 44 L 80 33 Z" fill="url(#cap-grad-base)" opacity="0.9" />
+    <path d="M 40 44 C 40 52, 80 52, 80 44" stroke="#818cf8" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.7" />
+
+    <!-- Mortarboard Diamond Rhombus -->
+    <path d="M 60 14 L 98 29 L 60 44 L 22 29 Z" fill="url(#cap-grad-top)" />
+    <!-- Highlight on upper facets -->
+    <path d="M 60 14 L 98 29 L 60 26 Z" fill="#ffffff" opacity="0.2" />
+    <path d="M 22 29 L 60 14 L 60 44 Z" fill="#ffffff" opacity="0.1" />
+
+    <!-- Cap Button & Tassel -->
+    <ellipse cx="60" cy="29" rx="3.5" ry="2" fill="#fde047" />
+    <path d="M 60 29 C 76 29, 92 34, 94 42 L 94 54" stroke="url(#tassel-grad)" stroke-width="2" stroke-linecap="round" fill="none" />
+    <circle cx="94" cy="54" r="2.5" fill="#f59e0b" />
+
+    <!-- OPEN BOOK / SYLLABUS PAGES / WINGS (BOTTOM) -->
+    <!-- Left Wing 1 (Outer lower) -->
+    <path d="M 60 102 C 48 94, 20 86, 12 68 C 16 66, 26 66, 36 71 C 46 76, 56 86, 60 102 Z" fill="url(#wing-left-outer)" />
+    <!-- Left Wing 2 (Inner elevated) -->
+    <path d="M 60 98 C 50 88, 28 80, 22 62 C 27 60, 38 61, 48 67 C 54 71, 58 82, 60 98 Z" fill="url(#wing-left-inner)" />
+
+    <!-- Right Wing 1 (Outer lower) -->
+    <path d="M 60 102 C 72 94, 100 86, 108 68 C 104 66, 94 66, 84 71 C 74 76, 64 86, 60 102 Z" fill="url(#wing-right-outer)" />
+    <!-- Right Wing 2 (Inner elevated) -->
+    <path d="M 60 98 C 70 88, 92 80, 98 62 C 93 60, 82 61, 72 67 C 66 71, 62 82, 60 98 Z" fill="url(#wing-right-inner)" />
+
+    <!-- Center Spine Keel / Grounding Stem -->
+    <path d="M 58 92 C 59 98, 60 106, 60 106 C 60 106, 61 98, 62 92 Z" fill="#6366f1" />
+
+    <!-- CENTRAL AI INTELLIGENCE SPARK / SENSE CORE -->
+    <!-- 4-point dynamic astroid spark uniting cap & book -->
+    <path d="M 60 38 
+             C 60 50, 64 54, 78 58 
+             C 64 62, 60 66, 60 78 
+             C 60 66, 56 62, 42 58 
+             C 56 54, 60 50, 60 38 Z" 
+          fill="url(#spark-grad)" 
+          filter="url(#spark-shadow)" />
+
+    <!-- Spark Inner Brightness Core -->
+    <ellipse cx="60" cy="58" rx="3" ry="3" fill="#ffffff" />
+    <path d="M 60 48 L 60 68 M 50 58 L 70 58" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.8" />
+  </g>
+</svg>

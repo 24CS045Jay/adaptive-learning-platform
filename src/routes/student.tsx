@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   LayoutDashboard, MessageCircle, Search, ListChecks, Bookmark,
-  CalendarClock, Megaphone, UserCircle, Network, MessageSquare, Video,
+  CalendarClock, Megaphone, UserCircle, Network, MessageSquare, Video, Sparkles,
 } from "lucide-react";
 import { AppShell, type NavItem } from "@/components/app-shell";
 
 const nav: NavItem[] = [
   { to: "/student", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/student/ai-faculty", label: "AI Faculty", icon: Sparkles },
   { to: "/student/ask", label: "Ask Tutor", icon: MessageCircle },
   { to: "/student/meetings", label: "Faculty Connect", icon: Video },
   { to: "/student/planner", label: "Study Planner", icon: CalendarClock },

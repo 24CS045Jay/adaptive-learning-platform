@@ -122,6 +122,37 @@ class ChromaStore:
         self.version += 1
         return len(ids)
 
+    def set_active_version(self, doc_id: str, active_version_id: str) -> int:
+        with self._lock:
+            got = self.collection.get(where={"document_id": doc_id}, include=["metadatas"])
+            ids, metas = got.get("ids", []), got.get("metadatas", [])
+            if ids:
+                new_metas = []
+                for m in metas:
+                    is_this_active = (m.get("version_id") == active_version_id)
+                    new_metas.append({**m, "is_active": is_this_active})
+                for i in range(0, len(ids), 100):
+                    self.collection.update(
+                        ids=ids[i : i + 100],
+                        metadatas=[_clean_meta(m) for m in new_metas[i : i + 100]],
+                    )
+            self.version += 1
+            return len(ids)
+
+    def delete_version(self, doc_id: str, version_id: str) -> int:
+        with self._lock:
+            got = self.collection.get(
+                where={"$and": [{"document_id": doc_id}, {"version_id": version_id}]},
+                include=[]
+            )
+            ids = got.get("ids", [])
+            if ids:
+                for i in range(0, len(ids), 200):
+                    self.collection.delete(ids=ids[i : i + 200])
+            self.version += 1
+            return len(ids)
+
+
     # ---- read ----
     def dense_search(self, query: str, k: int, where: Optional[dict]) -> List[Tuple[Document, float]]:
         n = self.collection.count()

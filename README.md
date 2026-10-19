@@ -214,14 +214,37 @@ cd rag_service
 python scripts/check_providers.py
 ```
 
-### 2. Run Automated Pytest Suite
-Execute 54 comprehensive unit and offline mock tests:
+### 2. Run Automated Test Suites
+Execute the complete automated test suite (37 tests across 14 suites):
+```bash
+npm test
+```
+
+### 3. Run End-to-End ML Pipeline Verification
+Execute the full 10-step student learning lifecycle test:
+```bash
+node scripts/verify-ml-e2e.js
+```
+
+### 4. Train & Evaluate Machine Learning Models
+Train the student topic mastery prediction models and evaluate recommendation ranking:
+```bash
+# Train Calibrated Logistic Regression & Gradient Boosting models
+python ml_service/mastery_model.py
+
+# Evaluate Recommendation Engine Ranking (Precision@K, NDCG@K, MRR)
+python ml_service/ranking_eval.py
+```
+
+### 5. Run Automated Pytest Suite (RAG Microservice)
+Execute comprehensive unit and offline mock tests for the RAG service:
 ```bash
 cd rag_service
 pytest -q
+cd ..
 ```
 
-### 3. Interactive Jupyter Demonstration Suite
+### 6. Interactive Jupyter Demonstration Suite
 Explore the end-to-end RAG stages in order from `rag_service/notebooks/`:
 1. `00_setup_and_provider_check.ipynb` — Provider connectivity and vector dimension check
 2. `01_document_parsing_and_chunking.ipynb` — Document parser evaluation across 9 formats
@@ -230,6 +253,19 @@ Explore the end-to-end RAG stages in order from `rag_service/notebooks/`:
 5. `04_augmentation_and_generation.ipynb` — Context-injected generation and citation validation
 6. `05_agentic_rag_langgraph.ipynb` — Multi-turn LangGraph agent with tool execution
 7. `06_evaluation_and_regression_tests.ipynb` — Grounding evaluation metrics
+
+---
+
+## 📚 Machine Learning Documentation
+
+Comprehensive documentation for the two core ML features is available in [`docs/`](docs/):
+
+- [`docs/ml-implementation-audit.md`](docs/ml-implementation-audit.md): Complete audit of analytics pages, defect repairs, and verification evidence.
+- [`docs/ml-architecture.md`](docs/ml-architecture.md): Architecture specification for Mastery Prediction, Recommendation Engine, and RAG integration.
+- [`docs/ml-data-dictionary.md`](docs/ml-data-dictionary.md): Event schemas, engineered features, proxy labels, and prediction schemas.
+- [`docs/ml-training-guide.md`](docs/ml-training-guide.md): Data preparation, training commands, evaluation procedures, and artifact lifecycle.
+- [`docs/ml-api-reference.md`](docs/ml-api-reference.md): Full API specification with request/response payloads, role permissions, and error codes.
+- [`docs/ml-limitations.md`](docs/ml-limitations.md): Small-sample boundaries, Expected Calibration Error results, and future roadmap.
 
 ---
 

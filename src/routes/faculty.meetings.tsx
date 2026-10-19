@@ -18,8 +18,7 @@ export function FacultyMeetingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Connect & Teams Meetings"
-        description="Schedule office hours, conduct group doubt seminars, and approve student consultation requests with Microsoft Teams."
-        badge="Microsoft Teams Integration"
+        subtitle="Schedule office hours, conduct group doubt seminars, and approve student consultation requests with Microsoft Teams."
       />
 
       {/* Overview Highlights */}

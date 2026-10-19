@@ -35,6 +35,12 @@ services:
         sync: false
       - key: CONFIDENCE_THRESHOLD
         value: "0.55"
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: "Edusense AI"
 
   - type: web
     name: adeptive-learning-rag

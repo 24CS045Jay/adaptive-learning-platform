@@ -10,8 +10,25 @@ function toCamelCase(str) {
   return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 }
 
+// Known column aliases across heterogeneous schema versions
+const TABLE_FIELD_ALIASES = {
+  conversations: {
+    student_id: "user_id",
+    studentId: "user_id",
+    userId: "user_id",
+  },
+  concept_edges: {
+    from_node_id: "source_node",
+    fromNodeId: "source_node",
+    to_node_id: "target_node",
+    toNodeId: "target_node",
+    relation_type: "relationship",
+    relationType: "relationship",
+  },
+};
+
 // Transform an object's keys to snake_case for Supabase
-export function objectToSnake(obj) {
+export function objectToSnake(obj, tableName = "") {
   if (!obj || typeof obj !== "object" || Array.isArray(obj) || obj instanceof Date) return obj;
   const result = {};
   for (const [key, rawVal] of Object.entries(obj)) {
@@ -31,7 +48,14 @@ export function objectToSnake(obj) {
       ) {
         val = val.id || val._id;
       }
-      const snakeKey = toSnakeCase(key);
+      let snakeKey = toSnakeCase(key);
+      if (tableName && TABLE_FIELD_ALIASES[tableName]) {
+        if (TABLE_FIELD_ALIASES[tableName][key]) {
+          snakeKey = TABLE_FIELD_ALIASES[tableName][key];
+        } else if (TABLE_FIELD_ALIASES[tableName][snakeKey]) {
+          snakeKey = TABLE_FIELD_ALIASES[tableName][snakeKey];
+        }
+      }
       result[snakeKey] = val;
     }
   }
@@ -52,11 +76,22 @@ export function rowToCamel(row, tableName = "") {
     doc.__tableName = tableName;
   }
 
+  // Cross-compatibility aliases
+  if (tableName === "conversations" || row.user_id) {
+    doc.studentId = row.user_id || row.student_id || doc.userId;
+    doc.userId = row.user_id || row.student_id || doc.studentId;
+  }
+  if (tableName === "concept_edges" || row.source_node) {
+    doc.fromNodeId = row.source_node || row.from_node_id;
+    doc.toNodeId = row.target_node || row.to_node_id;
+    doc.relationType = row.relationship || row.relation_type;
+  }
+
   // Add instance methods like save()
   Object.defineProperty(doc, "save", {
     value: async function () {
       const targetTable = this.__tableName || tableName || "documents";
-      const updates = objectToSnake(this);
+      const updates = objectToSnake(this, targetTable);
       delete updates.id;
       delete updates._id;
       delete updates.created_at;
@@ -139,7 +174,12 @@ class QueryBuilder {
         const orConditions = value
           .map((cond) => {
             const [k, v] = Object.entries(cond)[0] || [];
-            const col = k === "_id" ? "id" : toSnakeCase(k);
+            let col = k === "_id" ? "id" : toSnakeCase(k);
+            if (TABLE_FIELD_ALIASES[this.tableName]?.[k]) {
+              col = TABLE_FIELD_ALIASES[this.tableName][k];
+            } else if (TABLE_FIELD_ALIASES[this.tableName]?.[col]) {
+              col = TABLE_FIELD_ALIASES[this.tableName][col];
+            }
             return `${col}.eq.${v}`;
           })
           .join(",");
@@ -147,7 +187,29 @@ class QueryBuilder {
         continue;
       }
 
-      const col = key === "_id" ? "id" : toSnakeCase(key);
+      let col = key === "_id" ? "id" : toSnakeCase(key);
+      if (TABLE_FIELD_ALIASES[this.tableName]?.[key]) {
+        col = TABLE_FIELD_ALIASES[this.tableName][key];
+      } else if (TABLE_FIELD_ALIASES[this.tableName]?.[col]) {
+        col = TABLE_FIELD_ALIASES[this.tableName][col];
+      }
+
+      // Handle JSONB array columns (such as enrolled_student_ids on subjects)
+      if (col === "enrolled_student_ids") {
+        if (Array.isArray(value)) {
+          query = query.contains(col, JSON.stringify(value));
+        } else if (value && typeof value === "object") {
+          if (value.$in && Array.isArray(value.$in)) {
+            const orFilters = value.$in.map((v) => `${col}.cs.[${JSON.stringify(String(v))}]`).join(",");
+            if (orFilters) query = query.or(orFilters);
+          } else {
+            query = query.contains(col, JSON.stringify([String(value)]));
+          }
+        } else if (value !== null && value !== undefined) {
+          query = query.contains(col, JSON.stringify([String(value)]));
+        }
+        continue;
+      }
 
       if (value === null || value === undefined) {
         query = query.is(col, null);
@@ -289,7 +351,7 @@ export function createSupabaseModel(tableName) {
     Object.defineProperty(this, "save", {
       value: async function () {
         const targetTable = this.__tableName || tableName;
-        const updates = objectToSnake(this);
+        const updates = objectToSnake(this, targetTable);
         const rowId = updates.id || this.id || this._id;
         delete updates.id;
         delete updates._id;
@@ -372,7 +434,7 @@ export function createSupabaseModel(tableName) {
     if (Array.isArray(doc)) {
       return Model.insertMany(doc);
     }
-    const snakeDoc = objectToSnake(doc);
+    const snakeDoc = objectToSnake(doc, tableName);
     if (!snakeDoc.id && doc._id) snakeDoc.id = String(doc._id);
     snakeDoc.created_at = snakeDoc.created_at || new Date().toISOString();
     snakeDoc.updated_at = new Date().toISOString();
@@ -394,7 +456,7 @@ export function createSupabaseModel(tableName) {
 
   Model.insertMany = async function (docs) {
     const snakeDocs = docs.map((d) => {
-      const sd = objectToSnake(d);
+      const sd = objectToSnake(d, tableName);
       if (!sd.id && d._id) sd.id = String(d._id);
       sd.created_at = sd.created_at || new Date().toISOString();
       sd.updated_at = new Date().toISOString();
@@ -424,7 +486,7 @@ export function createSupabaseModel(tableName) {
     delete updateData.$push;
     delete updateData.$pull;
 
-    const snakeUpdate = objectToSnake(updateData);
+    const snakeUpdate = objectToSnake(updateData, tableName);
     delete snakeUpdate.id;
     delete snakeUpdate._id;
     snakeUpdate.updated_at = new Date().toISOString();

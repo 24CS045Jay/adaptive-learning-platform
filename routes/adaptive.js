@@ -5,127 +5,151 @@ import {
   Attempt,
   User,
   Subject,
-  LearnerPreference,
   AuditLog,
+  Question,
+  Quiz,
+  Document,
 } from "../models/index.js";
+import {
+  generateRecommendationsForStudent,
+  recordRecommendationInteraction,
+  getFacultyRecommendationInsights,
+} from "../lib/recommendation-engine.js";
 
 const router = express.Router();
 
 router.use(authenticate);
 
-// In-memory fallback stores for high-availability
-const memoryPreferences = new Map();
-const memoryMastery = new Map();
-
-// Helper to seed initial mastery items for students if empty
-function getStudentSeedMastery(studentId) {
-  return [
-    {
-      id: `tm-${studentId}-1`,
-      studentId,
-      subjectCode: "CSUC301",
-      topic: "HDFS Architecture & Block Storage",
-      score: 85,
-      attemptsCount: 4,
-      masteryLabel: "mastered",
-      lastPracticedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-      prerequisites: ["Distributed File Systems"],
-      weakSubtopics: [],
-    },
-    {
-      id: `tm-${studentId}-2`,
-      studentId,
-      subjectCode: "CSUC301",
-      topic: "MapReduce Shuffle & Sort Phase",
-      score: 52,
-      attemptsCount: 3,
-      masteryLabel: "weak",
-      lastPracticedAt: new Date(Date.now() - 86400000 * 1).toISOString(),
-      prerequisites: ["HDFS Block Storage"],
-      weakSubtopics: ["Spill to disk threshold", "Partition function routing"],
-    },
-    {
-      id: `tm-${studentId}-3`,
-      studentId,
-      subjectCode: "CSUC301",
-      topic: "Kafka Stream Partitioning & Offsets",
-      score: 72,
-      attemptsCount: 2,
-      masteryLabel: "proficient",
-      lastPracticedAt: new Date().toISOString(),
-      prerequisites: ["Publish-Subscribe Patterns"],
-      weakSubtopics: ["Consumer group rebalance"],
-    },
-    {
-      id: `tm-${studentId}-4`,
-      studentId,
-      subjectCode: "CSUC301",
-      topic: "Spark RDD Transformations vs Actions",
-      score: 48,
-      attemptsCount: 2,
-      masteryLabel: "weak",
-      lastPracticedAt: new Date(Date.now() - 86400000 * 4).toISOString(),
-      prerequisites: ["In-Memory Computing", "MapReduce"],
-      weakSubtopics: ["Wide dependencies vs Narrow dependencies", "Lazy evaluation"],
-    },
-  ];
-}
-
 /**
  * GET /api/adaptive/profile
- * Returns the student's mastery profile, weak topics, and active preferences
+ * Returns the student's authentic mastery profile, weak topics, and active preferences.
+ * When no attempts exist, returns a transparent insufficient_data state (no fake mock data).
  */
-router.get("/profile", requireRole("student"), async (req, res) => {
+router.get("/profile", requireRole("student", "faculty", "admin"), async (req, res) => {
   try {
-    const studentId = req.user.id || req.user._id;
+    const studentId = String(req.user.id || req.user._id).trim();
 
-    // 1. Fetch or initialize preferences
-    let prefs = null;
+    // 1. Fetch preferences from AuditLog
+    let prefs = {
+      studentId,
+      explanationLevel: "intermediate",
+      preferredLanguage: "en",
+      dailyGoalMinutes: 30,
+      enableSpacedRepetition: true,
+      updatedAt: new Date().toISOString(),
+    };
+
     try {
-      prefs = await LearnerPreference.findOne({ studentId });
-    } catch {}
-    if (!prefs) prefs = memoryPreferences.get(studentId);
-
-    if (!prefs) {
-      prefs = {
-        studentId,
-        explanationLevel: "intermediate", // "beginner" | "intermediate" | "advanced"
-        preferredLanguage: "en",           // "en" | "gu" | "hi"
-        dailyGoalMinutes: 30,
-        enableSpacedRepetition: true,
-        updatedAt: new Date().toISOString(),
-      };
-      memoryPreferences.set(studentId, prefs);
+      const prefLog = await AuditLog.findOne({
+        actor_id: studentId,
+        action: "LEARNER_PREFERENCE",
+      });
+      if (prefLog && prefLog.details) {
+        prefs = { ...prefs, ...prefLog.details, studentId };
+      }
+    } catch (e) {
+      console.warn("[Adaptive API] Error fetching preference audit log:", e.message);
     }
 
-    // 2. Fetch or compute topic masteries
+    // 2. Fetch real topic masteries from TopicMastery table
     let masteries = [];
     try {
-      masteries = await TopicMastery.find({ studentId });
-    } catch {}
+      const rows = await TopicMastery.find({ user_id: studentId });
+      masteries = (rows || []).map((m) => {
+        const score = typeof m.score === "number" ? m.score : Number(m.score || 0);
+        const attempts = typeof m.total_attempts === "number" ? m.total_attempts : Number(m.totalAttempts || m.total_attempts || 0);
 
-    if (!masteries || masteries.length === 0) {
-      if (!memoryMastery.has(studentId)) {
-        memoryMastery.set(studentId, getStudentSeedMastery(studentId));
-      }
-      masteries = memoryMastery.get(studentId);
+        let status = "insufficient_data";
+        if (attempts >= 2) {
+          if (score < 60) status = "needs_practice";
+          else if (score < 80) status = "developing";
+          else status = "strong";
+        }
+
+        return {
+          id: String(m.id || m._id),
+          studentId,
+          subjectId: m.subject_id || m.subjectId,
+          topic: m.topic,
+          score,
+          totalAttempts: attempts,
+          lastEvaluated: m.last_evaluated || m.updated_at || m.created_at,
+          status,
+          masteryLabel: status === "strong" ? "mastered" : status === "needs_practice" ? "weak" : "proficient",
+        };
+      });
+    } catch (e) {
+      console.warn("[Adaptive API] Error fetching topic masteries:", e.message);
     }
 
-    // 3. Compute aggregate statistics
+    // 3. Compute aggregate statistics from real data
     const totalTopics = masteries.length;
-    const avgScore = totalTopics > 0
-      ? Math.round(masteries.reduce((acc, m) => acc + (m.score || 0), 0) / totalTopics)
-      : 70;
+    const evaluatedMasteries = masteries.filter((m) => m.totalAttempts >= 2);
 
-    const weakTopics = masteries.filter((m) => (m.score || 0) < 60 || m.masteryLabel === "weak");
-    const masteredTopics = masteries.filter((m) => (m.score || 0) >= 80 || m.masteryLabel === "mastered");
+    const avgScore = evaluatedMasteries.length > 0
+      ? Math.round(evaluatedMasteries.reduce((acc, m) => acc + (m.score || 0), 0) / evaluatedMasteries.length)
+      : null;
+
+    const weakTopics = masteries.filter((m) => m.status === "needs_practice" || (m.totalAttempts >= 2 && m.score < 60));
+    const masteredTopics = masteries.filter((m) => m.status === "strong" || (m.totalAttempts >= 2 && m.score >= 80));
 
     // 4. Compute spaced-repetition due topics (items practiced > 2 days ago or weak)
     const twoDaysAgo = Date.now() - 86400000 * 2;
     const reviewDue = masteries.filter((m) => {
-      const practiceTime = m.lastPracticedAt ? new Date(m.lastPracticedAt).getTime() : 0;
-      return practiceTime < twoDaysAgo || (m.score || 0) < 65;
+      const practiceTime = m.lastEvaluated ? new Date(m.lastEvaluated).getTime() : 0;
+      return (practiceTime < twoDaysAgo && m.totalAttempts > 0) || m.status === "needs_practice";
     });
+
+    // 5. Build structured LearnerKnowledgeProfile for Adaptive RAG
+    const demonstrated = masteries
+      .filter((m) => m.score >= 75 || m.status === "strong")
+      .map((m) => m.topic);
+    const needingPractice = masteries
+      .filter((m) => m.status === "needs_practice" || (m.totalAttempts >= 1 && m.score < 65))
+      .map((m) => m.topic);
+
+    let estimatedLevel = "developing";
+    if (avgScore !== null) {
+      if (avgScore >= 85 && evaluatedMasteries.length >= 3) estimatedLevel = "advanced";
+      else if (avgScore >= 70) estimatedLevel = "proficient";
+      else if (avgScore >= 55) estimatedLevel = "developing";
+      else estimatedLevel = "beginner";
+    } else if (prefs.explanationLevel) {
+      estimatedLevel = prefs.explanationLevel === "intermediate" ? "developing" : prefs.explanationLevel;
+    }
+
+    const confidence = evaluatedMasteries.length >= 4 ? 0.9 : evaluatedMasteries.length >= 2 ? 0.7 : evaluatedMasteries.length >= 1 ? 0.5 : 0.25;
+
+    let recentScores = [];
+    try {
+      const attempts = await Attempt.find({ student_id: studentId });
+      recentScores = (attempts || [])
+        .slice(-5)
+        .map((a) => (typeof a.score === "number" ? a.score : Number(a.score || 0)));
+    } catch {
+      // non-fatal
+    }
+
+    const learnerKnowledgeProfile = {
+      student_id: studentId,
+      estimated_mastery_level: estimatedLevel,
+      concepts_demonstrated: demonstrated,
+      concepts_needing_practice: needingPractice,
+      recent_quiz_scores: recentScores,
+      recurring_mistakes: [],
+      preferred_explanation_depth: prefs.explanationLevel || "developing",
+      preferred_language: prefs.preferredLanguage || "en",
+      preferred_teaching_mode: prefs.preferredTeachingMode || "ask_tutor",
+      last_assessed_at: masteries[0]?.lastEvaluated || new Date().toISOString(),
+      evidence_sources: masteries.map((m) => ({
+        source: "topic_mastery",
+        topic: m.topic,
+        score: m.score,
+        attempts: m.totalAttempts,
+        timestamp: m.lastEvaluated,
+      })),
+      confidence_in_mastery_estimate: confidence,
+    };
 
     res.json({
       success: true,
@@ -134,10 +158,13 @@ router.get("/profile", requireRole("student"), async (req, res) => {
         name: req.user.name,
         email: req.user.email,
       },
+      hasData: evaluatedMasteries.length > 0,
       preferences: prefs,
+      learnerKnowledgeProfile,
       stats: {
         overallMasteryPct: avgScore,
         totalTopicsTracked: totalTopics,
+        evaluatedTopicsCount: evaluatedMasteries.length,
         weakCount: weakTopics.length,
         masteredCount: masteredTopics.length,
         reviewDueCount: reviewDue.length,
@@ -154,48 +181,53 @@ router.get("/profile", requireRole("student"), async (req, res) => {
 
 /**
  * PUT /api/adaptive/preferences
- * Student updates their personal learning preferences (explanation level, language, goal)
+ * Student updates their personal learning preferences
  */
-router.put("/preferences", requireRole("student"), async (req, res) => {
+router.put("/preferences", requireRole("student", "faculty", "admin"), async (req, res) => {
   try {
-    const studentId = req.user.id || req.user._id;
-    const { explanationLevel, preferredLanguage, dailyGoalMinutes, enableSpacedRepetition } = req.body;
+    const studentId = String(req.user.id || req.user._id).trim();
+    const { explanationLevel, preferredLanguage, preferredTeachingMode, dailyGoalMinutes, enableSpacedRepetition } = req.body;
 
-    const validLevels = ["beginner", "intermediate", "advanced"];
+    const validLevels = ["beginner", "intermediate", "developing", "proficient", "advanced"];
     const validLanguages = ["en", "gu", "hi", "mr", "bn", "ta", "te", "es", "fr"];
 
-    let prefs = memoryPreferences.get(studentId) || { studentId };
+    const updated = {
+      studentId,
+      explanationLevel: validLevels.includes(explanationLevel) ? explanationLevel : "intermediate",
+      preferredLanguage: validLanguages.includes(preferredLanguage) ? preferredLanguage : "en",
+      preferredTeachingMode: preferredTeachingMode || "ask_tutor",
+      dailyGoalMinutes: typeof dailyGoalMinutes === "number" ? Math.max(10, Math.min(180, dailyGoalMinutes)) : 30,
+      enableSpacedRepetition: typeof enableSpacedRepetition === "boolean" ? enableSpacedRepetition : true,
+      updatedAt: new Date().toISOString(),
+    };
 
-    if (explanationLevel && validLevels.includes(explanationLevel)) {
-      prefs.explanationLevel = explanationLevel;
-    }
-    if (preferredLanguage && validLanguages.includes(preferredLanguage)) {
-      prefs.preferredLanguage = preferredLanguage;
-    }
-    if (typeof dailyGoalMinutes === "number") {
-      prefs.dailyGoalMinutes = Math.max(10, Math.min(180, dailyGoalMinutes));
-    }
-    if (typeof enableSpacedRepetition === "boolean") {
-      prefs.enableSpacedRepetition = enableSpacedRepetition;
-    }
-    prefs.updatedAt = new Date().toISOString();
-
+    // Persist to audit_logs
     try {
-      const existing = await LearnerPreference.findOne({ studentId });
+      const existing = await AuditLog.findOne({
+        actor_id: studentId,
+        action: "LEARNER_PREFERENCE",
+      });
+
       if (existing) {
-        Object.assign(existing, prefs);
+        existing.details = updated;
+        existing.updated_at = new Date().toISOString();
         await existing.save();
       } else {
-        await LearnerPreference.create(prefs);
+        await AuditLog.create({
+          actor_id: studentId,
+          action: "LEARNER_PREFERENCE",
+          target: studentId,
+          details: updated,
+        });
       }
-    } catch {}
-
-    memoryPreferences.set(studentId, prefs);
+    } catch (e) {
+      console.warn("[Adaptive API] Error persisting preference audit log:", e.message);
+    }
 
     res.json({
       success: true,
       message: "Learner preferences updated successfully.",
-      preferences: prefs,
+      preferences: updated,
     });
   } catch (error) {
     console.error("[Adaptive API] Error updating preferences:", error);
@@ -204,50 +236,142 @@ router.put("/preferences", requireRole("student"), async (req, res) => {
 });
 
 /**
- * GET /api/adaptive/recommendations
- * Explainable topic recommendations based on mastery signals
+ * POST /api/adaptive/reset
+ * Student resets their personal learning profile and preferences
  */
-router.get("/recommendations", requireRole("student"), async (req, res) => {
+router.post("/reset", requireRole("student", "faculty", "admin"), async (req, res) => {
   try {
-    const studentId = req.user.id || req.user._id;
+    const studentId = String(req.user.id || req.user._id).trim();
 
-    let masteries = memoryMastery.get(studentId) || getStudentSeedMastery(studentId);
+    try {
+      await TopicMastery.deleteMany({ user_id: studentId });
+    } catch (e) {
+      console.warn("[Adaptive API] Clear TopicMastery notice:", e.message);
+    }
 
-    // Build explainable recommendations
-    const recommendations = masteries
-      .filter((m) => (m.score || 0) < 75)
-      .map((m) => {
-        let reason = "";
-        let urgency = "medium";
+    const defaultPrefs = {
+      studentId,
+      explanationLevel: "developing",
+      preferredLanguage: "en",
+      preferredTeachingMode: "ask_tutor",
+      dailyGoalMinutes: 30,
+      enableSpacedRepetition: true,
+      updatedAt: new Date().toISOString(),
+    };
 
-        if (m.score < 55) {
-          urgency = "high";
-          reason = `Low diagnostic mastery (${m.score}%). Missing foundation in ${m.prerequisites.join(", ") || "core principles"}.`;
-        } else if (m.weakSubtopics && m.weakSubtopics.length > 0) {
-          urgency = "medium";
-          reason = `Demonstrated difficulty on specific subtopics: ${m.weakSubtopics.join(", ")}.`;
-        } else {
-          urgency = "low";
-          reason = "Recommended for periodic reinforcement before upcoming module examination.";
-        }
-
-        return {
-          topic: m.topic,
-          subjectCode: m.subjectCode,
-          currentScore: m.score,
-          urgency,
-          reason,
-          prerequisites: m.prerequisites || [],
-          suggestedActions: [
-            "Ask EduSense AI tutor for step-by-step worked example",
-            "Generate adaptive practice quiz",
-            "Review uploaded syllabus lecture slides",
-          ],
-        };
+    try {
+      const existing = await AuditLog.findOne({
+        actor_id: studentId,
+        action: "LEARNER_PREFERENCE",
       });
+      if (existing) {
+        existing.details = defaultPrefs;
+        existing.updated_at = new Date().toISOString();
+        await existing.save();
+      }
+    } catch (e) {
+      console.warn("[Adaptive API] Reset audit log notice:", e.message);
+    }
 
     res.json({
       success: true,
+      message: "Learner personalization data successfully reset.",
+      preferences: defaultPrefs,
+    });
+  } catch (error) {
+    console.error("[Adaptive API] Error resetting personalization:", error);
+    res.status(500).json({ error: "Failed to reset personalization data." });
+  }
+});
+
+/**
+ * POST /api/adaptive/evaluate-check
+ * Evaluates student understanding check response and updates mastery
+ */
+router.post("/evaluate-check", requireRole("student", "faculty", "admin"), async (req, res) => {
+  try {
+    const studentId = String(req.user.id || req.user._id).trim();
+    const { question, studentAnswer, concept } = req.body;
+
+    if (!question || !studentAnswer) {
+      return res.status(400).json({ error: "question and studentAnswer are required." });
+    }
+
+    const internalToken = process.env.INTERNAL_SERVICE_TOKEN || "univ-rag-internal-dev-token";
+    const ragServiceUrl = process.env.RAG_SERVICE_URL || "http://127.0.0.1:8001";
+
+    const response = await fetch(`${ragServiceUrl}/adaptive/evaluate-check`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Token": internalToken,
+      },
+      body: JSON.stringify({
+        student_id: studentId,
+        question,
+        student_answer: studentAnswer,
+        concept: concept || "Understanding Check",
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `RAG service evaluation failed: ${errText}` });
+    }
+
+    const result = await response.json();
+
+    // Update TopicMastery in DB if concept is specified
+    if (concept && typeof result.score === "number") {
+      try {
+        let tm = await TopicMastery.findOne({ user_id: studentId, topic: concept });
+        if (tm) {
+          const prevScore = Number(tm.score || 0);
+          const prevAttempts = Number(tm.total_attempts || 0);
+          const newScore = Math.round((prevScore * prevAttempts + result.score) / (prevAttempts + 1));
+          tm.score = newScore;
+          tm.total_attempts = prevAttempts + 1;
+          tm.last_evaluated = new Date().toISOString();
+          await tm.save();
+        } else {
+          await TopicMastery.create({
+            user_id: studentId,
+            topic: concept,
+            score: Math.round(result.score),
+            total_attempts: 1,
+            last_evaluated: new Date().toISOString(),
+          });
+        }
+      } catch (tmErr) {
+        console.warn("[Adaptive API] TopicMastery update notice:", tmErr.message);
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("[Adaptive API] Error evaluating understanding check:", error);
+    res.status(500).json({ error: "Failed to evaluate concept check." });
+  }
+});
+
+/**
+ * GET /api/adaptive/recommendations
+ * Dynamically generated, explainable topic recommendations from real learning signals & course materials
+ */
+router.get("/recommendations", requireRole("student", "faculty", "admin"), async (req, res) => {
+  try {
+    const studentId = String(req.user.id || req.user._id).trim();
+    const courseId = req.query.courseId || req.query.subjectId;
+
+    const recommendations = await generateRecommendationsForStudent(studentId, {
+      courseId,
+      limit: 6,
+    });
+
+    res.json({
+      success: true,
+      count: recommendations.length,
       recommendations,
     });
   } catch (error) {
@@ -257,93 +381,108 @@ router.get("/recommendations", requireRole("student"), async (req, res) => {
 });
 
 /**
- * POST /api/adaptive/practice-quiz
- * Generate a personalized practice quiz specifically targeting weak topics
+ * POST /api/adaptive/recommendations/:id/interaction
+ * Captures student interactions with recommendations (viewed, selected, completed, dismissed, feedback)
  */
-router.post("/practice-quiz", requireRole("student"), async (req, res) => {
+router.post("/recommendations/:id/interaction", requireRole("student", "faculty", "admin"), async (req, res) => {
   try {
-    const studentId = req.user.id || req.user._id;
-    const { topic, difficulty = "intermediate" } = req.body;
+    const studentId = String(req.user.id || req.user._id).trim();
+    const recommendationId = req.params.id;
+    const { eventType, topic, courseId, feedbackValue } = req.body;
 
-    // Generated grounded practice questions targeting known student misconceptions
-    const questions = [
-      {
-        id: "q-1",
-        question: "Why does the MapReduce Shuffle phase introduce significant network I/O overhead?",
-        options: [
-          "Because intermediate map keys must be sorted and partitioned across all reducers over the network",
-          "Because input splits are duplicated across every DataNode",
-          "Because HDFS replication factor defaults to 1",
-          "Because reducers write directly to client browsers",
-        ],
-        correctIndex: 0,
-        explanation: "During shuffle, partitioner routes intermediate (key, value) pairs to corresponding reducers across network nodes, triggering high disk and network bandwidth consumption.",
-        difficulty,
-      },
-      {
-        id: "q-2",
-        question: "In Apache Kafka, what happens when a new consumer joins an existing consumer group?",
-        options: [
-          "Topic partitions are automatically deleted",
-          "A group rebalance is triggered and partition ownership is reassigned",
-          "Consumer offset commits are rolled back to zero",
-          "All incoming producer traffic is blocked",
-        ],
-        correctIndex: 1,
-        explanation: "Group coordinator detects the new consumer heartbeat and initiates partition rebalance to evenly redistribute topic partitions.",
-        difficulty,
-      },
-      {
-        id: "q-3",
-        question: "What differentiates Spark's Wide Dependencies from Narrow Dependencies?",
-        options: [
-          "Wide dependencies require data shuffling across cluster nodes, whereas narrow dependencies compute within the same partition",
-          "Narrow dependencies take longer to execute than wide dependencies",
-          "Wide dependencies cannot recover from node failures",
-          "Narrow dependencies require persistent disk storage",
-        ],
-        correctIndex: 0,
-        explanation: "In narrow dependencies (e.g. map, filter), each partition of parent RDD is used by at most one child partition. Wide dependencies (e.g. groupByKey, reduceByKey) require data shuffle across multiple partitions.",
-        difficulty,
-      },
-    ];
+    if (!eventType) {
+      return res.status(400).json({ error: "eventType is required ('viewed', 'selected', 'completed', 'dismissed', 'feedback')." });
+    }
+
+    const logEntry = await recordRecommendationInteraction({
+      recommendationId,
+      studentId,
+      topic,
+      courseId,
+      eventType,
+      feedbackValue,
+    });
 
     res.json({
       success: true,
-      topic: topic || "Big Data Fundamentals",
+      message: `Recommendation ${eventType} interaction recorded.`,
+      interactionId: String(logEntry.id || logEntry._id),
+    });
+  } catch (error) {
+    console.error("[Adaptive API] Error recording recommendation interaction:", error);
+    res.status(500).json({ error: error.message || "Failed to record recommendation interaction." });
+  }
+});
+
+/**
+ * POST /api/adaptive/practice-quiz
+ * Generates an adaptive practice quiz dynamically from the question bank matching the topic or enrolled subject
+ */
+router.post("/practice-quiz", requireRole("student", "faculty", "admin"), async (req, res) => {
+  try {
+    const studentId = String(req.user.id || req.user._id).trim();
+    const { topic, subjectId, difficulty = "medium" } = req.body;
+
+    // 1. Search for actual questions in DB matching topic or subject
+    let questions = [];
+    try {
+      if (topic) {
+        questions = await Question.find({ topicTag: topic });
+      }
+      if (questions.length === 0 && subjectId) {
+        const quizzes = await Quiz.find({ subjectId });
+        const qIds = quizzes.map((q) => q.id || q._id);
+        if (qIds.length > 0) {
+          questions = await Question.find({ quizId: { $in: qIds } });
+        }
+      }
+      if (questions.length === 0) {
+        // Fallback: search all available questions
+        questions = await Question.find({}).limit(5);
+      }
+    } catch (e) {
+      console.warn("[Adaptive API] Error fetching practice questions:", e.message);
+    }
+
+    if (questions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        topic: topic || "Course Topics",
+        message: "No practice questions have been uploaded for this topic yet. Faculty can create assessment questions in Faculty Quizzes.",
+        questions: [],
+      });
+    }
+
+    const formattedQuestions = questions.slice(0, 5).map((q, idx) => ({
+      id: String(q.id || q._id || `q-${idx}`),
+      question: q.text,
+      options: Array.isArray(q.options) ? q.options : [],
+      correctIndex: typeof q.correctOption === "number" ? q.correctOption : 0,
+      difficulty: q.difficulty || difficulty,
+      topicTag: q.topicTag || topic || "General",
+    }));
+
+    res.json({
+      success: true,
+      topic: topic || "Dynamic Practice Assessment",
       difficulty,
-      questions,
+      questions: formattedQuestions,
     });
   } catch (error) {
     console.error("[Adaptive API] Error creating practice quiz:", error);
-    res.status(500).json({ error: "Failed to generate adaptive quiz." });
+    res.status(500).json({ error: "Failed to generate practice quiz." });
   }
 });
 
 /**
  * GET /api/adaptive/faculty-analytics
- * Aggregated topic mastery and weak subtopic heatmap for faculty
+ * Live aggregated topic mastery and engagement insights computed from real database records
  */
 router.get("/faculty-analytics", requireRole("faculty", "admin"), async (req, res) => {
   try {
-    const topicBreakdown = [
-      { topic: "HDFS Architecture & Block Storage", avgScore: 82, studentsMastered: 48, studentsStruggling: 6, status: "healthy" },
-      { topic: "MapReduce Shuffle & Sort Phase", avgScore: 54, studentsMastered: 18, studentsStruggling: 36, status: "critical_gap" },
-      { topic: "Kafka Stream Partitioning & Offsets", avgScore: 71, studentsMastered: 38, studentsStruggling: 16, status: "moderate" },
-      { topic: "Spark RDD Transformations vs Actions", avgScore: 51, studentsMastered: 14, studentsStruggling: 40, status: "critical_gap" },
-      { topic: "NoSQL Cassandra Ring & Consistent Hashing", avgScore: 76, studentsMastered: 42, studentsStruggling: 12, status: "moderate" },
-    ];
-
-    res.json({
-      success: true,
-      subjectCode: "CSUC301",
-      subjectName: "Big Data Analytics",
-      totalStudents: 54,
-      overallClassAverage: 66.8,
-      topicBreakdown,
-      criticalGaps: ["MapReduce Shuffle & Sort Phase", "Spark RDD Transformations vs Actions"],
-      recommendedAction: "Schedule a group doubt session or upload additional worked-example materials on Wide vs Narrow dependencies.",
-    });
+    const { subjectId } = req.query;
+    const insights = await getFacultyRecommendationInsights(subjectId);
+    res.json(insights);
   } catch (error) {
     console.error("[Adaptive API] Error fetching faculty analytics:", error);
     res.status(500).json({ error: "Failed to fetch faculty analytics." });

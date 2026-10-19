@@ -1,0 +1,50 @@
+{
+  "model_version": "1.0.0",
+  "champion_algorithm": "Gradient_Boosting",
+  "trained_at": "2026-10-14T15:32:16.062694",
+  "dataset_rows": 8192,
+  "unique_students": 120,
+  "feature_columns": [
+    "total_attempts",
+    "correct_count",
+    "incorrect_count",
+    "raw_accuracy",
+    "smoothed_accuracy",
+    "recent_accuracy",
+    "performance_trend",
+    "days_since_last_attempt",
+    "weighted_difficulty_score",
+    "wilson_lower_bound",
+    "confidence_weight"
+  ],
+  "metrics": {
+    "Baseline_Bayesian": {
+      "Accuracy": 0.7442,
+      "ROC_AUC": 0.6677,
+      "Brier_Score": 0.1846,
+      "Log_Loss": 0.5507,
+      "ECE": 0.1586
+    },
+    "Calibrated_Logistic_Regression": {
+      "Accuracy": 0.7876,
+      "ROC_AUC": 0.6672,
+      "Brier_Score": 0.1582,
+      "Log_Loss": 0.4892,
+      "ECE": 0.017
+    },
+    "Random_Forest": {
+      "Accuracy": 0.7901,
+      "ROC_AUC": 0.6621,
+      "Brier_Score": 0.1583,
+      "Log_Loss": 0.4891,
+      "ECE": 0.0168
+    },
+    "Gradient_Boosting": {
+      "Accuracy": 0.7863,
+      "ROC_AUC": 0.6539,
+      "Brier_Score": 0.1596,
+      "Log_Loss": 0.4927,
+      "ECE": 0.0146
+    }
+  }
+}

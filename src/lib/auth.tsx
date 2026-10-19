@@ -36,9 +36,8 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (role: Role, email: string, password: string) => Promise<LoginResult>;
   loginWithGoogle: (role: Role, email?: string, name?: string) => LoginResult;
-  signInWithGoogleOAuth: (role?: Role) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
-  sendPasswordReset: (email: string) => { ok: boolean; error?: string };
+  sendPasswordReset: (email: string) => Promise<{ ok: boolean; error?: string }> | { ok: boolean; error?: string };
   sendOtp: (email: string, name?: string) => Promise<{ ok: boolean; message?: string; error?: string }>;
   changePassword: (currentPw: string, newPw: string) => { ok: boolean; error?: string };
   clearMustChangePw: () => void;
@@ -342,10 +341,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveActiveUser(null);
   }, []);
 
-  const sendPasswordReset = useCallback((email: string): { ok: boolean; error?: string } => {
-    const ok = requestPasswordReset(email);
-    return ok ? { ok: true } : { ok: false, error: "No account found with this email." };
-  }, []);
+  const sendPasswordReset = useCallback(
+    async (email: string): Promise<{ ok: boolean; error?: string }> => {
+      try {
+        const response = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          return { ok: true };
+        }
+        return { ok: false, error: data.error || "Failed to send reset link." };
+      } catch {
+        const ok = requestPasswordReset(email);
+        return ok ? { ok: true } : { ok: false, error: "No account found with this email." };
+      }
+    },
+    [],
+  );
 
   const changePassword = useCallback(
     (currentPw: string, newPw: string): { ok: boolean; error?: string } => {

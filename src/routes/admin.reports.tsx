@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, FileText, CheckCircle2, ShieldCheck, Printer, Filter, Sparkles } from "lucide-react";
 import { PageHeader, Card, PrimaryButton, Pill } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
+import { useAuth } from "@/lib/auth";
+import { API_BASE, authHeaders } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/reports")({
@@ -13,27 +15,50 @@ export type ReportType = "student_mastery" | "faculty_coverage" | "rag_complianc
 
 function Reports() {
   const { subjects, documents, users, queries } = useAppData();
+  const { user } = useAuth();
+  const token = localStorage.getItem("token") || "";
 
   const [activeReportType, setActiveReportType] = useState<ReportType>("student_mastery");
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [downloadSuccess, setDownloadSuccess]     = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [liveReports, setLiveReports] = useState<any[]>([]);
 
-  const reportRows = subjects.map((s, i) => {
-    const approvedDocs = documents.filter((d) => d.subjectId === s.id && d.status === "approved").length;
-    const studentCount = s.enrolledStudentIds.length;
-    const masteryPct = [84, 91, 76, 78, 88, 72][i] ?? 80;
+  useEffect(() => {
+    async function fetchReports() {
+      try {
+        const res = await fetch(`${API_BASE}/api/analytics/institutional-reports`, {
+          headers: authHeaders(token, { role: user?.role, id: user?.id }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveReports(data);
+        }
+      } catch (err) {
+        console.warn("[Reports] Failed to fetch live reports:", err);
+      }
+    }
+    fetchReports();
+  }, [token, user]);
 
-    return {
-      subjectName: s.name,
-      code: s.code,
-      faculty: s.faculty,
-      approvedDocs,
-      studentCount,
-      queriesCount: Math.round(approvedDocs * 24 + 30),
-      masteryPct,
-      complianceStatus: "Compliant ✓",
-    };
-  });
+  const reportRows = liveReports.length > 0
+    ? liveReports
+    : subjects.map((s) => {
+        const approvedDocs = documents.filter((d) => (d.subjectId === s.id || (d as any).subject_id === s.id) && d.status === "approved").length;
+        const studentCount = (s.enrolledStudentIds || []).length;
+        const subjQueries = queries.filter((q) => q.subject === s.name || q.subject === s.code).length;
+
+        return {
+          id: s.id,
+          subjectName: s.name,
+          code: s.code,
+          faculty: s.faculty || "Assigned Faculty",
+          approvedDocs,
+          studentCount,
+          queriesCount: subjQueries,
+          masteryPct: 0,
+          hasMasteryData: false,
+          complianceStatus: approvedDocs >= 1 ? "Compliant ✓" : "Pending Materials",
+        };
+      });
 
   const handleExportCSV = () => {
     const headers = ["Subject,Code,Faculty,Approved_Docs,Enrolled_Students,Total_Queries,Mastery_Pct,Compliance"];
@@ -129,8 +154,10 @@ function Reports() {
                   <td className="py-3 pr-4 text-foreground font-semibold">{r.approvedDocs} Docs</td>
                   <td className="py-3 pr-4 text-muted-foreground">{r.studentCount} Students</td>
                   <td className="py-3 pr-4 text-violet font-semibold">{r.queriesCount}</td>
-                  <td className="py-3 pr-4 text-success font-bold">{r.masteryPct}%</td>
-                  <td className="py-3"><Pill tone="green">{r.complianceStatus}</Pill></td>
+                  <td className="py-3 pr-4 text-success font-bold">
+                    {r.hasMasteryData ? `${r.masteryPct}%` : <span className="text-xs text-muted-foreground italic">No attempts yet</span>}
+                  </td>
+                  <td className="py-3"><Pill tone={r.approvedDocs > 0 ? "green" : "amber"}>{r.complianceStatus}</Pill></td>
                 </tr>
               ))}
             </tbody>
