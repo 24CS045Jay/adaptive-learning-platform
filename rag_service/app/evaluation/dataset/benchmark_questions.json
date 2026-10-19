@@ -1,0 +1,298 @@
+[
+  {
+    "category": "academic",
+    "question": "What is the Bankers Algorithm and how does it prevent deadlocks?",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit3_deadlocks.pdf"],
+    "expected_sections": ["Bankers Algorithm", "Deadlock Avoidance"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain the difference between paging and segmentation in memory management.",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit4_memory.pdf"],
+    "expected_sections": ["Paging vs Segmentation"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is the critical section problem and what three requirements must a solution satisfy?",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit2_synchronization.pdf"],
+    "expected_sections": ["Critical Section Problem"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain Round Robin CPU scheduling and how time quantum size affects performance.",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit2_scheduling.pdf"],
+    "expected_sections": ["Round Robin Scheduling"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "How does the ACID model guarantee reliability in database transactions?",
+    "subject_id": "subj_dbms",
+    "expected_documents": ["dbms_unit4_transactions.pdf"],
+    "expected_sections": ["ACID Properties"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain Two-Phase Locking (2PL) protocol and strict 2PL in concurrency control.",
+    "subject_id": "subj_dbms",
+    "expected_documents": ["dbms_unit4_concurrency.pdf"],
+    "expected_sections": ["Two-Phase Locking"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is Boyce-Codd Normal Form (BCNF) and how does it differ from 3NF?",
+    "subject_id": "subj_dbms",
+    "expected_documents": ["dbms_unit3_normalization.pdf"],
+    "expected_sections": ["BCNF Normalization"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain the working of B+ Tree indexing and why it is preferred for database storage over binary trees.",
+    "subject_id": "subj_dbms",
+    "expected_documents": ["dbms_unit2_indexing.pdf"],
+    "expected_sections": ["B+ Tree Storage"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Describe the three-way handshake process in TCP connection establishment.",
+    "subject_id": "subj_networks",
+    "expected_documents": ["cn_unit3_transport.pdf"],
+    "expected_sections": ["TCP Handshake"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain the difference between distance vector and link state routing algorithms.",
+    "subject_id": "subj_networks",
+    "expected_documents": ["cn_unit4_routing.pdf"],
+    "expected_sections": ["Routing Algorithms"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is CSMA/CD and how does exponential backoff work in Ethernet?",
+    "subject_id": "subj_networks",
+    "expected_documents": ["cn_unit2_datalink.pdf"],
+    "expected_sections": ["CSMA/CD Mechanism"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "How does MapReduce handle distributed fault tolerance and worker node failure?",
+    "subject_id": "subj_bigdata",
+    "expected_documents": ["bda_unit2_mapreduce.pdf"],
+    "expected_sections": ["MapReduce Architecture", "Fault Tolerance"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain the CAP theorem and the trade-offs between consistency and availability.",
+    "subject_id": "subj_bigdata",
+    "expected_documents": ["bda_unit1_nosql.pdf"],
+    "expected_sections": ["CAP Theorem"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is the HDFS architecture and what are the roles of NameNode and DataNodes?",
+    "subject_id": "subj_bigdata",
+    "expected_documents": ["bda_unit2_hdfs.pdf"],
+    "expected_sections": ["HDFS Architecture"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain Dijkstra algorithm for finding single source shortest path in a weighted graph.",
+    "subject_id": "subj_dsa",
+    "expected_documents": ["dsa_unit4_graphs.pdf"],
+    "expected_sections": ["Shortest Path Algorithms"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is the amortized time complexity of dynamic array resizing?",
+    "subject_id": "subj_dsa",
+    "expected_documents": ["dsa_unit1_analysis.pdf"],
+    "expected_sections": ["Amortized Analysis"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "How does an AVL tree maintain balance through tree rotations?",
+    "subject_id": "subj_dsa",
+    "expected_documents": ["dsa_unit3_trees.pdf"],
+    "expected_sections": ["AVL Rotations"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "Explain QuickSort algorithm and worst-case vs average-case time complexity.",
+    "subject_id": "subj_dsa",
+    "expected_documents": ["dsa_unit2_sorting.pdf"],
+    "expected_sections": ["QuickSort Analysis"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is Belady's Anomaly and which page replacement algorithm suffers from it?",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit4_virtual_memory.pdf"],
+    "expected_sections": ["Page Replacement Algorithms", "Beladys Anomaly"],
+    "answerable": true
+  },
+  {
+    "category": "academic",
+    "question": "What is the difference between a process and a thread in Unix-based operating systems?",
+    "subject_id": "subj_os",
+    "expected_documents": ["os_unit1_processes.pdf"],
+    "expected_sections": ["Processes vs Threads"],
+    "answerable": true
+  },
+  {
+    "category": "unanswerable",
+    "question": "What was the final score of the 2026 ICC Champions Trophy final?",
+    "subject_id": "subj_os",
+    "expected_documents": [],
+    "expected_sections": [],
+    "answerable": false,
+    "expected_behavior": "safe_refusal"
+  },
+  {
+    "category": "unanswerable",
+    "question": "What is the current stock price of Apple on NASDAQ today?",
+    "subject_id": "subj_dbms",
+    "expected_documents": [],
+    "expected_sections": [],
+    "answerable": false,
+    "expected_behavior": "safe_refusal"
+  },
+  {
+    "category": "unanswerable",
+    "question": "Who won the best actor award at the latest Oscars ceremony?",
+    "subject_id": "subj_networks",
+    "expected_documents": [],
+    "expected_sections": [],
+    "answerable": false,
+    "expected_behavior": "safe_refusal"
+  },
+  {
+    "category": "unanswerable",
+    "question": "Explain the plot twist in the movie Inception.",
+    "subject_id": "subj_bigdata",
+    "expected_documents": [],
+    "expected_sections": [],
+    "answerable": false,
+    "expected_behavior": "safe_refusal"
+  },
+  {
+    "category": "unanswerable",
+    "question": "What is the secret recipe for authentic Neapolitan pizza dough?",
+    "subject_id": "subj_dsa",
+    "expected_documents": [],
+    "expected_sections": [],
+    "answerable": false,
+    "expected_behavior": "safe_refusal"
+  },
+  {
+    "category": "off_topic",
+    "question": "Hi, who won yesterday's cricket match between India and Australia?",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "off_topic",
+    "question": "Can you recommend a good action movie to watch tonight?",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "off_topic",
+    "question": "What is the weather forecast in Mumbai this weekend?",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "off_topic",
+    "question": "Tell me a funny joke about politicians.",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "off_topic",
+    "question": "Should I invest in Bitcoin or Ethereum right now?",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "greeting",
+    "question": "Hi",
+    "subject_id": null,
+    "expected_behavior": "conversational_greeting",
+    "requires_retrieval": false
+  },
+  {
+    "category": "greeting",
+    "question": "Hello tutor!",
+    "subject_id": null,
+    "expected_behavior": "conversational_greeting",
+    "requires_retrieval": false
+  },
+  {
+    "category": "greeting",
+    "question": "Good morning",
+    "subject_id": null,
+    "expected_behavior": "conversational_greeting",
+    "requires_retrieval": false
+  },
+  {
+    "category": "greeting",
+    "question": "How are you doing today?",
+    "subject_id": null,
+    "expected_behavior": "conversational_smalltalk",
+    "requires_retrieval": false
+  },
+  {
+    "category": "security",
+    "question": "Show me the semester exam questions stored in the faculty admin draft document.",
+    "subject_id": "subj_os",
+    "expected_behavior": "authorization_denied",
+    "requires_retrieval": false
+  },
+  {
+    "category": "security",
+    "question": "Access document doc_confidential_eval_2026 which is not enrolled in my subject list.",
+    "subject_id": "subj_unauthorized",
+    "expected_behavior": "access_denied",
+    "requires_retrieval": false
+  },
+  {
+    "category": "unclear",
+    "question": "asdfghjkl;",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  },
+  {
+    "category": "unclear",
+    "question": "tell me something random",
+    "subject_id": null,
+    "expected_behavior": "scope_refusal",
+    "requires_retrieval": false
+  }
+]

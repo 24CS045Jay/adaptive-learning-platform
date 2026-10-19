@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { RefreshCcw, Trash2, FileText, Presentation, FileType2, Sliders, BookOpen } from "lucide-react";
+import { RefreshCcw, Trash2, FileText, Presentation, FileType2, Sliders, BookOpen, History } from "lucide-react";
 import { PageHeader, Card, Pill, statusTone } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
 import { useAuth } from "@/lib/auth";
 import { PassageWorkbenchModal } from "@/components/passage-workbench";
 import { DocumentViewerModal } from "@/components/document-viewer-modal";
+import { DocumentVersionsModal } from "@/components/document-versions-modal";
 import type { FileType, Difficulty } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ function MyDocuments() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [rerankDoc, setRerankDoc]       = useState<{ id: string; name: string } | null>(null);
   const [viewPdfDoc, setViewPdfDoc]     = useState<{ name: string; fileType: FileType; subjectId: string; uploadedBy: string; date: string } | null>(null);
+  const [versionDoc, setVersionDoc]     = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     refreshSubjects();
@@ -193,6 +195,13 @@ function MyDocuments() {
                         </button>
                         <button
                           className="hover:text-violet transition"
+                          title="Version History & Revisions"
+                          onClick={() => setVersionDoc({ id: d.id, name: d.name })}
+                        >
+                          <History className="h-4 w-4 text-violet" />
+                        </button>
+                        <button
+                          className="hover:text-violet transition"
                           title="Inspect & Rerank Chunks"
                           onClick={() => setRerankDoc({ id: d.id, name: d.name })}
                         >
@@ -236,6 +245,16 @@ function MyDocuments() {
           uploadedBy={viewPdfDoc.uploadedBy}
           uploadDate={viewPdfDoc.date}
           onClose={() => setViewPdfDoc(null)}
+        />
+      )}
+
+      {/* Document Version Management Modal */}
+      {versionDoc && (
+        <DocumentVersionsModal
+          docId={versionDoc.id}
+          docName={versionDoc.name}
+          onClose={() => setVersionDoc(null)}
+          onRefresh={() => refreshSubjects()}
         />
       )}
     </div>

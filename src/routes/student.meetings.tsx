@@ -18,8 +18,7 @@ export function StudentMeetingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Faculty Connect & Doubt Sessions"
-        description="Book 1-on-1 office hours or small group syllabus doubt consultations with course professors using Microsoft Teams."
-        badge="Microsoft Teams"
+        subtitle="Book 1-on-1 office hours or small group syllabus doubt consultations with course professors using Microsoft Teams."
       />
 
       {/* Info Banner */}

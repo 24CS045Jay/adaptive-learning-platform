@@ -1120,7 +1120,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const result = sendPasswordReset(email.trim());
+    const result = await sendPasswordReset(email.trim());
     setLoading(false);
     if (!result.ok) {
       setError(result.error ?? "Error sending reset link.");
@@ -1155,7 +1155,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
             Check your inbox at <strong>{email}</strong>.
           </p>
           <p className="mt-1 text-xs text-muted-foreground opacity-70">
-            (Demo — no email is actually sent.)
+            Please check your inbox and spam folder for your password reset link.
           </p>
           <button
             type="button"

@@ -42,6 +42,7 @@ import { Route as FacultyQuizzesRouteImport } from './routes/faculty.quizzes'
 import { Route as FacultySubjectsRouteImport } from './routes/faculty.subjects'
 import { Route as FacultyUploadRouteImport } from './routes/faculty.upload'
 import { Route as StudentIndexRouteImport } from './routes/student.index'
+import { Route as StudentAiFacultyRouteImport } from './routes/student.ai-faculty'
 import { Route as StudentAnnouncementsRouteImport } from './routes/student.announcements'
 import { Route as StudentAskRouteImport } from './routes/student.ask'
 import { Route as StudentBookmarksRouteImport } from './routes/student.bookmarks'
@@ -219,6 +220,11 @@ const StudentIndexRoute = StudentIndexRouteImport.update({
   path: '/',
   getParentRoute: () => StudentRoute,
 } as any)
+const StudentAiFacultyRoute = StudentAiFacultyRouteImport.update({
+  id: '/ai-faculty',
+  path: '/ai-faculty',
+  getParentRoute: () => StudentRoute,
+} as any)
 const StudentAnnouncementsRoute = StudentAnnouncementsRouteImport.update({
   id: '/announcements',
   path: '/announcements',
@@ -306,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/faculty/quizzes': typeof FacultyQuizzesRoute
   '/faculty/subjects': typeof FacultySubjectsRoute
   '/faculty/upload': typeof FacultyUploadRoute
+  '/student/ai-faculty': typeof StudentAiFacultyRoute
   '/student/announcements': typeof StudentAnnouncementsRoute
   '/student/ask': typeof StudentAskRoute
   '/student/bookmarks': typeof StudentBookmarksRoute
@@ -349,6 +356,7 @@ export interface FileRoutesByTo {
   '/faculty/quizzes': typeof FacultyQuizzesRoute
   '/faculty/subjects': typeof FacultySubjectsRoute
   '/faculty/upload': typeof FacultyUploadRoute
+  '/student/ai-faculty': typeof StudentAiFacultyRoute
   '/student/announcements': typeof StudentAnnouncementsRoute
   '/student/ask': typeof StudentAskRoute
   '/student/bookmarks': typeof StudentBookmarksRoute
@@ -396,6 +404,7 @@ export interface FileRoutesById {
   '/faculty/quizzes': typeof FacultyQuizzesRoute
   '/faculty/subjects': typeof FacultySubjectsRoute
   '/faculty/upload': typeof FacultyUploadRoute
+  '/student/ai-faculty': typeof StudentAiFacultyRoute
   '/student/announcements': typeof StudentAnnouncementsRoute
   '/student/ask': typeof StudentAskRoute
   '/student/bookmarks': typeof StudentBookmarksRoute
@@ -444,6 +453,7 @@ export interface FileRouteTypes {
     | '/faculty/quizzes'
     | '/faculty/subjects'
     | '/faculty/upload'
+    | '/student/ai-faculty'
     | '/student/announcements'
     | '/student/ask'
     | '/student/bookmarks'
@@ -487,6 +497,7 @@ export interface FileRouteTypes {
     | '/faculty/quizzes'
     | '/faculty/subjects'
     | '/faculty/upload'
+    | '/student/ai-faculty'
     | '/student/announcements'
     | '/student/ask'
     | '/student/bookmarks'
@@ -533,6 +544,7 @@ export interface FileRouteTypes {
     | '/faculty/quizzes'
     | '/faculty/subjects'
     | '/faculty/upload'
+    | '/student/ai-faculty'
     | '/student/announcements'
     | '/student/ask'
     | '/student/bookmarks'
@@ -791,6 +803,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudentIndexRouteImport
       parentRoute: typeof StudentRoute
     }
+    '/student/ai-faculty': {
+      id: '/student/ai-faculty'
+      path: '/ai-faculty'
+      fullPath: '/student/ai-faculty'
+      preLoaderRoute: typeof StudentAiFacultyRouteImport
+      parentRoute: typeof StudentRoute
+    }
     '/student/announcements': {
       id: '/student/announcements'
       path: '/announcements'
@@ -953,6 +972,7 @@ const FacultyRouteWithChildren =
   FacultyRoute._addFileChildren(FacultyRouteChildren)
 
 interface StudentRouteChildren {
+  StudentAiFacultyRoute: typeof StudentAiFacultyRoute
   StudentAnnouncementsRoute: typeof StudentAnnouncementsRoute
   StudentAskRoute: typeof StudentAskRoute
   StudentBookmarksRoute: typeof StudentBookmarksRoute
@@ -967,6 +987,7 @@ interface StudentRouteChildren {
 }
 
 const StudentRouteChildren: StudentRouteChildren = {
+  StudentAiFacultyRoute: StudentAiFacultyRoute,
   StudentAnnouncementsRoute: StudentAnnouncementsRoute,
   StudentAskRoute: StudentAskRoute,
   StudentBookmarksRoute: StudentBookmarksRoute,

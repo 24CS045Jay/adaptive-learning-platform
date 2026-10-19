@@ -20,6 +20,7 @@ import {
 import { ActionCard, Card, Pill } from "@/components/app-shell";
 import { WelcomeHero } from "@/components/welcome-hero";
 import { useAppData } from "@/lib/app-data-context";
+import { API_BASE, authHeaders } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/student/")({ component: StudentDashboard });
@@ -46,34 +47,38 @@ const STREAK_DAYS = [
   { day: "S", active: 1 },
 ];
 
-const MASTERY_PCT = 74;
 const WEEKLY_PROGRESS_PCT = 85;
 
 /* ── Animated Mastery Ring ── */
-function MasteryRing({ pct }: { pct: number }) {
+function MasteryRing({ pct }: { pct: number | null }) {
   const outerR = 56;
   const innerR = 46; // secondary ring
   const circ = 2 * Math.PI * outerR;
   const innerCirc = 2 * Math.PI * innerR;
 
+  const validPct = typeof pct === "number" ? Math.max(0, Math.min(100, pct)) : 0;
   const [displayed, setDisplayed] = useState(0);
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (pct === null) {
+      setDisplayed(0);
+      return;
+    }
     const duration = 950;
     const run = (ts: number) => {
       if (!startRef.current) startRef.current = ts;
       const p = Math.min((ts - startRef.current) / duration, 1);
       const eased = 1 - Math.pow(1 - p, 3);
-      setDisplayed(Math.round(eased * pct));
+      setDisplayed(Math.round(eased * validPct));
       if (p < 1) rafRef.current = requestAnimationFrame(run);
     };
     rafRef.current = requestAnimationFrame(run);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [pct]);
+  }, [pct, validPct]);
 
   const outerDash = `${(displayed / 100) * circ} ${circ}`;
   const innerDash = `${(WEEKLY_PROGRESS_PCT / 100) * innerCirc} ${innerCirc}`;
@@ -126,8 +131,12 @@ function MasteryRing({ pct }: { pct: number }) {
         />
       </svg>
       <div className="relative text-center">
-        <div className="text-gradient-violet text-3xl font-bold tabular-nums">{displayed}%</div>
-        <div className="text-[11px] text-muted-foreground mt-0.5">Mastery</div>
+        <div className="text-gradient-violet text-3xl font-bold tabular-nums">
+          {pct !== null ? `${displayed}%` : "0%"}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-0.5">
+          {pct !== null ? "Mastery" : "Awaiting Data"}
+        </div>
       </div>
     </div>
   );
@@ -322,13 +331,33 @@ function StudentDashboard() {
   const visibleSubjects = activeSemester
     ? subjects.filter((subject) => Number(subject.semester) === activeSemester)
     : subjects;
+  const [adaptiveProfile, setAdaptiveProfile] = useState<any>(null);
+  const [recommendations, setRecommendations] = useState<any[]>([]);
 
-  const suggestedWeakTopics = subjects.slice(0, 3).map((s, i) => ({
-    topic: i === 0 ? "MapReduce Shuffle & Partitioning" : i === 1 ? "L1/L2 Regularization Penalty" : "Distributed File Storage HDFS",
-    reason: i === 0 ? "Scored 55% in recent assessment" : "Low confidence in Ask Tutor session",
-    subject: s.name,
-  }));
+  useEffect(() => {
+    async function loadStudentAdaptive() {
+      try {
+        const token = localStorage.getItem("token") || "";
+        const [profRes, recRes] = await Promise.all([
+          fetch(`${API_BASE}/api/adaptive/profile`, { headers: authHeaders(token, { role: user?.role, id: user?.id }) }),
+          fetch(`${API_BASE}/api/adaptive/recommendations`, { headers: authHeaders(token, { role: user?.role, id: user?.id }) }),
+        ]);
+        if (profRes.ok) {
+          const prof = await profRes.json();
+          setAdaptiveProfile(prof);
+        }
+        if (recRes.ok) {
+          const rec = await recRes.json();
+          setRecommendations(rec.recommendations || []);
+        }
+      } catch (e) {
+        console.warn("[Student Dashboard] Adaptive fetch fallback:", e);
+      }
+    }
+    if (user?.id) loadStudentAdaptive();
+  }, [user?.id]);
 
+  const studentMasteryPct = adaptiveProfile?.stats?.overallMasteryPct ?? null;
   const axisStyle = { fontSize: 11, fill: "var(--color-muted-foreground)" };
 
   return (
@@ -421,19 +450,25 @@ function StudentDashboard() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Mastery Hero Card */}
         <Card variant="hero" className="flex flex-col items-center justify-center gap-4 py-8">
-          <MasteryRing pct={MASTERY_PCT} />
+          <MasteryRing pct={studentMasteryPct} />
           <div className="text-center">
             <div className="font-serif text-base font-bold text-foreground">Overall Mastery</div>
             <div className="text-xs text-muted-foreground">Across all enrolled subjects</div>
-            <div className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-success">
-              <Star className="h-3.5 w-3.5 fill-success" />
-              Top 30% of your class
-            </div>
+            {studentMasteryPct !== null ? (
+              <div className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-success">
+                <Star className="h-3.5 w-3.5 fill-success" />
+                {studentMasteryPct >= 80 ? "Demonstrated Strong Mastery" : studentMasteryPct >= 60 ? "Developing Topic Competency" : "Needs Targeted Topic Review"}
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-muted-foreground italic">
+                Complete quiz assessments to generate topic mastery scores.
+              </div>
+            )}
             {/* Weekly progress legend */}
             <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-violet" />
-                Overall {MASTERY_PCT}%
+                Overall {studentMasteryPct !== null ? `${studentMasteryPct}%` : "0%"}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-gold" />
@@ -779,37 +814,49 @@ function StudentDashboard() {
         </Card>
       </div>
 
-      {/* ── Row 4: Weak Topics ── */}
+      {/* ── Row 4: Recommended Next Steps ── */}
       <div className="mt-4">
-        <Card title="Weak Topics — Suggested AI Revision">
-          {suggestedWeakTopics.length === 0 ? (
+        <Card title="Personalized Learning Recommendations — Targeted Next Steps">
+          {recommendations.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              Take a few quizzes to build your personalized revision plan.
+              Complete course assessments or ask the AI tutor to build your personalized revision recommendations.
             </div>
           ) : (
             <ul className="divide-y divide-border">
-              {suggestedWeakTopics.map((w) => (
+              {recommendations.slice(0, 5).map((r) => (
                 <li
-                  key={w.topic}
-                  className="flex items-center justify-between py-3 transition hover:bg-accent/30 rounded-lg px-2"
+                  key={r.id || r.topic}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-3 transition hover:bg-accent/30 rounded-lg px-2"
                 >
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <div className="font-medium text-foreground">{w.topic}</div>
-                      <span className="rounded-full bg-violet/10 px-1.5 py-0.5 text-[10px] font-bold text-violet">
-                        AI Recommended
+                      <div className="font-medium text-foreground truncate">{r.title || r.topic}</div>
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                        r.urgency === "high" ? "bg-danger/10 text-danger" : r.urgency === "medium" ? "bg-amber-500/15 text-amber-500" : "bg-success/10 text-success"
+                      )}>
+                        {r.urgency}
                       </span>
                     </div>
-                    <div className="text-xs text-muted-foreground">{w.reason}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{r.reason}</div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Pill tone="indigo">{w.subject}</Pill>
-                    <Link
-                      to="/student/ask"
-                      className="rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition"
-                    >
-                      Ask Tutor →
-                    </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Pill tone="indigo">{r.subjectName || r.subjectCode || "Curriculum"}</Pill>
+                    {r.type === "practice_quiz" ? (
+                      <Link
+                        to="/student/quizzes"
+                        className="rounded-lg bg-amber-500/15 text-amber-500 px-2.5 py-1 text-xs font-semibold hover:bg-amber-500/25 transition"
+                      >
+                        Start Quiz →
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/student/ask"
+                        className="rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition"
+                      >
+                        Ask Tutor →
+                      </Link>
+                    )}
                   </div>
                 </li>
               ))}

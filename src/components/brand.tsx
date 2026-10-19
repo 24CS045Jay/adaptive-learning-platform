@@ -4,7 +4,15 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 
 /** Official EduSense AI Brand Emblem */
-export function EduSenseMark({ className, size = "md" }: { className?: string; size?: "xs" | "sm" | "md" | "lg" | "xl" }) {
+export function EduSenseMark({
+  className,
+  size = "md",
+  src = "/assets/edusense-emblem.svg",
+}: {
+  className?: string;
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  src?: string;
+}) {
   const sizeClass = {
     xs: "h-7 w-7",
     sm: "h-9 w-9",
@@ -15,11 +23,17 @@ export function EduSenseMark({ className, size = "md" }: { className?: string; s
 
   return (
     <img
-      src="/assets/edusense-logo.png"
+      src={src}
+      onError={(e) => {
+        const target = e.currentTarget;
+        if (target.src.endsWith(".svg")) {
+          target.src = "/assets/edusense-logo.png";
+        }
+      }}
       alt="EduSense AI"
       draggable={false}
       className={cn(
-        "object-contain rounded-full shadow-sm drop-shadow-[0_4px_12px_rgba(20,40,90,0.25)] select-none transition-transform hover:scale-105 duration-200",
+        "object-contain select-none transition-transform hover:scale-105 duration-200",
         sizeClass,
         className,
       )}
@@ -64,6 +78,26 @@ export function Logo({
         )}
       </div>
     </div>
+  );
+}
+
+/** Official EduSense AI Horizontal Logo with White Background */
+export function EduSenseHorizontalLogo({
+  className,
+  height = "h-10",
+  alt = "EduSense AI — Adaptive Intelligence Platform",
+}: {
+  className?: string;
+  height?: string;
+  alt?: string;
+}) {
+  return (
+    <img
+      src="/assets/edusense-logo-horizontal-dark.svg"
+      alt={alt}
+      draggable={false}
+      className={cn("w-auto object-contain select-none transition-transform hover:scale-[1.02] duration-200", height, className)}
+    />
   );
 }
 

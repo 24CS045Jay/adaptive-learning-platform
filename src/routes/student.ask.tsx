@@ -19,6 +19,7 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { PageHeader, Card } from "@/components/app-shell";
 import { useAppData } from "@/lib/app-data-context";
@@ -74,6 +75,14 @@ interface ApiResponse {
   follow_up?: string[];
   response_language?: string;
   learner_level?: string;
+  tool_used?: string | null;
+  understanding_check?: {
+    question: string;
+    topic?: string;
+    subtopic?: string;
+  } | null;
+  learning_intent?: any;
+  learner_profile?: any;
 }
 
 interface ChatMessage {
@@ -95,6 +104,13 @@ interface ChatMessage {
   follow_up?: string[];
   response_language?: string;
   learner_level?: string;
+  tool_used?: string | null;
+  understanding_check?: {
+    question: string;
+    topic?: string;
+    subtopic?: string;
+  } | null;
+  learning_intent?: any;
 }
 
 interface ChatSession {
@@ -122,8 +138,9 @@ const LANGUAGES = [
 
 const LEARNER_LEVELS = [
   { id: "beginner", label: "Beginner", icon: "🌱", hint: "Intuitive analogies & simplified fundamentals" },
-  { id: "intermediate", label: "Intermediate", icon: "⚡", hint: "Balanced academic rigor & mechanisms" },
-  { id: "advanced", label: "Advanced", icon: "🔬", hint: "In-depth theory, math rigor & nuances" },
+  { id: "developing", label: "Developing", icon: "⚡", hint: "Structured explanations & progressive examples" },
+  { id: "proficient", label: "Proficient", icon: "🎯", hint: "Deeper concepts, comparisons & mechanism depth" },
+  { id: "advanced", label: "Advanced", icon: "🔬", hint: "Formal math, proofs, complexity & edge cases" },
 ];
 
 // ── Typing indicator ──────────────────────────────────────────────────────────
@@ -373,16 +390,103 @@ function SourceModal({ source, onClose }: { source: SourceChip; onClose: () => v
   );
 }
 
+// ── Formative Understanding Check Component ─────────────────────────────────────
+function UnderstandingCheckCard({
+  check,
+  onEvaluated,
+}: {
+  check: { question: string; topic?: string; subtopic?: string };
+  onEvaluated?: (res: any) => void;
+}) {
+  const [answer, setAnswer] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!answer.trim() || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/adaptive/evaluate-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: check.question,
+          studentAnswer: answer.trim(),
+          concept: check.topic || check.subtopic || "Concept Check",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setResult(data);
+        if (onEvaluated) onEvaluated(data);
+        toast.success(data.correct ? "Mastery updated! Great answer." : "Concept check submitted.");
+      } else {
+        toast.error("Could not evaluate concept check.");
+      }
+    } catch {
+      toast.error("Connection error while evaluating check.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 my-3 space-y-2.5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wide">
+          <span>💡 Quick Concept Check</span>
+          {check.topic && <span className="text-[10px] text-muted-foreground font-normal">({check.topic})</span>}
+        </div>
+        {result && (
+          <span
+            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              result.correct ? "bg-emerald-500/20 text-emerald-600" : "bg-amber-500/20 text-amber-600"
+            }`}
+          >
+            Score: {result.score}%
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-foreground font-medium leading-relaxed">{check.question}</p>
+
+      {!result ? (
+        <form onSubmit={handleSubmit} className="flex gap-2 pt-1">
+          <input
+            type="text"
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            placeholder="Type your brief answer to check your understanding..."
+            className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+          />
+          <button
+            type="submit"
+            disabled={loading || !answer.trim()}
+            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition disabled:opacity-50"
+          >
+            {loading ? "Checking..." : "Submit Check"}
+          </button>
+        </form>
+      ) : (
+        <div className="pt-1.5 text-xs text-foreground/90 space-y-1 border-t border-amber-500/20">
+          <p className="font-semibold text-[11px] text-muted-foreground">Feedback:</p>
+          <p className="italic">{result.feedback}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Educational Modes ──────────────────────────────────────────────────────────
 const EDUCATIONAL_MODES = [
-  { id: "ask_tutor", label: "Ask Tutor", icon: "🎓" },
+  { id: "ask_tutor", label: "Tutor", icon: "🎓" },
   { id: "explain", label: "Explain", icon: "💡" },
-  { id: "summarize", label: "Summarize", icon: "📝" },
-  { id: "exam_prep", label: "Exam Prep", icon: "🎯" },
-  { id: "quiz_me", label: "Quiz Me", icon: "❓" },
-  { id: "compare", label: "Compare", icon: "⚖️" },
-  { id: "solve", label: "Solve", icon: "🔢" },
-  { id: "code_help", label: "Code Help", icon: "💻" },
+  { id: "step_by_step", label: "Step-by-Step", icon: "🪜" },
+  { id: "socratic", label: "Socratic Hints", icon: "🧠" },
+  { id: "worked_example", label: "Worked Example", icon: "🔢" },
+  { id: "practice", label: "Practice Quiz", icon: "🎯" },
+  { id: "exam_revision", label: "Exam Revision", icon: "📝" },
+  { id: "compare_concepts", label: "Compare Concepts", icon: "⚖️" },
 ];
 
 // ── Main page ─────────────────────────────────────────────────────────────────
@@ -416,7 +520,46 @@ function AskTutorPage() {
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
   const [selectedMode, setSelectedMode] = useState<string>("ask_tutor");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
-  const [learnerLevel, setLearnerLevel] = useState<string>("intermediate");
+  const [learnerLevel, setLearnerLevel] = useState<string>("developing");
+  const [learnerProfile, setLearnerProfile] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/adaptive/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.learnerKnowledgeProfile) {
+          setLearnerProfile(data.learnerKnowledgeProfile);
+          if (data.learnerKnowledgeProfile.preferred_explanation_depth) {
+            setLearnerLevel(data.learnerKnowledgeProfile.preferred_explanation_depth);
+          }
+          if (data.learnerKnowledgeProfile.preferred_language) {
+            setSelectedLanguage(data.learnerKnowledgeProfile.preferred_language);
+          }
+          if (data.learnerKnowledgeProfile.preferred_teaching_mode) {
+            setSelectedMode(data.learnerKnowledgeProfile.preferred_teaching_mode);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleResetPersonalization = async () => {
+    if (!window.confirm("Are you sure you want to reset your personal learning history and preferences?")) return;
+    try {
+      const res = await fetch("/api/adaptive/reset", { method: "POST" });
+      if (res.ok) {
+        toast.success("Learning profile and preferences reset.");
+        setLearnerLevel("developing");
+        setSelectedMode("ask_tutor");
+        fetch("/api/adaptive/profile")
+          .then((r) => r.json())
+          .then((d) => setLearnerProfile(d?.learnerKnowledgeProfile || null))
+          .catch(() => {});
+      }
+    } catch {
+      toast.error("Failed to reset learning profile.");
+    }
+  };
 
   const [showControls, setShowControls] = useState<boolean>(false);
 
@@ -445,7 +588,7 @@ function AskTutorPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load past conversations from MongoDB backend
+  // Load past conversations from MongoDB/Supabase backend
   useEffect(() => {
     async function fetchServerConversations() {
       try {
@@ -459,16 +602,18 @@ function AskTutorPage() {
           const convs = await res.json();
           if (Array.isArray(convs) && convs.length > 0) {
             const loadedSessions: ChatSession[] = convs.map((c: any) => ({
-              id: c.id || c._id,
-              mongoId: c.id || c._id,
-              title: c.title,
+              id: String(c.id || c._id),
+              mongoId: String(c.id || c._id),
+              title: c.title || "Untitled Conversation",
               subject: c.subjectName || "General",
               subjectId: c.subjectId || "",
-              createdAt: new Date(c.updatedAt).toLocaleDateString(),
+              createdAt: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
               messages: [],
             }));
             setSessions(loadedSessions);
             setActiveSessionId(loadedSessions[0].id);
+            // Immediately load the conversation messages for the initially active session
+            loadSessionMessages(loadedSessions[0].id, loadedSessions);
           }
         }
       } catch (e) {
@@ -505,40 +650,56 @@ function AskTutorPage() {
     }
   }, [activeSessionId, activeSession?.subject, activeSession?.subjectId, subjects, firstSubject]);
 
-  // Load conversation messages from server when selected
-  const handleSelectSession = async (sessId: string) => {
+  // Load conversation messages from server
+  const loadSessionMessages = async (sessId: string, currentList?: ChatSession[]) => {
+    const list = currentList || sessions;
+    const target = list.find((s) => s.id === sessId);
+    const convId = target?.mongoId || (target && !target.id.startsWith("sess_") ? target.id : null);
+    if (!convId) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/conversations/${convId}`, {
+        headers: {
+          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+          ...(user?.id ? { "x-user-id": user.id } : {}),
+        },
+      });
+      if (res.ok) {
+        const convData = await res.json();
+        const rawMsgs = Array.isArray(convData.messages)
+          ? convData.messages
+          : typeof convData.messages === "string"
+          ? JSON.parse(convData.messages || "[]")
+          : [];
+
+        const msgs: ChatMessage[] = rawMsgs.map((m: any, idx: number) => ({
+          id: m._id || m.id || `msg_${idx}`,
+          role: m.role === "student" || m.role === "user" ? "user" : "ai",
+          text: m.text,
+          worked_example: m.worked_example || null,
+          visual: m.visual || null,
+          chart: m.chart || null,
+          sources: m.sources || [],
+          timestamp: m.timestamp
+            ? new Date(m.timestamp).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "",
+        }));
+
+        setSessions((prev) => prev.map((s) => (s.id === sessId ? { ...s, messages: msgs } : s)));
+      }
+    } catch (err) {
+      console.error("[Ask Tutor] Failed to load session messages:", err);
+    }
+  };
+
+  const handleSelectSession = (sessId: string) => {
     setActiveSessionId(sessId);
     const target = sessions.find((s) => s.id === sessId);
-    if (target && target.messages.length === 0 && target.mongoId) {
-      try {
-        const res = await fetch(`${API_BASE}/api/conversations/${target.mongoId}`, {
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-            ...(user?.id ? { "x-user-id": user.id } : {}),
-          },
-        });
-        if (res.ok) {
-          const convData = await res.json();
-          const msgs: ChatMessage[] = (convData.messages || []).map((m: any, idx: number) => ({
-            id: m._id || `msg_${idx}`,
-            role: m.role === "student" ? "user" : "ai",
-            text: m.text,
-            worked_example: m.worked_example || null,
-            visual: m.visual || null,
-            sources: m.sources || [],
-            timestamp: m.timestamp
-              ? new Date(m.timestamp).toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "",
-          }));
-
-          setSessions((prev) => prev.map((s) => (s.id === sessId ? { ...s, messages: msgs } : s)));
-        }
-      } catch (err) {
-        console.error("[Ask Tutor] Failed to load session messages:", err);
-      }
+    if (target && target.messages.length === 0) {
+      loadSessionMessages(sessId);
     }
   };
 
@@ -555,8 +716,12 @@ function AskTutorPage() {
     setActiveSessionId(newSess.id);
   };
 
-  const deleteSession = (sessId: string, e: React.MouseEvent) => {
+  const deleteSession = async (sessId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const target = sessions.find((s) => s.id === sessId);
+    const convId = target?.mongoId || (target && !target.id.startsWith("sess_") ? target.id : null);
+
+    // 1. Remove from local state immediately
     setSessions((prev) => {
       const remaining = prev.filter((s) => s.id !== sessId);
       if (remaining.length === 0) {
@@ -568,6 +733,21 @@ function AskTutorPage() {
       if (activeSessionId === sessId) setActiveSessionId(remaining[0].id);
       return remaining;
     });
+
+    // 2. Permanently delete from database so it never comes back
+    if (convId && !convId.startsWith("sess_")) {
+      try {
+        await fetch(`${API_BASE}/api/conversations/${convId}`, {
+          method: "DELETE",
+          headers: {
+            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
+            ...(user?.id ? { "x-user-id": user.id } : {}),
+          },
+        });
+      } catch (err) {
+        console.warn("[Ask Tutor] Failed to delete conversation on server:", err);
+      }
+    }
   };
 
   const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -637,6 +817,7 @@ function AskTutorPage() {
           mode: selectedMode,
           response_language: selectedLanguage,
           learner_level: learnerLevel,
+          learner_profile: learnerProfile,
         }),
       });
 
@@ -691,6 +872,9 @@ function AskTutorPage() {
       follow_up: apiResp.follow_up,
       response_language: selectedLanguage,
       learner_level: learnerLevel,
+      tool_used: (apiResp as any)?.tool_used ?? null,
+      understanding_check: (apiResp as any)?.understanding_check ?? null,
+      learning_intent: (apiResp as any)?.learning_intent ?? null,
     };
 
     setSessions((prev) =>
@@ -903,6 +1087,20 @@ function AskTutorPage() {
                   <span className="rounded-full bg-violet/10 px-2.5 py-1 text-violet font-semibold text-[11px] hidden md:inline">
                     {selectedSubjectCode}
                   </span>
+
+                  {learnerProfile && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
+                      <span>🎯 Mastery: {learnerProfile.estimated_mastery_level || "developing"}</span>
+                      <button
+                        type="button"
+                        onClick={handleResetPersonalization}
+                        title="Reset learning profile & personalization data"
+                        className="ml-1 text-[10px] text-muted-foreground hover:text-rose-500 underline cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -936,6 +1134,12 @@ function AskTutorPage() {
                           const userMsgs = activeSession.messages.slice(0, idx).filter((m) => m.role === "user");
                           const lastUser = userMsgs[userMsgs.length - 1];
                           if (lastUser) handleSend(lastUser.text);
+                        }}
+                        onProfileUpdate={() => {
+                          fetch("/api/adaptive/profile")
+                            .then((r) => r.json())
+                            .then((d) => setLearnerProfile(d?.learnerKnowledgeProfile || null))
+                            .catch(() => {});
                         }}
                       />
                     ))}
@@ -1025,17 +1229,19 @@ function ChatMessageBubble({
   onSourceClick,
   onFollowUpClick,
   onRetry,
+  onProfileUpdate,
 }: {
   msg: ChatMessage;
   onSourceClick: (s: SourceChip) => void;
   onFollowUpClick?: (text: string) => void;
   onRetry?: () => void;
+  onProfileUpdate?: () => void;
 }) {
   const [rated, setRated] = useState<"up" | "down" | null>(null);
   const [showCommentBox, setShowCommentBox] = useState(false);
   const [commentText, setCommentText] = useState("");
 
-  const isUser = msg.role === "user";
+  const isUser = msg.role === "user" || (msg.role as string) === "student";
   const isEscalated = msg.escalated === true;
 
   if (isUser) {
@@ -1115,6 +1321,11 @@ function ChatMessageBubble({
                     <CheckCircle2 className="h-3 w-3" /> Verified Grounded
                   </span>
                 )}
+                {msg.tool_used && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400">
+                    ⚙️ Tool: {msg.tool_used}
+                  </span>
+                )}
                 {msg.mode && (
                   <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-violet/10 text-violet">
                     {msg.mode.replace("_", " ")}
@@ -1168,6 +1379,16 @@ function ChatMessageBubble({
                 {msg.worked_example}
               </div>
             </div>
+          )}
+
+          {/* Formative Understanding Check */}
+          {!isEscalated && msg.understanding_check && (
+            <UnderstandingCheckCard
+              check={msg.understanding_check}
+              onEvaluated={() => {
+                if (onProfileUpdate) onProfileUpdate();
+              }}
+            />
           )}
 
           {/* Source citation chips */}

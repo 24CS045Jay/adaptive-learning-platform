@@ -4,6 +4,7 @@
  * REST endpoints for student conversation history.
  * - GET /api/conversations (List student's conversations)
  * - GET /api/conversations/:id (Fetch full message history for a conversation)
+ * - DELETE /api/conversations/:id (Delete a conversation permanently)
  */
 
 import express from "express";
@@ -37,7 +38,13 @@ function softAuthenticate(req, res, next) {
   return next();
 }
 
-const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
+function isValidId(id) {
+  if (!id || typeof id !== "string") return false;
+  const trimmed = id.trim();
+  const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  const OBJECTID_RE = /^[0-9a-fA-F]{24}$/;
+  return UUID_RE.test(trimmed) || OBJECTID_RE.test(trimmed) || /^[a-zA-Z0-9_-]{8,64}$/.test(trimmed);
+}
 
 // GET /api/conversations — List student's conversations
 router.get("/", softAuthenticate, async (req, res) => {
@@ -45,25 +52,38 @@ router.get("/", softAuthenticate, async (req, res) => {
     const rawStudentId = req.user?.id || req.user?._id || null;
     const filter = {};
 
-    if (rawStudentId && OBJECTID_RE.test(String(rawStudentId))) {
-      filter.studentId = rawStudentId;
+    if (rawStudentId && isValidId(String(rawStudentId))) {
+      filter.studentId = String(rawStudentId);
     }
 
-    const conversations = await Conversation.find(filter)
+    let conversations = await Conversation.find(filter)
       .populate("subjectId", "name code")
-      .sort({ updatedAt: -1 })
-      .lean();
+      .sort({ updatedAt: -1 });
 
-    const result = conversations.map((c) => ({
-      _id: c._id,
-      id: c._id,
+    // Fallback if older rows have null studentId
+    if ((!conversations || conversations.length === 0) && rawStudentId) {
+      conversations = await Conversation.find({})
+        .populate("subjectId", "name code")
+        .sort({ updatedAt: -1 });
+      conversations = (conversations || []).filter(
+        (c) => !c.studentId || String(c.studentId) === String(rawStudentId)
+      );
+    }
+
+    const result = (conversations || []).map((c) => ({
+      _id: c._id || c.id,
+      id: c.id || c._id,
       title: c.title,
       subjectId: c.subjectId?._id || c.subjectId || null,
       subjectName: c.subjectId?.name || "General",
       subjectCode: c.subjectId?.code || "GENERAL",
-      updatedAt: c.updatedAt,
+      updatedAt: c.updatedAt || c.createdAt,
       createdAt: c.createdAt,
-      messagesCount: c.messages?.length || 0,
+      messagesCount: Array.isArray(c.messages)
+        ? c.messages.length
+        : typeof c.messages === "string"
+        ? JSON.parse(c.messages || "[]").length
+        : 0,
     }));
 
     return res.json(result);
@@ -77,13 +97,11 @@ router.get("/", softAuthenticate, async (req, res) => {
 router.get("/:id", softAuthenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    if (!id || !OBJECTID_RE.test(id)) {
+    if (!id || !isValidId(id)) {
       return res.status(400).json({ error: "Invalid conversation ID." });
     }
 
-    const conversation = await Conversation.findById(id)
-      .populate("subjectId", "name code")
-      .lean();
+    const conversation = await Conversation.findById(id).populate("subjectId", "name code");
 
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found." });
@@ -100,20 +118,67 @@ router.get("/:id", softAuthenticate, async (req, res) => {
       return res.status(403).json({ error: "Forbidden: You do not own this conversation." });
     }
 
+    let messages = conversation.messages || [];
+    if (typeof messages === "string") {
+      try {
+        messages = JSON.parse(messages);
+      } catch {
+        messages = [];
+      }
+    }
+
     return res.json({
-      _id: conversation._id,
-      id: conversation._id,
+      _id: conversation._id || conversation.id,
+      id: conversation.id || conversation._id,
       title: conversation.title,
       subjectId: conversation.subjectId?._id || conversation.subjectId || null,
       subjectName: conversation.subjectId?.name || "General",
       subjectCode: conversation.subjectId?.code || "GENERAL",
-      updatedAt: conversation.updatedAt,
+      updatedAt: conversation.updatedAt || conversation.createdAt,
       createdAt: conversation.createdAt,
-      messages: conversation.messages || [],
+      messages,
     });
   } catch (err) {
     console.error("[Conversations] Get error:", err);
     return res.status(500).json({ error: "Failed to load conversation history." });
+  }
+});
+
+// DELETE /api/conversations/:id — Delete a conversation permanently from database
+router.delete("/:id", softAuthenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !isValidId(id)) {
+      return res.status(400).json({ error: "Invalid conversation ID." });
+    }
+
+    const conversation = await Conversation.findById(id);
+    if (!conversation) {
+      return res.status(404).json({ error: "Conversation not found." });
+    }
+
+    const currentUserId = req.user?.id || req.user?._id;
+    if (
+      currentUserId &&
+      conversation.studentId &&
+      String(conversation.studentId) !== String(currentUserId) &&
+      req.user?.role !== "admin" &&
+      req.user?.role !== "super_admin"
+    ) {
+      return res.status(403).json({ error: "Forbidden: You do not own this conversation." });
+    }
+
+    await Conversation.findByIdAndDelete(id);
+    console.log(`[Conversations] Permanently deleted conversation: ${id}`);
+
+    return res.json({
+      success: true,
+      message: "Conversation deleted permanently.",
+      id,
+    });
+  } catch (err) {
+    console.error("[Conversations] Delete error:", err);
+    return res.status(500).json({ error: "Failed to delete conversation." });
   }
 });
 

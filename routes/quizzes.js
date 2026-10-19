@@ -1,6 +1,7 @@
 import express from "express";
 import { authenticate, requireRole } from "../middleware/auth.js";
 import { Quiz, Question, Attempt, TopicMastery, Subject } from "../models/index.js";
+import { processQuizAttemptEvent } from "../lib/learning-pipeline.js";
 
 const router = express.Router();
 
@@ -138,6 +139,8 @@ router.post("/:id/attempt", requireRole("student", "faculty", "admin"), async (r
     let correctCount = 0;
     const topicPerformance = {}; // topicTag -> { total: 0, correct: 0 }
 
+    const enrichedAnswers = [];
+
     questions.forEach((q, index) => {
       let studentAnswer = null;
       if (Array.isArray(answers)) {
@@ -150,12 +153,12 @@ router.post("/:id/attempt", requireRole("student", "faculty", "admin"), async (r
         studentAnswer = answers[q._id] ?? answers[String(q._id)] ?? answers[index];
       }
 
-      const isCorrect = String(studentAnswer).trim().toLowerCase() === String(q.correctOption).trim().toLowerCase();
+      const isCorrect = String(studentAnswer ?? "").trim().toLowerCase() === String(q.correctOption ?? "").trim().toLowerCase();
       if (isCorrect) {
         correctCount++;
       }
 
-      const tag = q.topicTag || "General";
+      const tag = q.topicTag || q.topic || "General";
       if (!topicPerformance[tag]) {
         topicPerformance[tag] = { total: 0, correct: 0 };
       }
@@ -163,46 +166,50 @@ router.post("/:id/attempt", requireRole("student", "faculty", "admin"), async (r
       if (isCorrect) {
         topicPerformance[tag].correct++;
       }
+
+      enrichedAnswers.push({
+        questionId: String(q._id || q.id),
+        topicTag: tag,
+        difficulty: q.difficulty || "medium",
+        selectedOption: studentAnswer,
+        correctOption: q.correctOption,
+        isCorrect,
+      });
     });
 
     const scorePct = Math.round((correctCount / questions.length) * 100);
     const studentId = req.user._id || req.user.id;
 
-    // Create Attempt record
+    // Create Attempt record with itemized answers
     const attempt = await Attempt.create({
       quizId,
-      studentId,
+      studentId: String(studentId),
       score: scorePct,
-      answers: answers || [],
+      answers: enrichedAnswers,
       submittedAt: new Date(),
     });
 
-    // Update TopicMastery for each topic tag evaluated in this quiz
-    for (const [topicTag, perf] of Object.entries(topicPerformance)) {
-      const topicPct = (perf.correct / perf.total) * 100;
-      let masteryLabel = "average";
-      if (topicPct >= 80) masteryLabel = "strong";
-      else if (topicPct < 50) masteryLabel = "weak";
-
-      await TopicMastery.findOneAndUpdate(
-        { studentId, subjectId: quiz.subjectId, topicTag },
-        {
-          studentId,
-          subjectId: quiz.subjectId,
-          topicTag,
-          masteryLabel,
-          updatedAt: new Date(),
-        },
-        { upsert: true, new: true }
-      );
+    // Process through the authentic Learning Data Pipeline
+    let pipelineResults = [];
+    try {
+      pipelineResults = await processQuizAttemptEvent({
+        quizId,
+        studentId: String(studentId),
+        answers: enrichedAnswers,
+        score: scorePct,
+        subjectId: String(quiz.subjectId),
+      });
+    } catch (pipelineErr) {
+      console.warn("[Quizzes API] Pipeline processing warning:", pipelineErr.message);
     }
 
     res.json({
-      attemptId: String(attempt._id),
+      attemptId: String(attempt._id || attempt.id),
       score: scorePct,
       correctCount,
       totalQuestions: questions.length,
       topicPerformance,
+      pipelineResults,
     });
   } catch (error) {
     console.error("[Quizzes API] Attempt submit error:", error);

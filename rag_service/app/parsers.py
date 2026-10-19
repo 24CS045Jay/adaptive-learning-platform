@@ -11,7 +11,11 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional
 
-SUPPORTED = {"pdf", "docx", "pptx", "xlsx", "xls", "csv", "txt", "md", "markdown", "html", "htm", "json", "rtf"}
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "bmp", "tiff", "gif"}
+SUPPORTED = {
+    "pdf", "docx", "pptx", "xlsx", "xls", "csv", "txt", "md", "markdown", "html", "htm", "json", "rtf",
+    *IMAGE_EXTENSIONS,
+}
 
 
 @dataclass
@@ -56,11 +60,89 @@ def _pdf(data: bytes) -> List[Section]:
             t = _clean(page.extract_text() or "")
         except Exception:
             t = ""
+        # If page has very little or no text, try OCR on page images if present
+        if len(t) < 20 and hasattr(page, "images") and page.images:
+            try:
+                import pytesseract
+                from PIL import Image
+                img_texts = []
+                for p_img in page.images:
+                    p_pil = Image.open(io.BytesIO(p_img.data))
+                    ocr_res = pytesseract.image_to_string(p_pil).strip()
+                    if ocr_res:
+                        img_texts.append(ocr_res)
+                if img_texts:
+                    t = _clean((t + "\n" + "\n".join(img_texts)).strip())
+            except Exception:
+                pass
         if t:
             out.append(Section(t, i))
     if not out:
-        raise ParseError("PDF has no extractable text (scanned image PDF? run OCR first)")
+        raise ParseError("PDF has no extractable text (scanned image PDF? OCR fallback produced no text)")
     return out
+
+
+def _image(data: bytes, file_name: str) -> List[Section]:
+    from PIL import Image
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Exception as e:
+        raise ParseError(f"Cannot open image file: {e}")
+
+    parts = []
+    ocr_text = ""
+    try:
+        import pytesseract
+        ocr_text = pytesseract.image_to_string(img).strip()
+        if ocr_text:
+            parts.append(f"### Extracted OCR Text\n{ocr_text}")
+    except Exception:
+        pass
+
+    # Vision model analysis if API key is available
+    try:
+        import base64
+        from langchain_core.messages import HumanMessage
+        from app.config import get_settings
+        from app.providers import get_llm
+
+        s = get_settings()
+        if not s.offline and (s.gemini_key or s.openai_key):
+            b64_img = base64.b64encode(data).decode("utf-8")
+            fmt = ext_of(file_name) or "jpeg"
+            if fmt == "jpg":
+                fmt = "jpeg"
+            mime_type = f"image/{fmt}"
+            prompt = (
+                "You are an educational vision expert. Analyze this course diagram, chart, screenshot, or note.\n"
+                "1. Transcribe all text, formulas, equations, or labels accurately.\n"
+                "2. If this is a chart or graph: detail title, axes, units, legends, and key numbers.\n"
+                "3. If this is a diagram: describe components, relationships, arrows, and workflow.\n"
+                "4. Output clear structured educational Markdown without inventing unobserved facts."
+            )
+            llm = get_llm("heavy")
+            msg = HumanMessage(
+                content=[
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_img}"}},
+                ]
+            )
+            resp = llm.invoke([msg])
+            v_text = str(resp.content).strip()
+            if v_text:
+                parts.append(f"### Visual & Diagrammatic Analysis\n{v_text}")
+    except Exception:
+        pass
+
+    if not parts:
+        if ocr_text:
+            parts.append(ocr_text)
+        else:
+            parts.append(f"Visual Diagram: {file_name} (Dimensions: {img.size[0]}x{img.size[1]})")
+
+    full_text = _clean("\n\n".join(parts))
+    return [Section(full_text, 1, f"Image: {file_name}")]
+
 
 
 def _docx(data: bytes) -> List[Section]:
@@ -211,6 +293,8 @@ def parse_bytes(data: bytes, file_name: str) -> List[Section]:
         return _csv(data)
     if e in {"html", "htm"}:
         return _html(data)
+    if e in IMAGE_EXTENSIONS:
+        return _image(data, file_name)
     return _text(data)  # txt, md, json, rtf (plain)
 
 

@@ -31,25 +31,37 @@ export function MermaidRenderer({ chart, className = "", title = "Visual Concept
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
-  const uniqueId = `mermaid_${useId().replace(/[^a-zA-Z0-9]/g, "_")}_${Math.random().toString(36).slice(2, 7)}`;
+  const rawId = useId().replace(/[^a-zA-Z0-9]/g, "_");
+  const idRef = useRef<string>(`mermaid_${rawId}`);
 
   useEffect(() => {
     let isMounted = true;
 
     async function renderChart() {
-      if (!chart?.trim()) return;
-      try {
+      if (!chart?.trim()) {
+        setSvgContent("");
         setError(null);
+        return;
+      }
+      try {
         // Normalize chart text (e.g. strip markdown fences if included)
-        let cleanedChart = chart.trim().replace(/^```(?:mermaid)?/i, "").replace(/```$/, "").trim();
-        const { svg } = await mermaid.render(uniqueId, cleanedChart);
+        const cleanedChart = chart.trim().replace(/^```(?:mermaid)?\s*/i, "").replace(/\s*```$/, "").trim();
+        const renderId = `${idRef.current}_${Math.random().toString(36).slice(2, 7)}`;
+        const { svg } = await mermaid.render(renderId, cleanedChart);
         if (isMounted) {
           setSvgContent(svg);
+          setError(null);
         }
       } catch (err: any) {
-        console.warn("[MermaidRenderer] Render failed:", err);
+        console.warn("[MermaidRenderer] Render failed:", err?.message || err);
+        // Clean up any stray error elements injected by mermaid into DOM
+        try {
+          const stray = document.querySelectorAll(`[id^="d${idRef.current}"]`);
+          stray.forEach((el) => el.remove());
+        } catch {}
         if (isMounted) {
           setError(err?.message || "Failed to render visual diagram.");
+          setSvgContent("");
         }
       }
     }
@@ -59,7 +71,7 @@ export function MermaidRenderer({ chart, className = "", title = "Visual Concept
     return () => {
       isMounted = false;
     };
-  }, [chart, uniqueId]);
+  }, [chart]);
 
   const handleCopyCode = async () => {
     try {

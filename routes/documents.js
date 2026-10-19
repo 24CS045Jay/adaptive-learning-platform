@@ -22,7 +22,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = ["pdf", "pptx", "docx", "xlsx", "csv", "txt", "md", "html", "htm"];
+    const allowedExtensions = ["pdf", "pptx", "docx", "xlsx", "csv", "txt", "md", "html", "htm", "jpg", "jpeg", "png", "webp", "bmp"];
     const ext = file.originalname.split(".").pop()?.toLowerCase() ?? "";
 
     if (!allowedExtensions.includes(ext)) {
@@ -38,7 +38,7 @@ function handleUploadFile(req, res, next) {
     if (err) {
       if (err.message === "ALLOWED_TYPES_ONLY" || err.code === "LIMIT_UNEXPECTED_FILE") {
         return res.status(400).json({
-          error: "Invalid file type. Allowed types: PDF, PPTX, DOCX, XLSX, CSV, TXT, MD, HTML.",
+          error: "Invalid file type. Allowed types: PDF, PPTX, DOCX, XLSX, CSV, TXT, MD, HTML, JPG, PNG, WEBP.",
         });
       }
       if (err.code === "LIMIT_FILE_SIZE") {
@@ -51,7 +51,22 @@ function handleUploadFile(req, res, next) {
 }
 
 async function performDocumentIngestion(doc, actorId, action) {
-  const subjectCode = doc.subjectId?.code || "GENERAL";
+  let subject = null;
+  if (doc.subjectId) {
+    if (typeof doc.subjectId === "object" && doc.subjectId.code) {
+      subject = doc.subjectId;
+    } else {
+      try {
+        subject = await Subject.findById(doc.subjectId);
+      } catch (e) {
+        console.warn("[performDocumentIngestion] Subject lookup notice:", e.message);
+      }
+    }
+  }
+  const subjectCode = subject?.code || "GENERAL";
+  const subjectId = subject?._id ? String(subject._id) : (doc.subjectId ? String(doc.subjectId) : "");
+  const departmentId = subject?.departmentId ? String(subject.departmentId) : "";
+  const semester = subject?.semester || 1;
   const collectionName = `subject_${subjectCode}`;
   let ingestionStatus = "failed";
   let chunkCount = 0;
@@ -68,16 +83,19 @@ async function performDocumentIngestion(doc, actorId, action) {
         "X-Internal-Token": internalToken,
       },
       body: JSON.stringify({
-        documentId: String(doc._id),
+        documentId: String(doc._id || doc.id),
         subjectCode,
         fileUrl: doc.fileUrl,
         fileName: doc.fileName,
         metadata: {
           subject: subjectCode,
-          subjectId: doc.subjectId?._id ? String(doc.subjectId._id) : undefined,
-          departmentId: doc.subjectId?.departmentId ? String(doc.subjectId.departmentId) : undefined,
-          semester: doc.subjectId?.semester,
-          uploadedAt: doc.createdAt?.toISOString() ?? new Date().toISOString(),
+          subject_code: subjectCode,
+          subjectId: subjectId,
+          subject_id: subjectId,
+          departmentId: departmentId,
+          department_id: departmentId,
+          semester: semester,
+          uploadedAt: doc.createdAt?.toISOString?.() ?? new Date().toISOString(),
           fileName: doc.fileName,
           is_active: doc.status === "approved" || doc.status === "active",
         },
@@ -245,6 +263,13 @@ router.post("/upload", authenticate, requireRole("faculty", "admin"), handleUplo
       chunkCount: 0,
       chromaCollection: "",
     });
+
+    // Auto-ingest if uploaded by admin (pre-approved)
+    if (initialStatus === "approved") {
+      performDocumentIngestion(docRecord, req.user._id || req.user.id, "AUTO_APPROVE_DOCUMENT").catch((err) => {
+        console.warn("[Background Ingestion Notice]:", err.message);
+      });
+    }
 
     // 4. Log to AuditLog
     try {
@@ -476,5 +501,128 @@ router.get("/:id/ingestion-status", authenticate, async (req, res) => {
     return res.status(500).json({ error: "Internal server error fetching ingestion status." });
   }
 });
+
+// GET /api/documents/:id/versions — List version history for a logical document
+router.get("/:id/versions", authenticate, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: "Document not found." });
+
+    const internalToken = process.env.INTERNAL_SERVICE_TOKEN || "univ-rag-internal-dev-token";
+    const ragRes = await fetch(`${RAG_SERVICE_URL}/documents/${req.params.id}/versions`, {
+      headers: { "X-Internal-Token": internalToken },
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!ragRes.ok) {
+      return res.status(ragRes.status).json({ error: "Failed to fetch versions from RAG service" });
+    }
+
+    const data = await ragRes.json();
+    return res.json({
+      documentId: doc._id || doc.id,
+      fileName: doc.fileName,
+      status: doc.status,
+      ...data,
+    });
+  } catch (error) {
+    console.error("[Get Document Versions Error]:", error);
+    return res.status(500).json({ error: "Failed to fetch document versions." });
+  }
+});
+
+// POST /api/documents/:id/revision — Upload a new revision of an existing document
+router.post(
+  "/:id/revision",
+  authenticate,
+  requireRole("faculty", "admin"),
+  handleUploadFile,
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No revision file attached." });
+      }
+
+      const doc = await Document.findById(req.params.id);
+      if (!doc) return res.status(404).json({ error: "Original document not found." });
+
+      const safeFileName = `${Date.now()}_rev_${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const localFilePath = path.join(UPLOADS_DIR, safeFileName);
+      fs.writeFileSync(localFilePath, req.file.buffer);
+
+      const protocol = req.protocol || "http";
+      const host = req.get("host") || "localhost:5000";
+      const fileUrl = `${protocol}://${host}/uploads/documents/${safeFileName}`;
+
+      doc.fileName = req.file.originalname;
+      doc.fileUrl = fileUrl;
+      doc.ingestionStatus = "pending";
+      await doc.save();
+
+      performDocumentIngestion(doc, req.user._id || req.user.id, "UPLOAD_DOCUMENT_REVISION").catch((err) => {
+        console.warn("[Revision Ingestion Notice]:", err.message);
+      });
+
+      return res.status(200).json({
+        message: "New document revision uploaded and queued for processing.",
+        document: doc,
+      });
+    } catch (error) {
+      console.error("[Upload Revision Error]:", error);
+      return res.status(500).json({ error: error.message || "Failed to upload revision." });
+    }
+  }
+);
+
+// POST /api/documents/:id/rollback/:versionId — Roll back to a previous published version
+router.post(
+  "/:id/rollback/:versionId",
+  authenticate,
+  requireRole("faculty", "admin"),
+  async (req, res) => {
+    try {
+      const doc = await Document.findById(req.params.id);
+      if (!doc) return res.status(404).json({ error: "Document not found." });
+
+      const internalToken = process.env.INTERNAL_SERVICE_TOKEN || "univ-rag-internal-dev-token";
+      const rollbackRes = await fetch(`${RAG_SERVICE_URL}/documents/${req.params.id}/rollback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": internalToken,
+        },
+        body: JSON.stringify({ target_version_id: req.params.versionId }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (!rollbackRes.ok) {
+        const errText = await rollbackRes.text();
+        return res.status(rollbackRes.status).json({ error: `Rollback failed: ${errText.slice(0, 200)}` });
+      }
+
+      const result = await rollbackRes.json();
+
+      try {
+        await AuditLog.create({
+          actorId: req.user._id || req.user.id,
+          action: "ROLLBACK_DOCUMENT_VERSION",
+          details: {
+            documentId: doc._id,
+            fileName: doc.fileName,
+            targetVersionId: req.params.versionId,
+          },
+        });
+      } catch {}
+
+      return res.json({
+        message: `Successfully rolled back to version ${result.version_number}.`,
+        result,
+      });
+    } catch (error) {
+      console.error("[Rollback Version Error]:", error);
+      return res.status(500).json({ error: error.message || "Failed to roll back version." });
+    }
+  }
+);
 
 export default router;

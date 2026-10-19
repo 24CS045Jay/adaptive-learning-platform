@@ -1,0 +1,23 @@
+{
+  "Random": {
+    "Precision@1": 0.449,
+    "Precision@3": 0.4762,
+    "Recall@3": 0.3544,
+    "NDCG@3": 0.4753,
+    "MRR": 0.6605
+  },
+  "Popularity_Baseline": {
+    "Precision@1": 0.5408,
+    "Precision@3": 0.534,
+    "Recall@3": 0.4144,
+    "NDCG@3": 0.5528,
+    "MRR": 0.7277
+  },
+  "Explainable_Multi_Factor": {
+    "Precision@1": 0.9388,
+    "Precision@3": 0.8027,
+    "Recall@3": 0.6173,
+    "NDCG@3": 0.853,
+    "MRR": 0.9626
+  }
+}

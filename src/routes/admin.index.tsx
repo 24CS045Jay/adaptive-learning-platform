@@ -93,20 +93,20 @@ const TABS = [
 function AdminDashboard() {
   const { user } = useAuth();
   const [tab, setTab] = useState("overview");
-  const { users, subjects, documents, escalations, topicVolume } = useAppData();
+  const { users, subjects, documents, escalations, topicVolume, queries } = useAppData();
 
-  const students = users.filter((u) => u.role === "Student").length;
-  const faculty  = users.filter((u) => u.role === "Faculty").length;
-  const admins   = users.filter((u) => u.role === "Admin").length;
+  const students = users.filter((u) => (u.role || "").toLowerCase() === "student").length;
+  const faculty  = users.filter((u) => (u.role || "").toLowerCase() === "faculty").length;
+  const admins   = users.filter((u) => (u.role || "").toLowerCase().includes("admin")).length;
   const openEsc  = escalations.filter((e) => e.status === "open").length;
   const pending  = documents.filter((d) => d.status === "pending").length;
   const approved = documents.filter((d) => d.status === "approved").length;
   const rejected = documents.filter((d) => d.status === "rejected").length;
   const totalDocs = pending + approved + rejected;
 
-  const prevQueries = Math.round((topicVolume.reduce((a, t) => a + t.asked, 0) + 1480) * 0.82);
-  const currentQueries = topicVolume.reduce((a, t) => a + t.asked, 0) + 1480;
-  const queriesTrendPct = Math.round(((currentQueries - prevQueries) / Math.max(prevQueries, 1)) * 100);
+  const currentQueries = queries.length;
+  const prevQueries = Math.max(1, Math.round(currentQueries * 0.8));
+  const queriesTrendPct = currentQueries > 0 ? Math.round(((currentQueries - prevQueries) / prevQueries) * 100) : 0;
 
   const prevEsc = Math.max(openEsc + 2, 1);
   const escTrendPct = Math.round(((openEsc - prevEsc) / prevEsc) * 100);

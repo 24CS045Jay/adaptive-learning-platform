@@ -33,6 +33,13 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.config import get_settings
+from app.learner_adaptive import (
+    LearnerKnowledgeProfile,
+    QueryLearningIntent,
+    TeachingPlanner,
+    analyze_query_and_intent,
+    asdict,
+)
 from app.providers import get_llm, llm_text
 from app.retriever import HybridRetriever, build_where
 
@@ -60,8 +67,13 @@ class AgentState(TypedDict, total=False):
     document_ids: Optional[List[str]]
     learner_level: str
     response_language: str
+    mode: str
+    learner_profile: Optional[Dict[str, Any]]
     # working
     intent: str
+    learning_intent: Optional[Dict[str, Any]]
+    tool_used: Optional[str]
+    tool_result: Optional[Any]
     standalone: str
     sub_queries: List[str]
     candidates: Dict[str, Dict[str, Any]]  # chunk_id -> {doc, score}
@@ -74,9 +86,11 @@ class AgentState(TypedDict, total=False):
     # output
     confidence: float
     sources: List[Dict[str, Any]]
+    understanding_check: Optional[Dict[str, Any]]
     trace: Annotated[List[Dict[str, Any]], operator.add]
     retrieval: Dict[str, Any]
     final: str
+
 
 
 # ---------------------------------------------------------------- helpers
@@ -111,22 +125,36 @@ def route_node(s: AgentState) -> dict:
         out = _json(
             _light(
                 "TASK:ROUTE\nClassify the student message. Reply ONLY JSON "
-                '{"intent":"academic|smalltalk|offtopic"}. academic = any question about a subject, '
-                "concept, assignment or course content (even short follow-ups like 'why?'). "
-                "smalltalk = greeting/thanks. offtopic = unrelated to studying.\n"
+                '{"intent":"academic|computation|graph|smalltalk|offtopic"}.\n'
+                "- computation: calculations, arithmetic, formulas, math equations, matrix, statistics, or numerical solving.\n"
+                "- graph: plot, draw, chart, or visual graphing.\n"
+                "- academic: course concepts, definitions, theories, coding problems, algorithms.\n"
+                "- smalltalk: greetings, thanks, pleasantries.\n"
+                "- offtopic: completely unrelated topics (celebrity gossip, sports scores, weather).\n"
                 f"RECENT CHAT:\n{_fmt_history(s.get('history', []))}\nQUESTION: {q}"
             )
         )
-        if out and out.get("intent") in {"academic", "smalltalk", "offtopic"}:
+        if out and out.get("intent") in {"academic", "computation", "graph", "smalltalk", "offtopic"}:
             intent = out["intent"]
     except Exception as e:  # degrade: treat as academic
         log.warning("route failed (%s) -> academic", e)
-    return {"intent": intent, "round": 0, "gen_attempt": 0, "candidates": {}, "trace": _t("route", intent=intent)}
+    return {
+        "intent": intent,
+        "round": 0,
+        "gen_attempt": 0,
+        "candidates": {},
+        "tool_used": None,
+        "tool_result": None,
+        "trace": _t("route", intent=intent),
+    }
 
 
 def rewrite_node(s: AgentState) -> dict:
     q = s["question"].strip()
-    standalone, subs = q, [q]
+    profile = LearnerKnowledgeProfile.from_dict(s.get("learner_profile"))
+    intent_obj = analyze_query_and_intent(q, s.get("history", []), profile)
+
+    standalone, subs = intent_obj.normalized_query or q, [intent_obj.normalized_query or q]
     try:
         out = _json(
             _light(
@@ -139,15 +167,29 @@ def rewrite_node(s: AgentState) -> dict:
             )
         )
         if out and out.get("standalone"):
-            standalone = str(out["standalone"]).strip() or q
+            standalone = str(out["standalone"]).strip() or standalone
             subs = [str(x).strip() for x in (out.get("sub_queries") or []) if str(x).strip()][:3] or [standalone]
     except Exception as e:
         log.warning("rewrite failed (%s) -> raw question", e)
+
+    # Scaffolding: if student has prerequisite gaps, also retrieve the prerequisite concept
+    if intent_obj.needs_scaffolding and intent_obj.prerequisite_gaps:
+        for gap in intent_obj.prerequisite_gaps[:2]:
+            gap_q = f"{gap} definition principles"
+            if gap_q not in subs:
+                subs.append(gap_q)
+
     if standalone not in subs:
         subs = [standalone] + subs
     if q not in subs:
         subs.append(q)
-    return {"standalone": standalone, "sub_queries": subs[:4], "trace": _t("rewrite", queries=subs[:4])}
+
+    return {
+        "standalone": standalone,
+        "sub_queries": subs[:5],
+        "learning_intent": asdict(intent_obj),
+        "trace": _t("rewrite", queries=subs[:5], intent_goal=intent_obj.immediate_goal, gaps=intent_obj.prerequisite_gaps),
+    }
 
 
 def retrieve_node(s: AgentState) -> dict:
@@ -274,30 +316,34 @@ def generate_node(s: AgentState) -> dict:
             "Keep code keywords, programming syntax, mathematical equations, and source citation markers like [1] untouched."
         )
 
-    tutor_guidelines = (
-        "\nTEACHING STRUCTURE & FORMATTING GUIDELINES:\n"
-        "- Structure your explanation clearly with Markdown:\n"
-        "  1. Direct, accessible explanation of the core concept.\n"
-        "  2. Step-by-step breakdown or illustrative mechanism.\n"
-        "  3. Meaningful real-world example.\n"
-        "  4. Visual Representation: If the concept is procedural, relational, algorithmic, or architectural "
-        "(e.g. workflows, lifecycles, trees, state transitions), include a clean ```mermaid diagram. "
-        "If it involves numerical distributions, comparative metrics, or complexity comparisons, include a valid ```json:chart specification:\n"
-        '     ```json:chart\n'
-        '     {"type":"chart","chartType":"bar|line|scatter","title":"...","xLabel":"...","yLabel":"...","data":[{"label":"...","value":10}],"explanation":"..."}\n'
-        '     ```\n'
-        "     Only include a diagram or chart if it genuinely aids pedagogical understanding; do not force one for simple factual queries.\n"
-        "  5. Practical application, common misconceptions, or a short practice question when helpful.\n"
-        "- Format code with syntax language tags (e.g. ```python, ```sql).\n"
-        "- Format mathematical formulas with LaTeX ($inline$ or $$block$$).\n"
+    tutor_formatting = (
+        "\nTEACHING FORMATTING GUIDELINES:\n"
+        "- Structure your explanation clearly with Markdown.\n"
+        "- If procedural or architectural, include a clean ```mermaid diagram.\n"
+        "- If numerical distribution or comparative, include a valid ```json:chart specification.\n"
+        "- Format code with language syntax tags (e.g. ```python), formulas with LaTeX ($inline$ or $$block$$).\n"
         "- Cite numbered context inline like [1] or [2][3] after the sentences they support."
     )
+
+    prof_dict = s.get("learner_profile")
+    profile = LearnerKnowledgeProfile.from_dict(prof_dict)
+    intent_dict = s.get("learning_intent")
+    if intent_dict and isinstance(intent_dict, dict):
+        try:
+            intent_obj = QueryLearningIntent(**intent_dict)
+        except Exception:
+            intent_obj = analyze_query_and_intent(s["question"], s.get("history", []), profile)
+    else:
+        intent_obj = analyze_query_and_intent(s["question"], s.get("history", []), profile)
+
+    effective_mode = s.get("mode", profile.preferred_teaching_mode or "ask_tutor")
+    adaptive_plan = TeachingPlanner.generate_instruction(intent_obj, profile, effective_mode)
 
     prompt = (
         "TASK:ANSWER\nYou are an expert university AI tutor. Answer the student's question using the "
         "numbered context below. Cite sources inline like [1] or [2][3] after the sentences they support. "
         "Do not invent facts outside the context. If the context does not contain the answer, reply exactly "
-        f"INSUFFICIENT_CONTEXT. {_LEVEL.get(s.get('learner_level','intermediate'), '')}{lang_inst}{tutor_guidelines}{strict}\n"
+        f"INSUFFICIENT_CONTEXT.\n{adaptive_plan}{lang_inst}{tutor_formatting}{strict}\n"
         f"CONTEXT:\n{_ctx_block(s['relevant'])}\n"
         f"QUESTION: {s['standalone']}\n"
     )
@@ -305,7 +351,76 @@ def generate_node(s: AgentState) -> dict:
         ans = llm_text(get_llm("heavy").invoke(prompt)).strip()
     except Exception as e:
         raise LLMUnavailable(f"All LLM providers failed during generation: {str(e)[:300]}")
-    return {"answer": ans, "gen_attempt": attempt + 1, "trace": _t("generate", attempt=attempt + 1, chars=len(ans))}
+    return {"answer": ans, "gen_attempt": attempt + 1, "trace": _t("generate", attempt=attempt + 1, chars=len(ans), mode=effective_mode)}
+
+
+def compute_node(s: AgentState) -> dict:
+    from app.tools.registry import get_tool_registry
+    q = s.get("standalone") or s["question"]
+    intent = s.get("intent", "computation")
+    reg = get_tool_registry()
+    tool_used = "calculator"
+    tool_out = None
+
+    if intent == "graph" or any(w in q.lower() for w in ["plot", "graph", "chart"]):
+        tool_used = "generate_chart"
+        try:
+            spec = _json(_light(
+                f"TASK:EXTRACT_CHART_PARAMS\nGiven the user request, output JSON for generate_chart: "
+                f'{{"chart_type":"line|bar|histogram|function","title":"...","x_data":"...","y_data":"...","x_label":"...","y_label":"..."}}\n'
+                f"REQUEST: {q}"
+            ))
+            if spec and isinstance(spec, dict):
+                tool_out = reg.execute("generate_chart", **spec)
+            else:
+                tool_out = reg.execute("generate_chart", chart_type="function", title="Course Plot", x_data="x", y_data="sin(x)")
+        except Exception as e:
+            tool_out = {"success": False, "error": str(e)}
+    else:
+        calc_spec = _json(_light(
+            f"TASK:EXTRACT_MATH\nGiven the student question, extract the exact mathematical expression to evaluate, or a short educational python snippet.\n"
+            f'Reply ONLY JSON {{"tool":"calculator|python_executor","expression":"...","code":"..."}}.\n'
+            f"QUESTION: {q}"
+        ))
+        if calc_spec and calc_spec.get("tool") == "python_executor" and calc_spec.get("code"):
+            tool_used = "python_executor"
+            tool_out = reg.execute("python_executor", code=calc_spec["code"])
+        elif calc_spec and calc_spec.get("expression"):
+            tool_used = "calculator"
+            tool_out = reg.execute("calculator", expression=calc_spec["expression"])
+        else:
+            tool_used = "calculator"
+            tool_out = reg.execute("calculator", expression=q)
+
+    ctx = _ctx_block(s.get("relevant", [])) if s.get("relevant") else "(No specific course formula document needed)"
+    chart_md = tool_out.get("markdown", "") if isinstance(tool_out, dict) else ""
+    calc_str = str(tool_out)
+    explanation_prompt = (
+        f"TASK:EXPLAIN_COMPUTATION\n"
+        f"You are an expert university AI tutor. Explain the solution to the student clearly with step-by-step mathematical reasoning.\n"
+        f"Verified Tool Output: {calc_str}\n"
+        f"Course Reference Context: {ctx}\n"
+        f"Student Question: {q}\n\n"
+        f"Guidelines:\n"
+        f"1. State the calculated or generated answer clearly upfront.\n"
+        f"2. Show the mathematical steps, definitions, and equations using LaTeX notation ($...$).\n"
+        f"3. If a chart markdown was generated ({chart_md}), embed it in your response.\n"
+        f"4. Cite course material [1] if the context provided relevant formulas or definitions.\n"
+    )
+    try:
+        ans = llm_text(get_llm("heavy").invoke(explanation_prompt)).strip()
+    except Exception:
+        ans = f"Calculated Result: {calc_str}\n\n{chart_md}"
+
+    return {
+        "answer": ans,
+        "tool_used": tool_used,
+        "tool_result": tool_out,
+        "support": 1.0,
+        "grounded": True,
+        "trace": _t("compute", tool=tool_used, result=str(tool_out)[:100]),
+    }
+
 
 
 def verify_node(s: AgentState) -> dict:
@@ -343,8 +458,31 @@ def finalize_node(s: AgentState) -> dict:
         return {"final": OFFTOPIC, "grounded": True, "confidence": 1.0, "sources": [], "trace": _t("finalize")}
     if s.get("final"):  # no_answer path already filled it
         return {"trace": _t("finalize")}
-    rel = s["relevant"]
-    ans = s["answer"]
+
+    rel = s.get("relevant") or []
+    ans = s.get("answer", "")
+
+    if s.get("tool_used"):
+        sources = []
+        for idx, r in enumerate(rel, 1):
+            m = r["doc"].metadata
+            sources.append({
+                "document_id": m.get("document_id"),
+                "file_name": m.get("file_name"),
+                "page": m.get("page"),
+                "chunk_index": m.get("chunk_index"),
+                "section": m.get("heading") or None,
+                "snippet": r["doc"].page_content[:240],
+                "score": r["score"],
+                "ref": idx,
+            })
+        return {
+            "final": ans,
+            "confidence": 0.98,
+            "sources": sources,
+            "trace": _t("finalize", confidence=0.98, tool_used=s.get("tool_used")),
+        }
+
     cited = sorted({int(n) for grp in re.findall(r"\[(\d+(?:\s*,\s*\d+)*)\]", ans) for n in re.split(r"\s*,\s*", grp)})
     cited = [n for n in cited if 1 <= n <= len(rel)] or list(range(1, len(rel) + 1))
     sources = []
@@ -365,20 +503,36 @@ def finalize_node(s: AgentState) -> dict:
     top = max((c["score"] for c in rel), default=0.0)
     frac = len(rel) / max(1, len(s.get("candidates", {})) or 1)
     conf = 0.40 * s.get("support", 0.0) + 0.35 * min(1.0, top / 0.7) + 0.25 * min(1.0, frac * 2)
+
+    # Extract formative understanding check if generated
+    check_data = None
+    check_match = re.search(r"###\s*💡\s*Quick Concept Check\s*\n+([\s\S]*?)(?=\n###|\Z)", ans)
+    if check_match:
+        cq = check_match.group(1).strip()
+        if cq:
+            check_data = {
+                "question": cq,
+                "topic": (s.get("learning_intent") or {}).get("topic") or "Course Concept",
+                "subtopic": (s.get("learning_intent") or {}).get("subtopic"),
+            }
+
     return {
         "final": ans,
         "confidence": round(max(0.0, min(1.0, conf)), 3),
         "sources": sources,
+        "understanding_check": check_data,
         "trace": _t("finalize", confidence=round(conf, 3), cited=cited),
     }
 
 
 # ---------------------------------------------------------------- edges
 def after_route(s: AgentState) -> str:
-    return "rewrite" if s.get("intent") == "academic" else "finalize"
+    return "rewrite" if s.get("intent") in {"academic", "computation", "graph"} else "finalize"
 
 
 def after_grade(s: AgentState) -> str:
+    if s.get("intent") in {"computation", "graph"}:
+        return "compute"
     if s.get("relevant"):
         return "generate"
     return "refine" if s.get("round", 0) < get_settings().max_rounds - 1 else "no_answer"
@@ -398,7 +552,7 @@ def build_graph():
     g = StateGraph(AgentState)
     for name, fn in [
         ("route", route_node), ("rewrite", rewrite_node), ("retrieve", retrieve_node), ("grade", grade_node),
-        ("refine", refine_node), ("generate", generate_node), ("verify", verify_node),
+        ("compute", compute_node), ("refine", refine_node), ("generate", generate_node), ("verify", verify_node),
         ("no_answer", no_answer_node), ("finalize", finalize_node),
     ]:
         g.add_node(name, fn)
@@ -406,7 +560,8 @@ def build_graph():
     g.add_conditional_edges("route", after_route, {"rewrite": "rewrite", "finalize": "finalize"})
     g.add_edge("rewrite", "retrieve")
     g.add_edge("retrieve", "grade")
-    g.add_conditional_edges("grade", after_grade, {"generate": "generate", "refine": "refine", "no_answer": "no_answer"})
+    g.add_conditional_edges("grade", after_grade, {"generate": "generate", "compute": "compute", "refine": "refine", "no_answer": "no_answer"})
+    g.add_edge("compute", "finalize")
     g.add_edge("refine", "retrieve")
     g.add_conditional_edges("generate", after_generate, {"verify": "verify", "no_answer": "no_answer"})
     g.add_conditional_edges("verify", after_verify, {"finalize": "finalize", "generate": "generate", "no_answer": "no_answer"})
@@ -435,6 +590,8 @@ def ask(
     history: Optional[List[Dict[str, str]]] = None,
     learner_level: str = "intermediate",
     response_language: str = "en",
+    mode: str = "ask_tutor",
+    learner_profile: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     t0 = time.time()
     st = get_graph().invoke(
@@ -447,6 +604,8 @@ def ask(
             "document_ids": document_ids,
             "learner_level": learner_level,
             "response_language": response_language,
+            "mode": mode,
+            "learner_profile": learner_profile,
             "trace": [],
         },
         config={"recursion_limit": 25},
@@ -454,24 +613,33 @@ def ask(
 
     final_ans = st.get("final", NO_ANSWER)
 
-    # Extract chart data if present in markdown codeblock
+    # Extract chart data if present in markdown codeblock or returned by tool
     chart_data = None
-    chart_match = re.search(r"```(?:json:chart|chart)\s*([\s\S]*?)```", final_ans)
-    if chart_match:
-        try:
-            chart_data = json.loads(chart_match.group(1).strip())
-        except Exception:
-            pass
+    if st.get("tool_used") == "generate_chart" and isinstance(st.get("tool_result"), dict):
+        chart_data = st.get("tool_result")
+    else:
+        chart_match = re.search(r"```(?:json:chart|chart)\s*([\s\S]*?)```", final_ans)
+        if chart_match:
+            try:
+                chart_data = json.loads(chart_match.group(1).strip())
+            except Exception:
+                pass
 
     return {
         "answer": final_ans,
         "confidence": st.get("confidence", 0.0),
         "grounded": bool(st.get("grounded", False)),
         "intent": st.get("intent", "academic"),
+        "mode": st.get("mode", mode),
+        "tool_used": st.get("tool_used"),
         "sources": st.get("sources", []),
         "chart": chart_data,
+        "understanding_check": st.get("understanding_check"),
+        "learning_intent": st.get("learning_intent"),
+        "learner_profile": st.get("learner_profile"),
         "retrieval": st.get("retrieval", {"strategy": "hybrid_rrf"}),
         "agent_trace": st.get("trace", []),
         "standalone_question": st.get("standalone"),
         "latency_ms": int((time.time() - t0) * 1000),
     }
+
