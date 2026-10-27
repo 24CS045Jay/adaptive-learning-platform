@@ -27,7 +27,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { Logo, Sparkle, ThemeToggle } from "@/components/brand";
+import { Logo, Sparkle } from "@/components/brand";
 import { ProductDemoModal } from "@/components/video/ProductDemoModal";
 import { cn } from "@/lib/utils";
 
@@ -136,7 +136,6 @@ function LandingPage() {
             ))}
           </nav>
           <div className="flex items-center gap-3">
-            <ThemeToggle className="hidden sm:inline-flex" />
             <Link to="/login" className="btn-pill-ghost !px-6 !py-2.5">
               Login
             </Link>
@@ -458,10 +457,10 @@ function LandingPage() {
 function HeroBackdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden>
-      <div className="absolute inset-0 bg-[linear-gradient(180deg,#edf1ff_0%,#f4f1ff_60%,transparent_100%)] dark:bg-[linear-gradient(180deg,#0b0f36_0%,#0a0c27_70%,transparent_100%)]" />
-      <div className="absolute -left-20 top-24 h-96 w-96 rounded-full bg-sky-300/35 blur-3xl dark:bg-indigo-600/25" />
-      <div className="absolute right-[10%] top-0 h-[34rem] w-[34rem] rounded-full bg-violet-300/40 blur-3xl dark:bg-violet-700/25" />
-      <div className="absolute inset-x-0 top-0 h-full opacity-60 [background-image:radial-gradient(circle,rgba(255,255,255,.8)_1px,transparent_1.5px)] [background-size:36px_36px] dark:opacity-10" />
+      <div className="absolute inset-0 bg-[linear-gradient(180deg,#edf1ff_0%,#f4f1ff_60%,transparent_100%)]" />
+      <div className="absolute -left-20 top-24 h-96 w-96 rounded-full bg-sky-300/35 blur-3xl" />
+      <div className="absolute right-[10%] top-0 h-[34rem] w-[34rem] rounded-full bg-violet-300/40 blur-3xl" />
+      <div className="absolute inset-x-0 top-0 h-full opacity-60 [background-image:radial-gradient(circle,rgba(255,255,255,.8)_1px,transparent_1.5px)] [background-size:36px_36px]" />
     </div>
   );
 }

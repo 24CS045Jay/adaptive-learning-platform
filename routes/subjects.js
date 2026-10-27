@@ -149,7 +149,7 @@ router.post("/", authenticate, requireRole("admin", "super_admin"), async (req, 
         departmentId,
         facultyId: resolvedFacultyId,
       },
-    }).catch(() => {});
+    }).catch(() => { });
 
     const createdWithFaculty = await Subject.findById(subject.id || subject._id).populate(
       "facultyId",
@@ -265,7 +265,7 @@ router.delete("/:id", authenticate, requireRole("admin", "super_admin"), async (
       target = await Subject.findById(key._id);
     }
     if (!target) return res.status(404).json({ error: "Subject not found." });
-    
+
     await Subject.findByIdAndDelete(target.id || target._id);
     return res.json({ message: "Subject deleted successfully.", id: String(target.id || target._id) });
   } catch (error) {

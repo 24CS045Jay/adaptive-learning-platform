@@ -86,7 +86,7 @@ router.post("/login", async (req, res) => {
         action: "USER_LOGIN",
         details: { email: user.email, role: user.role, departmentId: user.departmentId, ip: req.ip },
       });
-    } catch {}
+    } catch { }
 
     return res.json({ token, user: publicUser(user) });
   } catch (error) {
@@ -205,7 +205,7 @@ router.post("/register", async (req, res) => {
         action: "USER_REGISTER",
         details: { email: user.email, role: user.role, departmentId: user.departmentId, ip: req.ip },
       });
-    } catch {}
+    } catch { }
 
     return res.status(201).json({ token, user: publicUser(user) });
   } catch (error) {
@@ -315,7 +315,7 @@ router.post("/reset-password", async (req, res) => {
         action: "PASSWORD_RESET",
         details: { email: user.email, ip: req.ip },
       });
-    } catch {}
+    } catch { }
 
     return res.json({
       ok: true,
@@ -324,6 +324,52 @@ router.post("/reset-password", async (req, res) => {
   } catch (error) {
     console.error("[Auth Error] Reset password error:", error);
     return res.status(500).json({ error: error.message || "Failed to reset password." });
+  }
+});
+
+// ─── CHANGE PASSWORD (AUTHENTICATED) ──────────────────────────────────────────
+router.post("/change-password", authenticate, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current password and new password are required." });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: "New password must be at least 6 characters." });
+    }
+
+    const userId = req.user.id || req.user._id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash || user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Incorrect current password." });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, await bcrypt.genSalt(10));
+    await User.findByIdAndUpdate(userId, {
+      passwordHash,
+      mustChangePassword: false,
+    });
+
+    try {
+      await AuditLog.create({
+        actorId: userId,
+        action: "PASSWORD_CHANGE",
+        details: { email: user.email, ip: req.ip },
+      });
+    } catch { }
+
+    return res.json({
+      ok: true,
+      message: "Password changed successfully.",
+    });
+  } catch (error) {
+    console.error("[Auth Error] Change password error:", error);
+    return res.status(500).json({ error: error.message || "Failed to change password." });
   }
 });
 

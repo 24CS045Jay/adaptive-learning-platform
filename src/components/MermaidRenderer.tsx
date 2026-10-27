@@ -2,19 +2,19 @@ import { useEffect, useRef, useState, useId } from "react";
 import mermaid from "mermaid";
 import { Maximize2, Minimize2, Copy, Check, Sparkles, RefreshCw } from "lucide-react";
 
-// Initialize mermaid once with clean modern theme configuration
+// Initialize mermaid once with clean modern light theme configuration
 mermaid.initialize({
   startOnLoad: false,
-  theme: "dark",
+  theme: "default",
   themeVariables: {
-    fontFamily: "Inter, sans-serif",
+    fontFamily: "Plus Jakarta Sans, Inter, sans-serif",
     fontSize: "13px",
-    primaryColor: "#7c3aed",
-    primaryTextColor: "#ffffff",
-    primaryBorderColor: "#9d72f7",
-    lineColor: "#a78bfa",
-    secondaryColor: "#3b82f6",
-    tertiaryColor: "#1e1b4b",
+    primaryColor: "#ede9fe",
+    primaryTextColor: "#14163a",
+    primaryBorderColor: "#7c3aed",
+    lineColor: "#6c4ff0",
+    secondaryColor: "#f0edff",
+    tertiaryColor: "#fdf8f6",
   },
   securityLevel: "loose",
 });

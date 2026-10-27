@@ -10,6 +10,8 @@ import express from "express";
 import multer from "multer";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
+import fs from "node:fs";
+import path from "node:path";
 dotenv.config({ override: true });
 import { JWT_SECRET } from "../middleware/auth.js";
 import {
@@ -116,6 +118,9 @@ router.get("/config", (req, res) => {
         persona_id: (process.env.TAVUS_PERSONA_ID || "peba358b8e8a").trim(),
         persona_name: "JARVIS",
         supported_modes: ["conversational_video", "audio_only"],
+        apiKeyMasked: (process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").length > 8
+          ? `${(process.env.TAVUS_API_KEY || TAVUS_API_KEY).slice(0, 4)}...${(process.env.TAVUS_API_KEY || TAVUS_API_KEY).slice(-4)}`
+          : "",
       },
       rag: {
         endpoint: RAG_SERVICE_URL,
@@ -406,7 +411,7 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
       } catch {}
     }
 
-    // Enforce student subject enrollment access control
+    // Enforce or auto-enroll student subject enrollment access
     if (req.user && (req.user.role === "student" || !req.user.role)) {
       const studentIdentifier = String(req.user.id || req.user._id || "");
       const studentEmail = req.user.email ? String(req.user.email).toLowerCase() : "";
@@ -422,11 +427,15 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
           return clean === studentIdentifier.toLowerCase() || (studentEmail && clean === studentEmail);
         });
 
-        if (!isEnrolled) {
-          return res.status(403).json({
-            error: `Enrollment required: You are not enrolled in ${subject.name || subjectCode}. Please enroll in this subject from your Dashboard Course Catalog to access AI Faculty live tutoring.`,
-            requiresEnrollment: true,
-          });
+        if (!isEnrolled && (studentIdentifier || studentEmail)) {
+          try {
+            const updated = [...enrolledList, studentIdentifier, studentEmail].filter(Boolean);
+            subject.enrolledStudentIds = updated;
+            await subject.save();
+            console.log(`[AI Faculty Interact] Auto-enrolled student ${studentIdentifier || studentEmail} in ${subject.name || subjectCode}`);
+          } catch (autoErr) {
+            console.warn("[AI Faculty Interact] Auto-enrollment notice:", autoErr.message);
+          }
         }
       }
     }
@@ -476,6 +485,7 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
           university_id: "CHARUSAT",
           department_id: "CSPIT-CSE",
           semester: 5,
+          subject_ids: subject?._id ? [String(subject._id)] : [subjectCode],
         },
         topK: 5,
       };
@@ -487,7 +497,7 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
           "X-Internal-Token": INTERNAL_SERVICE_TOKEN,
         },
         body: JSON.stringify(ragPayload),
-        signal: AbortSignal.timeout(22_000),
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (ragRes.ok) {
@@ -591,9 +601,13 @@ router.post("/interact", requireStudentOrUser, async (req, res) => {
     return res.json({
       turnId: parseInt(turnId, 10) || 1,
       spoken_answer: conciseSpoken,
+      spokenAnswer: conciseSpoken,
       full_answer: agenticAnswer,
+      agenticAnswer: agenticAnswer,
       audio_base64: audioBase64,
+      audioBase64: audioBase64,
       audio_mime: "audio/wav",
+      audioMimeType: "audio/wav",
       visual: visual,
       worked_example: workedExample,
       sources: sources,
@@ -644,24 +658,28 @@ router.post("/tavus/session", requireStudentOrUser, async (req, res) => {
           return clean === studentIdentifier.toLowerCase() || (studentEmail && clean === studentEmail);
         });
 
-        if (!isEnrolled) {
-          return res.status(403).json({
-            error: `Enrollment required: You are not enrolled in ${subject.name}. Please enroll from your Dashboard Course Catalog to start a live AI Faculty video call.`,
-            requiresEnrollment: true,
-          });
+        if (!isEnrolled && (studentIdentifier || studentEmail)) {
+          try {
+            const updated = [...enrolledList, studentIdentifier, studentEmail].filter(Boolean);
+            subject.enrolledStudentIds = updated;
+            await subject.save();
+            console.log(`[Tavus CVI] Auto-enrolled student ${studentIdentifier || studentEmail} in ${subject.name}`);
+          } catch (autoErr) {
+            console.warn("[Tavus CVI] Auto-enrollment notice:", autoErr.message);
+          }
         }
       }
     }
 
-    const apiKey = (process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").trim();
-    const personaId = (process.env.TAVUS_PERSONA_ID || TAVUS_PERSONA_ID || "peba358b8e8a").trim();
-    const replicaId = (process.env.TAVUS_REPLICA_ID || TAVUS_REPLICA_ID || "r72f7f7f7c8b").trim();
+    const apiKey = (req.body.apiKey || process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").trim();
+    const personaId = (req.body.personaId || process.env.TAVUS_PERSONA_ID || TAVUS_PERSONA_ID || "peba358b8e8a").trim();
+    const replicaId = (req.body.replicaId || process.env.TAVUS_REPLICA_ID || TAVUS_REPLICA_ID || "r72f7f7f7c8b").trim();
 
     if (!apiKey || apiKey.length < 5) {
       return res.status(503).json({
         error: "Tavus API key not configured.",
         configured: false,
-        note: "Add TAVUS_API_KEY to your .env file to enable live photorealistic WebRTC video replica.",
+        note: "Add TAVUS_API_KEY in Tavus Settings to enable live photorealistic WebRTC video replica.",
       });
     }
 
@@ -704,15 +722,20 @@ router.post("/tavus/session", requireStudentOrUser, async (req, res) => {
       });
     } else {
       const errText = await tavusRes.text().catch(() => "");
+      let parsed = null;
+      try { parsed = JSON.parse(errText); } catch {}
+      const userMessage = parsed?.message || (tavusRes.status === 402 ? "The user is out of conversational credits." : "Tavus conversation creation failed.");
       console.warn("[Tavus CVI Session Error]:", tavusRes.status, errText);
       return res.status(tavusRes.status).json({
         error: "Tavus conversation creation failed.",
+        statusCode: tavusRes.status,
+        message: userMessage,
         details: errText,
       });
     }
   } catch (err) {
     console.error("[Tavus Session Creation Exception]:", err);
-    return res.status(500).json({ error: "Failed to initialize Tavus video session." });
+    return res.status(500).json({ error: "Failed to initialize Tavus video session.", details: err.message });
   }
 });
 
@@ -724,14 +747,15 @@ router.post("/tavus/end", requireStudentOrUser, async (req, res) => {
       return res.status(400).json({ error: "conversation_id is required." });
     }
 
-    if (!TAVUS_API_KEY) {
+    const apiKey = (process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").trim();
+    if (!apiKey) {
       return res.json({ status: "ended", local: true });
     }
 
     const endRes = await fetch(`https://tavusapi.com/v2/conversations/${conversation_id}/end`, {
       method: "POST",
       headers: {
-        "x-api-key": TAVUS_API_KEY,
+        "x-api-key": apiKey,
       },
       signal: AbortSignal.timeout(10_000),
     });
@@ -740,6 +764,102 @@ router.post("/tavus/end", requireStudentOrUser, async (req, res) => {
   } catch (err) {
     console.warn("[Tavus End Session Warning]:", err.message);
     return res.json({ status: "ended", warning: err.message });
+  }
+});
+
+// ── 9. POST /api/ai-faculty/tavus/config ───────────────────────────────────────
+// Get or update Tavus API key, Persona ID, Replica ID and persist to .env
+router.post("/tavus/config", requireStudentOrUser, async (req, res) => {
+  try {
+    const { apiKey, personaId, replicaId } = req.body;
+    
+    let verified = false;
+    let creditsStatus = "unknown";
+    let errorMessage = null;
+
+    const testKey = (apiKey || process.env.TAVUS_API_KEY || TAVUS_API_KEY || "").trim();
+    if (testKey) {
+      try {
+        const testRes = await fetch("https://tavusapi.com/v2/personas", {
+          headers: { "x-api-key": testKey },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (testRes.ok) {
+          verified = true;
+          creditsStatus = "active";
+        } else if (testRes.status === 402) {
+          verified = true;
+          creditsStatus = "out_of_credits";
+          errorMessage = "Tavus key is valid, but account is out of conversational credits.";
+        } else if (testRes.status === 401) {
+          verified = false;
+          creditsStatus = "unauthorized";
+          errorMessage = "Invalid Tavus API key (401 Unauthorized).";
+        } else {
+          errorMessage = `Tavus responded with HTTP ${testRes.status}`;
+        }
+      } catch (err) {
+        errorMessage = `Could not reach Tavus API: ${err.message}`;
+      }
+    }
+
+    if (apiKey !== undefined || personaId !== undefined || replicaId !== undefined) {
+      const envPath = path.resolve(process.cwd(), ".env");
+      let envContent = "";
+      try {
+        envContent = fs.readFileSync(envPath, "utf-8");
+      } catch {}
+
+      if (apiKey !== undefined && apiKey.trim()) {
+        process.env.TAVUS_API_KEY = apiKey.trim();
+        if (envContent.includes("TAVUS_API_KEY=")) {
+          envContent = envContent.replace(/TAVUS_API_KEY=.*/g, `TAVUS_API_KEY=${apiKey.trim()}`);
+        } else {
+          envContent += `\nTAVUS_API_KEY=${apiKey.trim()}\n`;
+        }
+      }
+
+      if (personaId !== undefined && personaId.trim()) {
+        process.env.TAVUS_PERSONA_ID = personaId.trim();
+        if (envContent.includes("TAVUS_PERSONA_ID=")) {
+          envContent = envContent.replace(/TAVUS_PERSONA_ID=.*/g, `TAVUS_PERSONA_ID=${personaId.trim()}`);
+        } else {
+          envContent += `\nTAVUS_PERSONA_ID=${personaId.trim()}\n`;
+        }
+      }
+
+      if (replicaId !== undefined && replicaId.trim()) {
+        process.env.TAVUS_REPLICA_ID = replicaId.trim();
+        if (envContent.includes("TAVUS_REPLICA_ID=")) {
+          envContent = envContent.replace(/TAVUS_REPLICA_ID=.*/g, `TAVUS_REPLICA_ID=${replicaId.trim()}`);
+        } else {
+          envContent += `\nTAVUS_REPLICA_ID=${replicaId.trim()}\n`;
+        }
+      }
+
+      try {
+        fs.writeFileSync(envPath, envContent, "utf-8");
+      } catch (writeErr) {
+        console.warn("[Tavus Config] Error writing to .env:", writeErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      verified,
+      creditsStatus,
+      errorMessage,
+      tavus: {
+        apiKeyMasked: (process.env.TAVUS_API_KEY || "").length > 8 
+          ? `${process.env.TAVUS_API_KEY.slice(0, 4)}...${process.env.TAVUS_API_KEY.slice(-4)}`
+          : "",
+        apiKey: process.env.TAVUS_API_KEY || "",
+        persona_id: process.env.TAVUS_PERSONA_ID || "peba358b8e8a",
+        replica_id: process.env.TAVUS_REPLICA_ID || "r72f7f7f7c8b",
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to update Tavus configuration.", details: err.message });
   }
 });
 

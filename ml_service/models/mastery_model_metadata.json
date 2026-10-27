@@ -1,7 +1,7 @@
 {
   "model_version": "1.0.0",
   "champion_algorithm": "Gradient_Boosting",
-  "trained_at": "2026-10-14T15:32:16.062694",
+  "trained_at": "2026-10-22T09:04:13.878098",
   "dataset_rows": 8192,
   "unique_students": 120,
   "feature_columns": [

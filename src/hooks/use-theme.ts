@@ -1,36 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-type Theme = "dark" | "light";
-
-function getInitialTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  try {
-    const stored = localStorage.getItem("adeptive-theme") as Theme | null;
-    if (stored === "dark" || stored === "light") return stored;
-  } catch {}
-  return "dark"; // default dark
-}
-
-function applyTheme(theme: Theme) {
-  const html = document.documentElement;
-  if (theme === "dark") {
-    html.classList.add("dark");
-  } else {
-    html.classList.remove("dark");
-  }
-}
+export type Theme = "light";
 
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-
   useEffect(() => {
-    applyTheme(theme);
-    try {
-      localStorage.setItem("adeptive-theme", theme);
-    } catch {}
-  }, [theme]);
+    if (typeof window !== "undefined") {
+      document.documentElement.classList.remove("dark");
+      try {
+        localStorage.removeItem("adeptive-theme");
+      } catch {}
+    }
+  }, []);
 
-  const toggle = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
+  const toggle = () => {
+    if (typeof window !== "undefined") {
+      document.documentElement.classList.remove("dark");
+    }
+  };
 
-  return { theme, toggle, isDark: theme === "dark" };
+  return { theme: "light" as Theme, toggle, isDark: false };
 }
+

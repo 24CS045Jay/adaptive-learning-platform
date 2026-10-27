@@ -133,6 +133,11 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{document.documentElement.classList.remove('dark');localStorage.removeItem('adeptive-theme');}catch(e){}`,
+          }}
+        />
       </head>
       <body>
         {children}

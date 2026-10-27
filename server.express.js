@@ -162,14 +162,14 @@ async function checkRagServiceHealth() {
     } else {
       console.warn(
         `[Startup] ⚠️  Python RAG service returned HTTP ${res.status} — ` +
-          `Ask Tutor will degrade gracefully until the service is healthy.`,
+        `Ask Tutor will degrade gracefully until the service is healthy.`,
       );
     }
   } catch {
     console.warn(
       `[Startup] ⚠️  Python RAG service is UNREACHABLE at ${RAG_SERVICE_URL}\n` +
-        `         → Make sure the Python service is running: cd rag_service && uvicorn app.main:app --port 8001\n` +
-        `         → Ask Tutor will still escalate gracefully, but no real answers will be generated.`,
+      `         → Make sure the Python service is running: cd rag_service && uvicorn app.main:app --port 8001\n` +
+      `         → Ask Tutor will still escalate gracefully, but no real answers will be generated.`,
     );
   }
 }
