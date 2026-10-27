@@ -23,8 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/auth";
 import type { Role } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/hooks/use-theme";
-import { Logo, Sparkle, ThemeToggle } from "@/components/brand";
+import { Logo, Sparkle } from "@/components/brand";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -95,7 +94,6 @@ function LoginPage() {
   const [activeRole, setActiveRole] = useState<Role>("student");
   const [view, setView] = useState<ViewMode>("login");
   const navigate = useNavigate();
-  const { isDark } = useTheme();
 
   const handleLoginSuccess = useCallback(
     (role: Role, mustChangePw: boolean) => {
@@ -120,11 +118,6 @@ function LoginPage() {
   return (
     <div className="relative min-h-screen overflow-hidden font-sans text-foreground">
       <AuthBackdrop />
-
-      {/* Theme toggle */}
-      <div className="fixed right-6 top-5 z-30">
-        <ThemeToggle />
-      </div>
 
       <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-[1560px] items-center gap-6 px-6 py-8 lg:grid-cols-[1.28fr_1fr] lg:px-10 xl:px-14">
         {/* ───────── LEFT: brand + mascot ───────── */}
@@ -223,9 +216,7 @@ function LoginPage() {
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             className="glass relative rounded-[2.2rem] border border-border px-7 py-9 sm:px-10"
             style={{
-              boxShadow: isDark
-                ? "0 0 0 1px rgba(139,123,255,.28), 0 40px 90px -30px rgba(0,0,0,.8), 0 0 80px -20px rgba(99,102,241,.35)"
-                : "0 40px 80px -36px rgba(76,56,190,.45), 0 0 0 1px rgba(255,255,255,.8) inset",
+              boxShadow: "0 40px 80px -36px rgba(76,56,190,.45), 0 0 0 1px rgba(255,255,255,.8) inset",
             }}
           >
             <div className="mb-5 flex justify-center lg:hidden">
@@ -320,13 +311,13 @@ function LoginPage() {
 export function AuthBackdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-      <div className="absolute inset-0 bg-[linear-gradient(135deg,#eef2ff_0%,#f3efff_45%,#eaf1ff_100%)] dark:bg-[linear-gradient(135deg,#070a24_0%,#0b0f33_50%,#0a0c2b_100%)]" />
-      <div className="absolute -left-24 top-10 h-[26rem] w-[26rem] rounded-full bg-sky-300/35 blur-3xl dark:bg-indigo-600/25" />
-      <div className="absolute right-[18%] -top-24 h-[30rem] w-[30rem] rounded-[5rem] bg-violet-300/45 blur-3xl dark:bg-violet-700/25" />
-      <div className="absolute bottom-0 left-[28%] h-[20rem] w-[34rem] rounded-full bg-fuchsia-200/40 blur-3xl dark:bg-blue-700/20" />
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,#eef2ff_0%,#f3efff_45%,#eaf1ff_100%)]" />
+      <div className="absolute -left-24 top-10 h-[26rem] w-[26rem] rounded-full bg-sky-300/35 blur-3xl" />
+      <div className="absolute right-[18%] -top-24 h-[30rem] w-[30rem] rounded-[5rem] bg-violet-300/45 blur-3xl" />
+      <div className="absolute bottom-0 left-[28%] h-[20rem] w-[34rem] rounded-full bg-fuchsia-200/40 blur-3xl" />
       {/* faux bookshelf / window bokeh on the far left */}
-      <div className="absolute left-0 top-0 hidden h-full w-[12%] bg-gradient-to-r from-slate-300/35 to-transparent dark:from-indigo-900/40 lg:block" />
-      <div className="absolute inset-0 opacity-[.5] [background-image:radial-gradient(circle,rgba(255,255,255,.7)_1px,transparent_1.5px)] [background-size:34px_34px] dark:opacity-[.12]" />
+      <div className="absolute left-0 top-0 hidden h-full w-[12%] bg-gradient-to-r from-slate-300/35 to-transparent lg:block" />
+      <div className="absolute inset-0 opacity-[.5] [background-image:radial-gradient(circle,rgba(255,255,255,.7)_1px,transparent_1.5px)] [background-size:34px_34px]" />
     </div>
   );
 }
@@ -334,10 +325,10 @@ export function AuthBackdrop() {
 function GoogleG({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" className={className} aria-hidden>
-      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>
-      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/>
-      <path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3.1-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/>
-      <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z" />
+      <path fill="#FBBC05" d="M10.5 28.7c-.5-1.5-.8-3.1-.8-4.7s.3-3.2.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z" />
+      <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z" />
     </svg>
   );
 }
@@ -357,7 +348,6 @@ function LoginForm({
 }) {
   const { login, loginWithGoogle } = useAuth();
   const id = useId();
-  const { isDark } = useTheme();
 
   const [email, setEmail] = useState<string>(roleConfig.placeholder.email);
   const [password, setPassword] = useState<string>(roleConfig.placeholder.password);
@@ -434,8 +424,7 @@ function LoginForm({
               required
               className={cn(
                 "w-full rounded-full border bg-card/60 pl-12 pr-4 py-3.5 text-[0.95rem] text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                isDark ? "border-border" : "border-border",
+                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
               )}
             />
           </div>
@@ -455,8 +444,7 @@ function LoginForm({
               required
               className={cn(
                 "w-full rounded-full border bg-card/60 pl-12 pr-12 py-3.5 text-[0.95rem] text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                isDark ? "border-border" : "border-border",
+                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
               )}
             />
             <button
@@ -752,7 +740,6 @@ function RegisterForm({
 }) {
   const { register, sendOtp } = useAuth();
   const id = useId();
-  const { isDark } = useTheme();
 
   const [step, setStep] = useState<"form" | "otp">("form");
   const [name, setName] = useState("");
@@ -907,8 +894,7 @@ function RegisterForm({
                 required
                 className={cn(
                   "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                  isDark ? "border-border" : "border-border",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
                 )}
               />
             </div>
@@ -927,8 +913,7 @@ function RegisterForm({
                 required
                 className={cn(
                   "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                  isDark ? "border-border" : "border-border",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
                 )}
               />
             </div>
@@ -948,8 +933,7 @@ function RegisterForm({
               required
               className={cn(
                 "w-full rounded-full border bg-background/60 px-4 py-3 text-sm text-foreground outline-none transition",
-                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                isDark ? "border-border" : "border-border",
+                "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
               )}
             >
               {DEPARTMENT_OPTIONS.map((department) => (
@@ -973,8 +957,7 @@ function RegisterForm({
                 required
                 className={cn(
                   "w-full rounded-full border bg-background/60 pl-11 pr-11 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                  isDark ? "border-border" : "border-border",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
                 )}
               />
               <button
@@ -1060,8 +1043,7 @@ function RegisterForm({
               autoFocus
               className={cn(
                 "w-full rounded-2xl border bg-background/60 py-3.5 text-center font-mono text-2xl tracking-[0.5em] font-bold text-foreground outline-none transition",
-                "focus:border-violet focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_15%)]",
-                isDark ? "border-border" : "border-border",
+                "focus:border-violet focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_15%)] border-border",
               )}
             />
           </div>
@@ -1109,7 +1091,6 @@ function RegisterForm({
 
 function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
   const { sendPasswordReset } = useAuth();
-  const { isDark } = useTheme();
   const id = useId();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -1188,8 +1169,7 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
                 required
                 className={cn(
                   "w-full rounded-full border bg-background/60 pl-11 pr-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/70 hover:border-violet/30",
-                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]",
-                  isDark ? "border-border" : "border-border",
+                  "focus:border-violet/50 focus:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] border-border",
                 )}
               />
             </div>

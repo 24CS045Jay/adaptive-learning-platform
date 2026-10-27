@@ -12,9 +12,8 @@ import { currentUsers } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useAppData } from "@/lib/app-data-context";
-import { useTheme } from "@/hooks/use-theme";
 import { useCountUp } from "@/hooks/use-count-up";
-import { Logo, Mascot, ThemeToggle, Sparkle } from "@/components/brand";
+import { Logo, Mascot, Sparkle } from "@/components/brand";
 
 export type NavItem = { to: string; label: string; icon: LucideIcon };
 
@@ -26,7 +25,6 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
   const navigate = useNavigate();
   const { user: authUser, logout } = useAuth();
   const { notifications, markNotificationsAsRead } = useAppData();
-  const { isDark, toggle } = useTheme();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -173,7 +171,6 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
               </AnimatePresence>
             </div>
 
-            <ThemeToggle />
 
             <div className="relative">
               <button

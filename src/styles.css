@@ -115,53 +115,6 @@
   --glass: rgba(255,255,255,.72);
 }
 
-.dark {
-  /* Dark theme — deep midnight navy */
-  --background: #0a0c27;
-  --foreground: #f3f4ff;
-  --card: #12153a;
-  --card-foreground: #f3f4ff;
-  --popover: #12153a;
-  --popover-foreground: #f3f4ff;
-  --primary: #7c6af7;
-  --primary-foreground: #ffffff;
-  --secondary: #1a1e4a;
-  --secondary-foreground: #f3f4ff;
-  --muted: #1a1e4a;
-  --muted-foreground: #9aa0cf;
-  --accent: #1d2154;
-  --accent-foreground: #f3f4ff;
-  --destructive: #fb7185;
-  --destructive-foreground: #ffffff;
-  --border: rgba(140, 150, 255, 0.16);
-  --input: rgba(140, 150, 255, 0.22);
-  --ring: #7c6af7;
-  --violet: #8b7bff;
-  --gold: #fbbf24;
-  --success: #34d399;
-  --danger: #fb7185;
-  --chart-1: #8b7bff;
-  --chart-2: #fbbf24;
-  --chart-3: #34d399;
-  --chart-4: #2dd4bf;
-  --chart-5: #fb7185;
-  --sidebar: #0d1030;
-  --sidebar-foreground: #f3f4ff;
-  --sidebar-primary: #7c6af7;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1d2154;
-  --sidebar-accent-foreground: #f3f4ff;
-  --sidebar-border: rgba(140, 150, 255, 0.14);
-  --sidebar-ring: #7c6af7;
-  --page-bg:
-    radial-gradient(900px 520px at 85% -5%, rgba(99,102,241,.28), transparent 60%),
-    radial-gradient(700px 480px at 0% 40%, rgba(124,58,237,.18), transparent 60%),
-    linear-gradient(180deg, #0a0c27 0%, #080a20 100%);
-  --card-shadow: 0 14px 40px -18px rgba(0,0,0,.7), 0 0 0 1px rgba(140,150,255,.06) inset;
-  --btn-grad: linear-gradient(90deg, #6d5cf6 0%, #4f35e0 100%);
-  --glass: rgba(18,21,58,.72);
-}
-
 @layer base {
   * {
     border-color: var(--color-border);
@@ -569,53 +522,6 @@
     0 0 0 4px oklch(0.7 0.15 195 / 40%);
 }
 
-/* ═══════════════════════════════════════════════
-   THEME TOGGLE PILL
-═══════════════════════════════════════════════ */
-.theme-toggle-pill {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 64px;
-  height: 32px;
-  border-radius: 9999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-card);
-  cursor: pointer;
-  transition:
-    transform 0.2s ease,
-    background 0.25s ease,
-    border-color 0.25s ease,
-    box-shadow 0.25s ease;
-  box-shadow: 0 8px 18px -12px rgba(15, 23, 42, 0.42);
-  overflow: hidden;
-}
-.theme-toggle-thumb {
-  position: absolute;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--color-violet);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
-    background 0.25s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
-}
-.theme-toggle-thumb.is-dark {
-  transform: translateX(34px);
-}
-.theme-toggle-thumb.is-light {
-  transform: translateX(3px);
-  background: #d97706;
-}
-.dark .theme-toggle-pill {
-  box-shadow:
-    0 8px 24px -12px rgba(0, 0, 0, 0.85),
-    0 0 0 1px rgba(167, 139, 250, 0.12);
-}
 
 /* ═══════════════════════════════════════════════
    PROGRESS BAR GRADIENT FILL
@@ -683,7 +589,6 @@ html { scroll-behavior: smooth; }
   background: linear-gradient(90deg, #6c4ff0 0%, #a855f7 100%);
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
 }
-.dark .gradient-word { background-image: linear-gradient(90deg, #8b7bff 0%, #c084fc 100%); }
 
 .hand-note {
   font-family: var(--font-hand); color: var(--color-violet);
@@ -752,7 +657,6 @@ tbody tr:hover { background: color-mix(in srgb, var(--color-violet) 6%, transpar
 
 /* Sidebar */
 .sidebar-gradient { background: var(--glass); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
-.dark .sidebar-gradient { background: rgba(10,12,39,.82); }
 .nav-link {
   position: relative; display: flex; align-items: center; gap: .85rem; padding: .72rem 1rem;
   border-radius: 9999px; font-size: .9rem; font-weight: 500; color: var(--color-foreground);
@@ -774,17 +678,7 @@ tbody tr:hover { background: color-mix(in srgb, var(--color-violet) 6%, transpar
   backdrop-filter: blur(12px);
 }
 
-/* Theme toggle (sun | moon capsule, as in reference) */
-.theme-capsule {
-  display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9999px;
-  background: var(--glass); border: 1px solid var(--color-border); box-shadow: var(--card-shadow);
-}
-.theme-capsule button {
-  display: flex; height: 2rem; width: 2.4rem; align-items: center; justify-content: center;
-  border-radius: 9999px; color: var(--color-muted-foreground); transition: all .25s;
-}
-.theme-capsule button.on { background-image: var(--btn-grad); color: #fff; box-shadow: 0 6px 14px -6px rgba(95,63,230,.8); }
-.theme-capsule button.sun-on { color: #f59e0b; background: rgba(245,158,11,.14); }
+
 
 /* Hero banner for pages */
 .hero-banner { position: relative; overflow: visible; }

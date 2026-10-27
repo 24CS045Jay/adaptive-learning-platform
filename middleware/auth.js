@@ -50,7 +50,7 @@ export async function authenticate(req, res, next) {
         req.user = user;
         return next();
       }
-    } catch {}
+    } catch { }
 
     // Decode unverified JWT (e.g. Supabase JWT)
     try {
@@ -63,7 +63,7 @@ export async function authenticate(req, res, next) {
           return next();
         }
       }
-    } catch {}
+    } catch { }
 
     // Final fallback to headers if provided
     if (headerUserRole) {

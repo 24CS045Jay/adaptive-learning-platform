@@ -63,7 +63,7 @@ export interface AuditEntry {
 if (typeof window !== "undefined") {
   try {
     localStorage.removeItem("ai_tutor_mock_users");
-  } catch {}
+  } catch { }
 }
 
 export const AUDIT_LOG: AuditEntry[] = [];

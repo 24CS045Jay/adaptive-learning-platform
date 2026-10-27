@@ -68,7 +68,7 @@ export function Logo({
       <EduSenseMark size={size} />
       <div className="leading-tight">
         <div className={cn("tracking-tight flex items-center gap-1 text-foreground", titleSize)}>
-          <span className="text-slate-900 dark:text-white">EduSense</span>
+          <span className="text-slate-900">EduSense</span>
           <span className="bg-gradient-to-r from-amber-600 via-orange-500 to-amber-700 bg-clip-text text-transparent">AI</span>
         </div>
         {showSubtitle && subtitle && (
@@ -93,7 +93,7 @@ export function EduSenseHorizontalLogo({
 }) {
   return (
     <img
-      src="/assets/edusense-logo-horizontal-dark.svg"
+      src="/assets/edusense-logo-horizontal-light.svg"
       alt={alt}
       draggable={false}
       className={cn("w-auto object-contain select-none transition-transform hover:scale-[1.02] duration-200", height, className)}
@@ -121,29 +121,7 @@ export function Sparkle({ className, delay = 0 }: { className?: string; delay?: 
   );
 }
 
-/** Sun | Moon capsule toggle — matches the reference top-right control. */
-export function ThemeToggle({ className }: { className?: string }) {
-  const { isDark, toggle } = useTheme();
-  return (
-    <div className={cn("theme-capsule", className)} role="group" aria-label="Theme">
-      <button
-        type="button"
-        aria-label="Light theme"
-        aria-pressed={!isDark}
-        onClick={() => isDark && toggle()}
-        className={cn(!isDark && "sun-on")}
-      >
-        <Sun className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        aria-label="Dark theme"
-        aria-pressed={isDark}
-        onClick={() => !isDark && toggle()}
-        className={cn(isDark && "on")}
-      >
-        <Moon className="h-4 w-4" />
-      </button>
-    </div>
-  );
+/** Theme toggle disabled (light mode only) */
+export function ThemeToggle(_props: { className?: string }) {
+  return null;
 }

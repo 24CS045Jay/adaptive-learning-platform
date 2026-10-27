@@ -287,7 +287,7 @@ function mapBackendSubject(subject: any): AppSubject {
     enrolledStudentIds: Array.isArray(subject.enrolledStudentIds)
       ? subject.enrolledStudentIds.map((id: any) => String(id))
       : typeof subject.enrolledStudentIds === "string"
-      ? (() => {
+        ? (() => {
           try {
             const parsed = JSON.parse(subject.enrolledStudentIds);
             return Array.isArray(parsed) ? parsed.map(String) : [];
@@ -295,9 +295,9 @@ function mapBackendSubject(subject: any): AppSubject {
             return [];
           }
         })()
-      : Array.isArray(subject.enrolled_student_ids)
-      ? subject.enrolled_student_ids.map(String)
-      : [],
+        : Array.isArray(subject.enrolled_student_ids)
+          ? subject.enrolled_student_ids.map(String)
+          : [],
   };
 }
 
@@ -1080,7 +1080,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       try {
         await supabase.from("subjects").delete().eq("id", id);
-      } catch {}
+      } catch { }
 
       if (!user?.token) return;
       try {
@@ -1104,7 +1104,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
       try {
         await supabase.from("subjects").update({ syllabus }).eq("id", subjectId);
-      } catch {}
+      } catch { }
 
       if (!user?.token) return;
       try {

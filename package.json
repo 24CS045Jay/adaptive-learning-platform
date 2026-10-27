@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node scripts/dev-full.js",
     "dev:vite": "vite dev",
+    "clean:ports": "node scripts/kill-ports.js",
+    "restart": "node scripts/kill-ports.js && node scripts/dev-full.js",
     "server": "node server.express.js",
     "sync": "node scripts/sync-complete-database.js",
     "seed": "node scripts/seed.js",
@@ -57,6 +59,7 @@
     "cloudinary": "^2.10.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "compression": "^1.8.2",
     "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dotenv": "^17.4.2",
