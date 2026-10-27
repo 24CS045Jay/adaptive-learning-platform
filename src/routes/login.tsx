@@ -487,10 +487,20 @@ function LoginForm({
           type="submit"
           disabled={loading}
           whileTap={{ scale: 0.98 }}
-          className="btn-grad relative flex w-full items-center justify-center rounded-full py-4 text-base font-bold text-white shadow-[0_18px_34px_-14px_rgba(95,63,230,.85)] transition hover:-translate-y-0.5 disabled:opacity-60"
+          className="btn-grad relative flex w-full items-center justify-center rounded-full py-4 text-base font-bold text-white shadow-[0_18px_34px_-14px_rgba(95,63,230,.85)] transition hover:-translate-y-0.5 disabled:opacity-60 bg-gradient-to-r from-[#9d72f7] via-[#8b5cf6] to-[#6d28d9] hover:from-[#8b5cf6] hover:to-[#5b21b6]"
         >
-          {loading ? "Signing in…" : "Login"}
-          <span className="absolute right-2 flex h-10 w-10 items-center justify-center rounded-full bg-white text-violet shadow-md">
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <svg className="h-5 w-5 animate-spin text-white" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              Signing in…
+            </span>
+          ) : (
+            "Login"
+          )}
+          <span className="absolute right-2 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#7c3aed] shadow-md">
             <ArrowRight className="h-5 w-5" />
           </span>
         </motion.button>

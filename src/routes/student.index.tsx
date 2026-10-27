@@ -49,10 +49,10 @@ const STREAK_DAYS = [
 
 const WEEKLY_PROGRESS_PCT = 85;
 
-/* ── Animated Mastery Ring ── */
+/* ── Academic Mastery Ring ── */
 function MasteryRing({ pct }: { pct: number | null }) {
   const outerR = 56;
-  const innerR = 46; // secondary ring
+  const innerR = 46;
   const circ = 2 * Math.PI * outerR;
   const innerCirc = 2 * Math.PI * innerR;
 
@@ -66,7 +66,7 @@ function MasteryRing({ pct }: { pct: number | null }) {
       setDisplayed(0);
       return;
     }
-    const duration = 950;
+    const duration = 900;
     const run = (ts: number) => {
       if (!startRef.current) startRef.current = ts;
       const p = Math.min((ts - startRef.current) / duration, 1);
@@ -84,8 +84,8 @@ function MasteryRing({ pct }: { pct: number | null }) {
   const innerDash = `${(WEEKLY_PROGRESS_PCT / 100) * innerCirc} ${innerCirc}`;
 
   return (
-    <div className="relative flex h-40 w-40 items-center justify-center">
-      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 128 128" width="160" height="160">
+    <div className="relative flex h-36 w-36 items-center justify-center">
+      <svg className="absolute inset-0 -rotate-90" viewBox="0 0 128 128" width="144" height="144">
         {/* Track rings */}
         <circle
           cx="64"
@@ -93,7 +93,7 @@ function MasteryRing({ pct }: { pct: number | null }) {
           r={outerR}
           fill="none"
           stroke="var(--color-border)"
-          strokeWidth="10"
+          strokeWidth="8"
         />
         <circle
           cx="64"
@@ -101,66 +101,72 @@ function MasteryRing({ pct }: { pct: number | null }) {
           r={innerR}
           fill="none"
           stroke="var(--color-border)"
-          strokeWidth="5"
+          strokeWidth="4"
+          strokeOpacity={0.6}
         />
-        {/* Weekly progress ring (gold, inner) */}
+        {/* Weekly progress ring (inner, light blue) */}
         <circle
           cx="64"
           cy="64"
           r={innerR}
           fill="none"
-          stroke="#f5c451"
-          strokeWidth="5"
+          stroke="#3b82f6"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={innerDash}
-          className="ring-glow-gold"
           style={{ transition: "stroke-dasharray 0.03s linear" }}
         />
-        {/* Mastery ring (violet, outer) */}
+        {/* Mastery ring (outer, university blue) */}
         <circle
           cx="64"
           cy="64"
           r={outerR}
           fill="none"
-          stroke="#8b5cf6"
-          strokeWidth="10"
+          stroke="#1d4ed8"
+          strokeWidth="8"
           strokeLinecap="round"
           strokeDasharray={outerDash}
-          className="ring-glow-violet"
           style={{ transition: "stroke-dasharray 0.03s linear" }}
         />
       </svg>
       <div className="relative text-center">
-        <div className="text-gradient-violet text-3xl font-bold tabular-nums">
-          {pct !== null ? `${displayed}%` : "0%"}
+        <div className="text-3xl font-extrabold tracking-tight text-foreground tabular-nums">
+          {pct !== null ? `${displayed}%` : "—"}
         </div>
-        <div className="text-[11px] text-muted-foreground mt-0.5">
-          {pct !== null ? "Mastery" : "Awaiting Data"}
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-0.5">
+          {pct !== null ? "Mastery" : "Pending Data"}
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Streak Flame floating ── */
-function StreakFlame() {
+/* ── Academic Study Consistency Strip ── */
+function StudyConsistencyStrip() {
   return (
-    <div className="relative flex items-center gap-1">
-      <span className="flame-float text-xl">🔥</span>
-      <motion.span
-        animate={{ y: [0, -3, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity, delay: 0.3 }}
-        className="text-sm opacity-60"
-      >
-        🔥
-      </motion.span>
-      <motion.span
-        animate={{ y: [0, -2, 0] }}
-        transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
-        className="text-xs opacity-40"
-      >
-        🔥
-      </motion.span>
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium text-foreground">Weekly Activity</span>
+        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200">
+          6/7 Days Active
+        </span>
+      </div>
+      <div className="grid grid-cols-7 gap-1.5 pt-1">
+        {STREAK_DAYS.map((d, i) => (
+          <div key={i} className="flex flex-col items-center gap-1">
+            <div
+              className={cn(
+                "h-6 w-full rounded-md border flex items-center justify-center text-[10px] font-semibold transition",
+                d.active
+                  ? "bg-blue-50 text-blue-700 border-blue-200 font-bold"
+                  : "bg-muted/40 text-muted-foreground border-border/50"
+              )}
+            >
+              {d.day}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -383,14 +389,14 @@ function StudentDashboard() {
       />
 
       {/* ── Semester navigator ── */}
-      <section className="mb-5 rounded-3xl border border-violet/15 bg-gradient-to-r from-violet/10 via-card to-gold/5 p-4 shadow-[0_14px_32px_-24px_oklch(0.62_0.22_293_/_45%)]">
+      <section className="mb-5 rounded-xl border border-border bg-card p-4 shadow-2xs">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-violet">
-              Your curriculum
+            <div className="text-[11px] font-bold uppercase tracking-wider text-primary">
+              Curriculum Directory
             </div>
-            <h2 className="mt-1 font-serif text-lg font-bold text-foreground">
-              Explore by semester
+            <h2 className="mt-0.5 text-base font-bold text-foreground">
+              Filter Courses by Semester
             </h2>
           </div>
           <div className="hidden text-xs text-muted-foreground sm:block">
@@ -402,14 +408,14 @@ function StudentDashboard() {
             type="button"
             onClick={() => setActiveSemester(null)}
             className={cn(
-              "min-w-[84px] rounded-2xl border px-3 py-2 text-left transition",
+              "min-w-[80px] rounded-lg border px-3 py-2 text-left transition",
               activeSemester === null
-                ? "border-violet bg-violet text-white shadow-md"
-                : "border-border bg-card text-muted-foreground hover:border-violet/40 hover:text-foreground",
+                ? "border-primary bg-primary text-primary-foreground font-semibold shadow-xs"
+                : "border-border bg-background text-muted-foreground hover:border-slate-300 hover:text-foreground",
             )}
           >
             <div className="text-[10px] font-bold uppercase tracking-wider">All</div>
-            <div className="mt-1 text-xs font-semibold">Subjects</div>
+            <div className="mt-0.5 text-xs font-semibold">Subjects</div>
           </button>
           {semesters.map((semester) => {
             const count = subjects.filter(
@@ -421,14 +427,14 @@ function StudentDashboard() {
                 type="button"
                 onClick={() => setActiveSemester(semester)}
                 className={cn(
-                  "min-w-[84px] rounded-2xl border px-3 py-2 text-left transition",
+                  "min-w-[80px] rounded-lg border px-3 py-2 text-left transition",
                   activeSemester === semester
-                    ? "border-violet bg-violet text-white shadow-md"
-                    : "border-border bg-card text-muted-foreground hover:border-violet/40 hover:text-foreground",
+                    ? "border-primary bg-primary text-primary-foreground font-semibold shadow-xs"
+                    : "border-border bg-background text-muted-foreground hover:border-slate-300 hover:text-foreground",
                 )}
               >
                 <div className="text-[10px] font-bold uppercase tracking-wider">Sem {semester}</div>
-                <div className="mt-1 flex items-center gap-1 text-xs font-semibold">
+                <div className="mt-0.5 flex items-center gap-1 text-xs font-semibold">
                   {count} course{count === 1 ? "" : "s"} <ChevronRight className="h-3 w-3" />
                 </div>
               </button>
@@ -436,17 +442,17 @@ function StudentDashboard() {
           })}
         </div>
         {visibleSubjects.length > 0 && (
-          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-3.5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {visibleSubjects.slice(0, 4).map((subject) => (
               <div
                 key={subject.id}
-                className="flex items-center gap-3 rounded-2xl border border-border/70 bg-background/60 px-3 py-2.5"
+                className="flex items-center gap-2.5 rounded-lg border border-border bg-background px-3 py-2 text-xs"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet/10 text-violet">
-                  <BookOpen className="h-4 w-4" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 shrink-0">
+                  <BookOpen className="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-xs font-semibold text-foreground">
+                  <div className="truncate font-semibold text-foreground">
                     {subject.name}
                   </div>
                   <div className="text-[10px] text-muted-foreground">
@@ -461,67 +467,64 @@ function StudentDashboard() {
 
       {/* ── Row 1: Mastery Hero, Streak, Quick Actions ── */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        {/* Mastery Hero Card */}
-        <Card variant="hero" className="flex flex-col items-center justify-center gap-4 py-8">
+        {/* Mastery Card */}
+        <Card className="flex flex-col items-center justify-center gap-3 py-6">
+          <div className="w-full border-b border-border pb-2 text-left">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-primary">Academic Mastery</span>
+            <h3 className="text-sm font-bold text-foreground">Curriculum Competency</h3>
+          </div>
           <MasteryRing pct={studentMasteryPct} />
-          <div className="text-center">
-            <div className="font-serif text-base font-bold text-foreground">Overall Mastery</div>
-            <div className="text-xs text-muted-foreground">Across all enrolled subjects</div>
+          <div className="w-full text-center">
             {studentMasteryPct !== null ? (
-              <div className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-success">
-                <Star className="h-3.5 w-3.5 fill-success" />
-                {studentMasteryPct >= 80 ? "Demonstrated Strong Mastery" : studentMasteryPct >= 60 ? "Developing Topic Competency" : "Needs Targeted Topic Review"}
+              <div className="flex items-center justify-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                <Star className="h-3.5 w-3.5 fill-current" />
+                {studentMasteryPct >= 80 ? "Demonstrated Strong Mastery" : studentMasteryPct >= 60 ? "Developing Topic Competency" : "Needs Targeted Review"}
               </div>
             ) : (
-              <div className="mt-2 text-xs text-muted-foreground italic">
-                Complete quiz assessments to generate topic mastery scores.
+              <div className="text-xs text-muted-foreground italic">
+                Complete quiz assessments to calculate syllabus mastery.
               </div>
             )}
             {/* Weekly progress legend */}
-            <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
+            <div className="mt-3 flex items-center justify-center gap-4 text-[11px] text-muted-foreground border-t border-border/60 pt-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-violet" />
-                Overall {studentMasteryPct !== null ? `${studentMasteryPct}%` : "0%"}
+                <span className="h-2 w-2 rounded-full bg-blue-600" />
+                Mastery {studentMasteryPct !== null ? `${studentMasteryPct}%` : "—"}
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-gold" />
-                Weekly {WEEKLY_PROGRESS_PCT}%
+                <span className="h-2 w-2 rounded-full bg-blue-400" />
+                Weekly Target {WEEKLY_PROGRESS_PCT}%
               </div>
             </div>
           </div>
         </Card>
 
-        {/* Streak Card */}
-        <Card variant="hero-gold" className="flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gold/15 ring-1 ring-gold/25 shadow-[0_0_14px_-3px_oklch(0.82_0.18_84_/_40%)]">
-              <Flame className="h-6 w-6 text-gold" />
+        {/* Study Consistency Card */}
+        <Card className="flex flex-col justify-between p-5">
+          <div>
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Study Habit</span>
+                <h3 className="text-sm font-bold text-foreground">Learning Consistency</h3>
+              </div>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 border border-amber-200">
+                <Flame className="h-4 w-4" />
+              </div>
             </div>
-            <div>
-              <div className="text-gradient-gold font-serif text-2xl font-bold">6 Day Streak</div>
-              <div className="text-xs text-muted-foreground">Best: 14 days · Keep going!</div>
+
+            <div className="mt-3">
+              <div className="text-2xl font-extrabold text-foreground tracking-tight">6 Day Streak</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Consecutive daily engagement across enrolled courses</div>
             </div>
+
+            <StudyConsistencyStrip />
           </div>
-          <StreakFlame />
-          <div className="h-20 mt-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={STREAK_DAYS} barSize={14}>
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Bar
-                  dataKey="active"
-                  fill="var(--color-violet)"
-                  radius={[5, 5, 0, 0]}
-                  isAnimationActive
-                  animationDuration={700}
-                >
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Personal Best: <strong>14 Days</strong></span>
+              <span className="text-primary font-medium">Keep rhythm</span>
+            </div>
           </div>
         </Card>
 
@@ -562,9 +565,9 @@ function StudentDashboard() {
               <AreaChart data={TIME_SPENT}>
                 <defs>
                   <linearGradient id="timeGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.55} />
-                    <stop offset="55%" stopColor="#8b5cf6" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity={0.35} />
+                    <stop offset="55%" stopColor="#2563eb" stopOpacity={0.08} />
+                    <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -587,14 +590,14 @@ function StudentDashboard() {
                 <Area
                   type="monotone"
                   dataKey="hours"
-                  stroke="#8b5cf6"
+                  stroke="#2563eb"
                   strokeWidth={2.5}
                   fill="url(#timeGrad)"
                   name="Hours"
                   isAnimationActive
                   animationDuration={900}
                   dot={false}
-                  activeDot={{ r: 5, fill: "#8b5cf6", stroke: "var(--color-card)", strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: "#2563eb", stroke: "var(--color-card)", strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -609,11 +612,11 @@ function StudentDashboard() {
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-violet">
-                Active Learning Curriculum
+              <div className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                Active Curriculum
               </div>
-              <h2 className="font-serif text-xl font-bold text-foreground">
-                My Enrolled Subjects & Learning Modules ({subjects.filter(isEnrolled).length})
+              <h2 className="text-lg font-bold text-foreground">
+                My Enrolled Subjects & Modules ({subjects.filter(isEnrolled).length})
               </h2>
             </div>
           </div>
@@ -622,12 +625,12 @@ function StudentDashboard() {
             <Card className="border-amber-500/30 bg-amber-500/5 p-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 shrink-0">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 shrink-0">
                     <Lock className="h-6 w-6" />
                   </div>
                   <div>
-                    <div className="font-serif text-base font-bold text-foreground">
-                      0 Subjects Enrolled — Learning Modules Locked
+                    <div className="text-base font-bold text-foreground">
+                      0 Subjects Enrolled — Curriculum Content Locked
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 max-w-xl">
                       You are not currently enrolled in any subjects. To access curriculum units, learning modules, study materials, and AI tutor grounding, please browse the Course Catalog below and click <strong>+ Enroll in Subject</strong>.
@@ -641,16 +644,18 @@ function StudentDashboard() {
               {subjects.filter(isEnrolled).map((s) => {
                 const subMods = modules.filter((m) => m.subjectId === s.id);
                 return (
-                  <Card key={s.id} className="border-violet/25 bg-gradient-to-br from-card to-indigo-brand/5 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-4">
+                  <Card key={s.id} className="border-border bg-card shadow-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet/10 text-violet font-bold">
-                          <BookOpen className="h-5 w-5" />
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-bold">
+                          <BookOpen className="h-4 w-4" />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-serif text-base font-bold text-foreground">{s.name}</span>
-                            <Pill tone="green">✓ Enrolled & Unlocked</Pill>
+                            <span className="text-sm font-bold text-foreground">{s.name}</span>
+                            <span className="rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold">
+                              ✓ Enrolled
+                            </span>
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
                             {s.code} · Sem {s.semester} · Faculty: <strong className="text-foreground font-medium">{s.faculty || "Faculty Member"}</strong> · {subMods.length} Module{subMods.length !== 1 ? "s" : ""}
@@ -661,7 +666,7 @@ function StudentDashboard() {
                       <div className="flex items-center gap-2">
                         <Link
                           to="/student/ask"
-                          className="rounded-xl bg-violet px-3.5 py-1.5 text-xs font-bold text-white hover:bg-violet-hover shadow-2xs flex items-center gap-1.5 transition"
+                          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary-hover shadow-2xs flex items-center gap-1.5 transition"
                         >
                           <Sparkles className="h-3.5 w-3.5" /> Ask AI Tutor
                         </Link>
@@ -669,9 +674,9 @@ function StudentDashboard() {
                     </div>
 
                     {/* Modules list for this enrolled subject */}
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-3.5 space-y-2">
                       <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                        <Layers className="h-3.5 w-3.5 text-violet" /> Unlocked Modules for {s.name}:
+                        <Layers className="h-3.5 w-3.5 text-primary" /> Unlocked Modules for {s.name}:
                       </div>
                       {subMods.length === 0 ? (
                         <div className="text-xs text-muted-foreground italic py-2 pl-1">
@@ -757,8 +762,8 @@ function StudentDashboard() {
                     className={cn(
                       "flex flex-col justify-between rounded-xl border p-4 transition shadow-2xs",
                       enrolled
-                        ? "border-violet/30 bg-indigo-brand/5"
-                        : "border-border bg-card hover:border-violet/20"
+                        ? "border-blue-200 bg-blue-50/30 dark:border-blue-900 dark:bg-blue-950/20"
+                        : "border-border bg-card hover:border-slate-300"
                     )}
                   >
                     <div>
@@ -768,7 +773,7 @@ function StudentDashboard() {
                           Sem {s.semester}
                         </span>
                       </div>
-                      <div className="mt-2 font-serif text-base font-bold text-foreground">
+                      <div className="mt-2 text-sm font-bold text-foreground">
                         {s.name}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -776,7 +781,7 @@ function StudentDashboard() {
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground flex items-center gap-1">
                         {enrolled ? (
-                          <span className="text-success font-medium flex items-center gap-1">
+                          <span className="text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1">
                             <Unlock className="h-3 w-3" /> {subMods.length} module{subMods.length !== 1 ? "s" : ""} unlocked
                           </span>
                         ) : (
@@ -793,10 +798,10 @@ function StudentDashboard() {
                         disabled={isProcessing}
                         onClick={() => handleToggleEnroll(s.id)}
                         className={cn(
-                          "rounded-lg px-3 py-1.5 text-xs font-bold transition shadow-2xs disabled:opacity-50",
+                          "rounded-lg px-3 py-1.5 text-xs font-semibold transition shadow-2xs disabled:opacity-50",
                           enrolled
-                            ? "bg-green-brand text-white hover:opacity-90"
-                            : "bg-violet text-white hover:bg-violet-hover"
+                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                            : "bg-primary text-primary-foreground hover:bg-primary-hover"
                         )}
                       >
                         {isProcessing
@@ -809,7 +814,7 @@ function StudentDashboard() {
                       {enrolled ? (
                         <Link
                           to="/student/ask"
-                          className="text-xs font-semibold text-violet hover:underline"
+                          className="text-xs font-semibold text-primary hover:underline"
                         >
                           Ask Tutor →
                         </Link>
@@ -865,7 +870,7 @@ function StudentDashboard() {
                     ) : (
                       <Link
                         to="/student/ask"
-                        className="rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition"
+                        className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition"
                       >
                         Ask Tutor →
                       </Link>
