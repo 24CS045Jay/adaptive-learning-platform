@@ -3,7 +3,6 @@ import { useState, useEffect, useId, useRef } from "react";
 import {
   Send,
   Sparkles,
-  Sliders,
   FileText,
   History,
   Plus,
@@ -17,6 +16,12 @@ import {
   Code2,
   Languages,
   GraduationCap,
+  X,
+  ChevronRight,
+  Info,
+  Maximize2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -33,6 +38,12 @@ import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { EducationalActions } from "@/components/chat/EducationalActions";
 
 export const Route = createFileRoute("/student/ask")({
+  head: () => ({
+    meta: [
+      { title: "AI Tutor · EduSense AI" },
+      { name: "description", content: "Syllabus-grounded academic tutoring with verifiable source citations." },
+    ],
+  }),
   component: AskTutorPage,
 });
 
@@ -48,13 +59,14 @@ export type VisualData =
     }
   | null;
 
-interface SourceChip {
+export interface SourceChip {
   documentId: string | null;
   fileName: string;
   chunkIndex: number;
   page?: number | null;
   section?: string | null;
   score?: number | null;
+  excerpt?: string | null;
 }
 
 interface ApiResponse {
@@ -137,47 +149,21 @@ const LANGUAGES = [
 ];
 
 const LEARNER_LEVELS = [
-  { id: "beginner", label: "Beginner", icon: "🌱", hint: "Intuitive analogies & simplified fundamentals" },
-  { id: "developing", label: "Developing", icon: "⚡", hint: "Structured explanations & progressive examples" },
-  { id: "proficient", label: "Proficient", icon: "🎯", hint: "Deeper concepts, comparisons & mechanism depth" },
-  { id: "advanced", label: "Advanced", icon: "🔬", hint: "Formal math, proofs, complexity & edge cases" },
+  { id: "beginner", label: "Fundamental", hint: "Intuitive analogies & simplified foundations" },
+  { id: "developing", label: "Structured", hint: "Step-by-step mechanisms & guided examples" },
+  { id: "proficient", label: "Rigorous", hint: "Formal proofs, complexity & syllabus depth" },
+  { id: "advanced", label: "Advanced", hint: "Edge cases, implementation code & optimization" },
 ];
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
-function TypingIndicator() {
-  const [phase, setPhase] = useState(0);
-  const phases = [
-    "Analyzing question & learning intent…",
-    "Retrieving approved course materials & citations…",
-    "Formulating structured educational explanation…",
-  ];
+const EDUCATIONAL_MODES = [
+  { id: "ask_tutor", label: "Tutor Mode", icon: "🎓" },
+  { id: "step_by_step", label: "Step-by-Step", icon: "🪜" },
+  { id: "socratic", label: "Socratic Hints", icon: "🧠" },
+  { id: "worked_example", label: "Worked Example", icon: "🔢" },
+  { id: "exam_revision", label: "Exam Revision", icon: "📝" },
+];
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setPhase((p) => (p + 1) % phases.length);
-    }, 2200);
-    return () => clearInterval(timer);
-  }, [phases.length]);
-
-  return (
-    <div className="flex max-w-md items-center gap-3.5 rounded-2xl border border-violet/25 bg-card/90 px-4 py-3 shadow-md backdrop-blur-xs chat-ai-bubble">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet/15 ring-1 ring-violet/25 animate-pulse">
-        <Sparkles className="h-4 w-4 text-violet" />
-      </div>
-      <div className="space-y-0.5">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-violet animate-bounce" />
-          <span className="h-2 w-2 rounded-full bg-amber-500 animate-bounce [animation-delay:0.2s]" />
-          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-bounce [animation-delay:0.4s]" />
-          <span className="text-xs font-semibold text-foreground ml-1">AI Tutor thinking</span>
-        </div>
-        <p className="text-[11px] text-muted-foreground italic font-sans">{phases[phase]}</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Visual Renderer ───────────────────────────────────────────────────────────
+// ── Visual Renderer for Flowcharts & Concept Maps ──────────────────────────────
 function VisualRenderer({ visual }: { visual: VisualData }) {
   if (!visual) return null;
 
@@ -196,9 +182,9 @@ function VisualRenderer({ visual }: { visual: VisualData }) {
     const mermaidText = `graph TD\n${nodesDef}\n${edgesDef}`;
 
     return (
-      <div className="my-3 space-y-1.5">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-violet flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5" /> Flowchart Step Sequence
+      <div className="my-3 rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+          <span>Flowchart Representation</span>
         </div>
         <MermaidRenderer chart={mermaidText} />
       </div>
@@ -216,7 +202,6 @@ function VisualRenderer({ visual }: { visual: VisualData }) {
     });
 
     const nodesDef = nodes.map((n, i) => `  N${i}["${n.replace(/"/g, "'")}"]`).join("\n");
-
     const edgesDef = edges
       .map((e) => {
         const fromId = nodeMap[e.from] || `N_${e.from.replace(/\W/g, "")}`;
@@ -229,9 +214,9 @@ function VisualRenderer({ visual }: { visual: VisualData }) {
     const mermaidText = `graph TD\n${nodesDef}\n${edgesDef}`;
 
     return (
-      <div className="my-3 space-y-1.5">
-        <div className="text-[11px] font-bold uppercase tracking-wider text-violet flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5" /> Concept Map
+      <div className="my-3 rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+        <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+          <span>Concept Dependency Diagram</span>
         </div>
         <MermaidRenderer chart={mermaidText} />
       </div>
@@ -241,47 +226,34 @@ function VisualRenderer({ visual }: { visual: VisualData }) {
   if (visual.type === "comparison_chart") {
     const categories = visual.categories || [];
     const values = visual.values || [];
+    if (categories.length === 0 || values.length === 0) return null;
+
     const chartData = categories.map((cat, i) => ({
       category: cat,
       value: values[i] ?? 0,
     }));
-    const colors = ["#7c3aed", "#3b82f6", "#10b981", "#f59e0b", "#ec4899"];
 
     return (
-      <div className="my-3 rounded-xl border border-violet/20 bg-card p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-violet">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" /> Comparison Chart
-          </span>
-          {visual.label && (
-            <span className="text-muted-foreground font-normal text-xs">{visual.label}</span>
-          )}
+      <div className="my-3 rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+        <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+          <span>Concept Comparison</span>
+          {visual.label && <span className="text-slate-500 font-normal">{visual.label}</span>}
         </div>
-        <div className="h-48 w-full">
+        <div className="h-44 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-              <XAxis
-                dataKey="category"
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
-                interval={0}
-                angle={-15}
-                textAnchor="end"
-              />
-              <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} />
+              <XAxis dataKey="category" tick={{ fontSize: 11, fill: "#64748b" }} interval={0} />
+              <YAxis tick={{ fontSize: 11, fill: "#64748b" }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e1b4b",
-                  borderColor: "#7c3aed",
-                  borderRadius: "8px",
+                  backgroundColor: "#0f172a",
+                  borderColor: "#334155",
+                  borderRadius: "6px",
                   fontSize: "12px",
                   color: "#fff",
                 }}
               />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                {chartData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                ))}
-              </Bar>
+              <Bar dataKey="value" fill="#1d4ed8" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -292,105 +264,106 @@ function VisualRenderer({ visual }: { visual: VisualData }) {
   return null;
 }
 
-// ── Source chip ───────────────────────────────────────────────────────────────
-function SourceChipBadge({
+// ── Verified Source Evidence Shelf (Side Panel / Drawer) ────────────────────────
+function SourceEvidenceShelf({
   source,
-  onClick,
+  onClose,
 }: {
-  source: SourceChip;
-  onClick: (s: SourceChip) => void;
+  source: SourceChip | null;
+  onClose: () => void;
 }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(source)}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-violet/25 bg-violet/8 px-2.5 py-1 text-[11px] font-medium text-violet hover:bg-violet/15 hover:border-violet/50 transition-all"
-    >
-      <FileText className="h-3 w-3 shrink-0" />
-      <span className="max-w-[140px] truncate">{source.fileName}</span>
-      {source.page !== null && source.page !== undefined ? (
-        <span className="text-violet/70">p.{source.page}</span>
-      ) : (
-        <span className="text-violet/60">#{source.chunkIndex}</span>
-      )}
-      {source.section && (
-        <span className="text-muted-foreground/75 text-[10px] hidden sm:inline truncate max-w-[80px]">
-          ({source.section})
-        </span>
-      )}
-      <ExternalLink className="h-2.5 w-2.5 opacity-50" />
-    </button>
-  );
-}
+  if (!source) return null;
 
-// ── Source detail modal ───────────────────────────────────────────────────────
-function SourceModal({ source, onClose }: { source: SourceChip; onClose: () => void }) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.92, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.92, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-3"
-      >
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <FileText className="h-4 w-4 text-violet" />
-          Verified Course Source
-        </div>
-        <div className="rounded-xl bg-muted p-4 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Document</span>
-            <span className="font-semibold text-foreground max-w-[220px] truncate text-right">
-              {source.fileName}
-            </span>
-          </div>
-          {source.page !== null && source.page !== undefined && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Page</span>
-              <span className="font-semibold text-foreground">Page {source.page}</span>
-            </div>
-          )}
-          {source.section && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Section</span>
-              <span className="font-semibold text-foreground max-w-[220px] truncate text-right">{source.section}</span>
-            </div>
-          )}
-          {source.score !== undefined && source.score !== null && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Relevance Score</span>
-              <span className="font-semibold text-success">{Math.round((source.score || 0) * 100)}%</span>
-            </div>
-          )}
-          {source.documentId && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Document ID</span>
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {source.documentId.slice(-8)}…
-              </span>
-            </div>
-          )}
+    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl transition-all">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+          <FileText className="h-4 w-4 text-blue-700" />
+          <span>Verified Course Source</span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="w-full rounded-xl bg-gradient-to-r from-violet to-[#7c3aed] py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+          aria-label="Close evidence panel"
         >
-          Close
+          <X className="h-4 w-4" />
         </button>
-      </motion.div>
-    </motion.div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-slate-500">Document</span>
+            <span className="font-bold text-slate-900 text-right truncate max-w-[200px]" title={source.fileName}>
+              {source.fileName}
+            </span>
+          </div>
+
+          {source.page !== null && source.page !== undefined && (
+            <div className="flex justify-between border-t border-slate-200/60 pt-2">
+              <span className="font-semibold text-slate-500">Location</span>
+              <span className="font-bold text-slate-900">Page / Slide {source.page}</span>
+            </div>
+          )}
+
+          {source.section && (
+            <div className="flex justify-between border-t border-slate-200/60 pt-2">
+              <span className="font-semibold text-slate-500">Curriculum Section</span>
+              <span className="font-bold text-slate-900 text-right truncate max-w-[200px]">{source.section}</span>
+            </div>
+          )}
+
+          {source.score !== undefined && source.score !== null && (
+            <div className="flex justify-between border-t border-slate-200/60 pt-2">
+              <span className="font-semibold text-slate-500">Retrieval Grounding</span>
+              <span className="font-bold text-emerald-700">{Math.round((source.score || 0) * 100)}% Match</span>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className="mb-1.5 font-bold text-slate-800 uppercase tracking-wider text-[11px]">
+            Indexed Syllabus Excerpt
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-3.5 text-slate-700 leading-relaxed font-sans text-xs shadow-2xs">
+            {source.excerpt ? (
+              <p className="whitespace-pre-wrap">{source.excerpt}</p>
+            ) : (
+              <p className="italic text-slate-400">
+                This academic chunk was verified from the faculty-approved curriculum document and matched your question's semantic intent.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-lg bg-blue-50/60 border border-blue-100 p-3 text-slate-600 space-y-1">
+          <div className="font-semibold text-blue-900 flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5 text-blue-700" /> Academic Verification
+          </div>
+          <p className="text-[11px] leading-snug">
+            EduSense AI strictly enforces fail-closed grounding. Answers are derived from this verified lecture note rather than generic internet sources.
+          </p>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-slate-200 p-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-lg bg-slate-900 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
+        >
+          Dismiss Evidence View
+        </button>
+      </div>
+    </div>
   );
 }
 
-// ── Formative Understanding Check Component ─────────────────────────────────────
+// ── Formative Understanding Check ──────────────────────────────────────────────
 function UnderstandingCheckCard({
   check,
   onEvaluated,
@@ -420,7 +393,7 @@ function UnderstandingCheckCard({
         const data = await res.json();
         setResult(data);
         if (onEvaluated) onEvaluated(data);
-        toast.success(data.correct ? "Mastery updated! Great answer." : "Concept check submitted.");
+        toast.success(data.correct ? "Mastery updated! Great answer." : "Concept check evaluated.");
       } else {
         toast.error("Could not evaluate concept check.");
       }
@@ -432,23 +405,19 @@ function UnderstandingCheckCard({
   };
 
   return (
-    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 my-3 space-y-2.5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 text-xs uppercase tracking-wide">
+    <div className="rounded-lg border border-amber-200 bg-amber-50/40 p-3.5 my-3 space-y-2 text-xs">
+      <div className="flex items-center justify-between font-bold text-amber-900">
+        <span className="flex items-center gap-1.5">
           <span>💡 Quick Concept Check</span>
-          {check.topic && <span className="text-[10px] text-muted-foreground font-normal">({check.topic})</span>}
-        </div>
+          {check.topic && <span className="text-[10px] text-amber-700 font-normal">({check.topic})</span>}
+        </span>
         {result && (
-          <span
-            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-              result.correct ? "bg-emerald-500/20 text-emerald-600" : "bg-amber-500/20 text-amber-600"
-            }`}
-          >
+          <span className="rounded bg-amber-200/60 px-2 py-0.5 text-[10px] font-bold text-amber-900">
             Score: {result.score}%
           </span>
         )}
       </div>
-      <p className="text-xs text-foreground font-medium leading-relaxed">{check.question}</p>
+      <p className="font-medium text-slate-800 leading-relaxed">{check.question}</p>
 
       {!result ? (
         <form onSubmit={handleSubmit} className="flex gap-2 pt-1">
@@ -456,44 +425,265 @@ function UnderstandingCheckCard({
             type="text"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Type your brief answer to check your understanding..."
-            className="flex-1 text-xs px-3 py-1.5 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-amber-500"
+            placeholder="Type your brief answer to check retention..."
+            className="flex-1 text-xs px-3 py-1.5 rounded-md border border-amber-300 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
           <button
             type="submit"
             disabled={loading || !answer.trim()}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition disabled:opacity-50"
+            className="px-3 py-1.5 text-xs font-semibold rounded-md bg-amber-600 hover:bg-amber-700 text-white transition disabled:opacity-50"
           >
-            {loading ? "Checking..." : "Submit Check"}
+            {loading ? "Checking..." : "Submit Answer"}
           </button>
         </form>
       ) : (
-        <div className="pt-1.5 text-xs text-foreground/90 space-y-1 border-t border-amber-500/20">
-          <p className="font-semibold text-[11px] text-muted-foreground">Feedback:</p>
-          <p className="italic">{result.feedback}</p>
+        <div className="pt-2 text-xs text-slate-700 space-y-1 border-t border-amber-200/80">
+          <p className="font-semibold text-[11px] text-amber-900">Instructor Feedback:</p>
+          <p className="italic text-slate-600">{result.feedback}</p>
         </div>
       )}
     </div>
   );
 }
 
-// ── Educational Modes ──────────────────────────────────────────────────────────
-const EDUCATIONAL_MODES = [
-  { id: "ask_tutor", label: "Tutor", icon: "🎓" },
-  { id: "explain", label: "Explain", icon: "💡" },
-  { id: "step_by_step", label: "Step-by-Step", icon: "🪜" },
-  { id: "socratic", label: "Socratic Hints", icon: "🧠" },
-  { id: "worked_example", label: "Worked Example", icon: "🔢" },
-  { id: "practice", label: "Practice Quiz", icon: "🎯" },
-  { id: "exam_revision", label: "Exam Revision", icon: "📝" },
-  { id: "compare_concepts", label: "Compare Concepts", icon: "⚖️" },
-];
+// ── Chat Message Bubble ────────────────────────────────────────────────────────
+function ChatMessageBubble({
+  msg,
+  onSourceClick,
+  onFollowUpClick,
+  onRetry,
+}: {
+  msg: ChatMessage;
+  onSourceClick: (s: SourceChip) => void;
+  onFollowUpClick?: (text: string) => void;
+  onRetry?: () => void;
+  onProfileUpdate?: () => void;
+}) {
+  const [rated, setRated] = useState<"up" | "down" | null>(null);
+  const [copied, setCopied] = useState(false);
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+  const isUser = msg.role === "user" || (msg.role as string) === "student";
+  const isEscalated = msg.escalated === true;
+
+  const handleCopyText = async () => {
+    try {
+      await navigator.clipboard.writeText(msg.text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-2xl rounded-xl rounded-tr-xs bg-blue-700 px-4 py-3 text-sm text-white shadow-2xs">
+          <div className="leading-relaxed whitespace-pre-wrap">{msg.text}</div>
+          <div className="mt-1 text-[10px] text-blue-200 text-right opacity-80">{msg.timestamp}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-3 max-w-3xl">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs mt-0.5">
+        <GraduationCap className="h-4 w-4" />
+      </div>
+
+      <div className="flex-1 space-y-2">
+        <div
+          className={cn(
+            "rounded-xl border p-5 shadow-2xs space-y-3.5 bg-white transition-all",
+            isEscalated ? "border-amber-300 bg-amber-50/20" : "border-slate-200"
+          )}
+        >
+          {/* Status Header */}
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5 text-xs">
+            <div className="flex items-center gap-2">
+              {isEscalated ? (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2.5 py-0.5 font-bold text-amber-900 text-[11px]">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-700" /> Escalated to Course Faculty
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-800 text-[11px] border border-emerald-200">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Syllabus Grounded
+                </span>
+              )}
+              {msg.sources && msg.sources.length > 0 && (
+                <span className="text-[11px] font-medium text-slate-500">
+                  ({msg.sources.length} Verified {msg.sources.length === 1 ? "Citation" : "Citations"})
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleCopyText}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800 transition"
+                title="Copy complete answer"
+              >
+                {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                <span>{copied ? "Copied" : "Copy"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Formatted Markdown, Math & Code */}
+          <div className="text-sm leading-relaxed text-slate-800 font-sans">
+            <MarkdownRenderer
+              content={msg.text}
+              onCitationClick={(num) => {
+                if (msg.sources && msg.sources.length >= num && num > 0) {
+                  onSourceClick(msg.sources[num - 1]);
+                } else if (msg.sources && msg.sources.length > 0) {
+                  onSourceClick(msg.sources[0]);
+                }
+              }}
+            />
+          </div>
+
+          {/* Dedicated Chart visualization */}
+          {!isEscalated && msg.chart && <ChartRenderer spec={msg.chart} />}
+
+          {/* Visual Diagram Block */}
+          {!isEscalated && msg.visual && <VisualRenderer visual={msg.visual} />}
+
+          {/* Worked Example Block */}
+          {!isEscalated && msg.worked_example && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4 space-y-1.5 text-xs">
+              <div className="flex items-center gap-1.5 font-bold text-blue-900 uppercase tracking-wider text-[11px]">
+                <Code2 className="h-3.5 w-3.5 text-blue-700" /> Worked Example
+              </div>
+              <div className="text-slate-800 font-mono text-[11px] leading-relaxed whitespace-pre-wrap pl-3 border-l-2 border-blue-500">
+                {msg.worked_example}
+              </div>
+            </div>
+          )}
+
+          {/* Formative Understanding Check */}
+          {!isEscalated && msg.understanding_check && (
+            <UnderstandingCheckCard check={msg.understanding_check} />
+          )}
+
+          {/* Clickable Source Citation Chips */}
+          {!isEscalated && msg.sources && msg.sources.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <BookOpen className="h-3 w-3 text-blue-600" /> Verified Course Citations
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {msg.sources.map((src, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => onSourceClick(src)}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700 hover:border-blue-400 hover:bg-blue-50/70 hover:text-blue-800 transition"
+                    title={`View citation details from ${src.fileName}`}
+                  >
+                    <span className="font-bold text-blue-700">[{i + 1}]</span>
+                    <span className="max-w-[150px] truncate">{src.fileName}</span>
+                    {src.page !== null && src.page !== undefined && (
+                      <span className="text-slate-500">p.{src.page}</span>
+                    )}
+                    <ExternalLink className="h-2.5 w-2.5 text-slate-400" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Follow-up question pills */}
+          {!isEscalated && msg.follow_up && msg.follow_up.length > 0 && (
+            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Suggested Academic Inquiries
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {msg.follow_up.map((fu, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => onFollowUpClick && onFollowUpClick(fu)}
+                    className="text-xs px-2.5 py-1 rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium transition text-left"
+                  >
+                    💬 {fu}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Collapsible Inspection Details: folded for clean ergonomics */}
+          {(msg.confidence !== undefined || msg.tool_used || msg.agent_trace) && (
+            <details className="pt-1 text-[11px] text-slate-400 border-t border-slate-100">
+              <summary className="cursor-pointer select-none font-medium hover:text-slate-600 transition">
+                System Grounding & Trace Details
+              </summary>
+              <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-2.5 text-[10.5px] font-mono text-slate-600">
+                {msg.confidence !== undefined && (
+                  <div>Grounding Confidence: {Math.round(msg.confidence * 100)}%</div>
+                )}
+                {msg.tool_used && <div>Retrieval Tool: {msg.tool_used}</div>}
+                {msg.provider && <div>Model Engine: {msg.provider}</div>}
+                {msg.agent_trace && msg.agent_trace.length > 0 && (
+                  <div className="truncate">Trace Steps: {msg.agent_trace.length} verified operations</div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {/* Feedback Rating */}
+          {!isEscalated && (
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium text-[11px]">Helpful explanation?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRated("up");
+                    toast.success("Thank you for your feedback.");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition",
+                    rated === "up"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 font-bold"
+                      : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  )}
+                  aria-label="Mark explanation helpful"
+                >
+                  <ThumbsUp className="h-3 w-3" /> Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRated("down");
+                    toast.info("Feedback recorded to refine topic grounding.");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] transition",
+                    rated === "down"
+                      ? "border-rose-300 bg-rose-50 text-rose-800 font-bold"
+                      : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                  )}
+                  aria-label="Mark explanation not helpful"
+                >
+                  <ThumbsDown className="h-3 w-3" /> No
+                </button>
+              </div>
+              <span className="text-[10.5px] text-slate-400">{msg.timestamp}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main AskTutorPage Component ───────────────────────────────────────────────
 function AskTutorPage() {
   const { subjects, addQuery, refreshQueries } = useAppData();
   const { user } = useAuth();
-  const id = useId();
 
   const myId = user?.id || "";
   const myEmail = user?.email ? String(user.email).toLowerCase() : "";
@@ -505,23 +695,22 @@ function AskTutorPage() {
       : typeof s.enrolledStudentIds === "string"
       ? JSON.parse(s.enrolledStudentIds || "[]")
       : [];
-    return (
-      list.some((item) => {
-        const clean = String(item).toLowerCase();
-        return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId.toLowerCase());
-      })
-    );
+    return list.some((item) => {
+      const clean = String(item).toLowerCase();
+      return clean === myId.toLowerCase() || clean === myEmail || (myStudentId && clean === myStudentId.toLowerCase());
+    });
   };
 
   const enrolledSubjects = subjects.filter(isEnrolled);
   const firstSubject = enrolledSubjects[0] || null;
+
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(firstSubject?.id ?? "");
   const [selectedSubjectName, setSelectedSubjectName] = useState<string>(firstSubject?.name ?? "");
   const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>(firstSubject?.code ?? "");
   const [selectedMode, setSelectedMode] = useState<string>("ask_tutor");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("en");
   const [learnerLevel, setLearnerLevel] = useState<string>("developing");
-  const [learnerProfile, setLearnerProfile] = useState<any>(null);
+  const [showHistorySidebar, setShowHistorySidebar] = useState<boolean>(true);
 
   // Synchronize active subject with enrolled subjects
   useEffect(() => {
@@ -532,52 +721,38 @@ function AskTutorPage() {
         setSelectedSubjectName(enrolledSubjects[0].name);
         setSelectedSubjectCode(enrolledSubjects[0].code);
       }
-    } else {
-      setSelectedSubjectId("");
-      setSelectedSubjectName("");
-      setSelectedSubjectCode("");
     }
   }, [enrolledSubjects, selectedSubjectId]);
 
+  // Handle URL query parameters (e.g. from Concept Map "Ask AI Tutor")
   useEffect(() => {
-    fetch("/api/adaptive/profile")
-      .then((r) => r.json())
-      .then((data) => {
-        if (data?.learnerKnowledgeProfile) {
-          setLearnerProfile(data.learnerKnowledgeProfile);
-          if (data.learnerKnowledgeProfile.preferred_explanation_depth) {
-            setLearnerLevel(data.learnerKnowledgeProfile.preferred_explanation_depth);
-          }
-          if (data.learnerKnowledgeProfile.preferred_language) {
-            setSelectedLanguage(data.learnerKnowledgeProfile.preferred_language);
-          }
-          if (data.learnerKnowledgeProfile.preferred_teaching_mode) {
-            setSelectedMode(data.learnerKnowledgeProfile.preferred_teaching_mode);
-          }
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleResetPersonalization = async () => {
-    if (!window.confirm("Are you sure you want to reset your personal learning history and preferences?")) return;
+    if (typeof window === "undefined") return;
     try {
-      const res = await fetch("/api/adaptive/reset", { method: "POST" });
-      if (res.ok) {
-        toast.success("Learning profile and preferences reset.");
-        setLearnerLevel("developing");
-        setSelectedMode("ask_tutor");
-        fetch("/api/adaptive/profile")
-          .then((r) => r.json())
-          .then((d) => setLearnerProfile(d?.learnerKnowledgeProfile || null))
-          .catch(() => {});
-      }
-    } catch {
-      toast.error("Failed to reset learning profile.");
-    }
-  };
+      const params = new URLSearchParams(window.location.search);
+      const urlSubjectId = params.get("subjectId");
+      const urlQuestion = params.get("question");
+      const urlConcept = params.get("concept");
 
-  const [showControls, setShowControls] = useState<boolean>(false);
+      if (urlSubjectId && subjects.length > 0) {
+        const matchingSubj = subjects.find(
+          (s) => s.id === urlSubjectId || s.code?.toLowerCase() === urlSubjectId.toLowerCase(),
+        );
+        if (matchingSubj) {
+          setSelectedSubjectId(matchingSubj.id);
+          setSelectedSubjectName(matchingSubj.name);
+          setSelectedSubjectCode(matchingSubj.code);
+        }
+      }
+
+      if (urlQuestion) {
+        setInput(urlQuestion);
+      } else if (urlConcept) {
+        setInput(
+          `Explain the core principles, architecture, and real-world application of ${urlConcept} based on our syllabus.`,
+        );
+      }
+    } catch {}
+  }, [subjects]);
 
   const userSessionStorageKey = user?.id
     ? `ai_tutor_chat_sessions_user_${user.id}`
@@ -585,7 +760,7 @@ function AskTutorPage() {
 
   const makeDefaultSession = (): ChatSession => ({
     id: `sess_${Date.now()}`,
-    title: "New Conversation",
+    title: "New Inquiry",
     subject: selectedSubjectName || (firstSubject?.name ?? "General"),
     subjectId: selectedSubjectId || (firstSubject?.id ?? ""),
     createdAt: "Today",
@@ -612,63 +787,7 @@ function AskTutorPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Switch sessions safely when authenticated user changes
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const key = user?.id ? `ai_tutor_chat_sessions_user_${user.id}` : "ai_tutor_chat_sessions_guest";
-      const saved = localStorage.getItem(key);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setSessions(parsed);
-          setActiveSessionId(parsed[0].id);
-          return;
-        }
-      }
-    } catch {}
-    const fresh = makeDefaultSession();
-    setSessions([fresh]);
-    setActiveSessionId(fresh.id);
-  }, [user?.id]);
-
-  // Load past conversations from MongoDB/Supabase backend
-  useEffect(() => {
-    async function fetchServerConversations() {
-      if (!user?.id) return;
-      try {
-        const res = await fetch(`${API_BASE}/api/conversations`, {
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-            ...(user?.id ? { "x-user-id": user.id } : {}),
-          },
-        });
-        if (res.ok) {
-          const convs = await res.json();
-          if (Array.isArray(convs) && convs.length > 0) {
-            const loadedSessions: ChatSession[] = convs.map((c: any) => ({
-              id: String(c.id || c._id),
-              mongoId: String(c.id || c._id),
-              title: c.title || "Untitled Conversation",
-              subject: c.subjectName || "General",
-              subjectId: c.subjectId || "",
-              createdAt: new Date(c.updatedAt || c.createdAt).toLocaleDateString(),
-              messages: [],
-            }));
-            setSessions(loadedSessions);
-            setActiveSessionId(loadedSessions[0].id);
-            // Immediately load the conversation messages for the initially active session
-            loadSessionMessages(loadedSessions[0].id, loadedSessions);
-          }
-        }
-      } catch (e) {
-        console.warn("[Ask Tutor] Could not fetch server conversations:", e);
-      }
-    }
-
-    fetchServerConversations();
-  }, [user?.id, user?.token]);
-
+  // Sync to local storage
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
@@ -679,79 +798,14 @@ function AskTutorPage() {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
 
-  useEffect(() => {
-    if (!activeSession) return;
-    const subj = subjects.find(
-      (s) => s.id === activeSession.subjectId || s.name === activeSession.subject,
-    );
-    if (subj) {
-      setSelectedSubjectId(subj.id);
-      setSelectedSubjectName(subj.name);
-      setSelectedSubjectCode(subj.code);
-    } else if (firstSubject) {
-      setSelectedSubjectId(firstSubject.id);
-      setSelectedSubjectName(firstSubject.name);
-      setSelectedSubjectCode(firstSubject.code);
-    }
-  }, [activeSessionId, activeSession?.subject, activeSession?.subjectId, subjects, firstSubject]);
-
-  // Load conversation messages from server
-  const loadSessionMessages = async (sessId: string, currentList?: ChatSession[]) => {
-    const list = currentList || sessions;
-    const target = list.find((s) => s.id === sessId);
-    const convId = target?.mongoId || (target && !target.id.startsWith("sess_") ? target.id : null);
-    if (!convId) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/api/conversations/${convId}`, {
-        headers: {
-          ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-          ...(user?.id ? { "x-user-id": user.id } : {}),
-        },
-      });
-      if (res.ok) {
-        const convData = await res.json();
-        const rawMsgs = Array.isArray(convData.messages)
-          ? convData.messages
-          : typeof convData.messages === "string"
-          ? JSON.parse(convData.messages || "[]")
-          : [];
-
-        const msgs: ChatMessage[] = rawMsgs.map((m: any, idx: number) => ({
-          id: m._id || m.id || `msg_${idx}`,
-          role: m.role === "student" || m.role === "user" ? "user" : "ai",
-          text: m.text,
-          worked_example: m.worked_example || null,
-          visual: m.visual || null,
-          chart: m.chart || null,
-          sources: m.sources || [],
-          timestamp: m.timestamp
-            ? new Date(m.timestamp).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "",
-        }));
-
-        setSessions((prev) => prev.map((s) => (s.id === sessId ? { ...s, messages: msgs } : s)));
-      }
-    } catch (err) {
-      console.error("[Ask Tutor] Failed to load session messages:", err);
-    }
-  };
-
   const handleSelectSession = (sessId: string) => {
     setActiveSessionId(sessId);
-    const target = sessions.find((s) => s.id === sessId);
-    if (target && target.messages.length === 0) {
-      loadSessionMessages(sessId);
-    }
   };
 
   const createNewSession = () => {
     const newSess: ChatSession = {
       id: `sess_${Date.now()}`,
-      title: "New Conversation",
+      title: "New Inquiry",
       subject: selectedSubjectName,
       subjectId: selectedSubjectId,
       createdAt: "Just now",
@@ -763,36 +817,16 @@ function AskTutorPage() {
 
   const deleteSession = async (sessId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const target = sessions.find((s) => s.id === sessId);
-    const convId = target?.mongoId || (target && !target.id.startsWith("sess_") ? target.id : null);
-
-    // 1. Remove from local state immediately
     setSessions((prev) => {
       const remaining = prev.filter((s) => s.id !== sessId);
       if (remaining.length === 0) {
         const fresh = makeDefaultSession();
-        fresh.id = `sess_${Date.now()}`;
         setActiveSessionId(fresh.id);
         return [fresh];
       }
       if (activeSessionId === sessId) setActiveSessionId(remaining[0].id);
       return remaining;
     });
-
-    // 2. Permanently delete from database so it never comes back
-    if (convId && !convId.startsWith("sess_")) {
-      try {
-        await fetch(`${API_BASE}/api/conversations/${convId}`, {
-          method: "DELETE",
-          headers: {
-            ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),
-            ...(user?.id ? { "x-user-id": user.id } : {}),
-          },
-        });
-      } catch (err) {
-        console.warn("[Ask Tutor] Failed to delete conversation on server:", err);
-      }
-    }
   };
 
   const handleSubjectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -803,13 +837,12 @@ function AskTutorPage() {
       setSelectedSubjectCode(subj.code);
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === activeSessionId ? { ...s, subject: subj.name, subjectId: subj.id } : s,
-        ),
+          s.id === activeSessionId ? { ...s, subject: subj.name, subjectId: subj.id } : s
+        )
       );
     }
   };
 
-  // ── Send question ───────────────────────────────────────────────────────────
   const handleSend = async (overrideQuery?: string) => {
     const q = (overrideQuery ?? input).trim();
     if (!q || isProcessing) return;
@@ -827,10 +860,9 @@ function AskTutorPage() {
     setSessions((prev) =>
       prev.map((s) => {
         if (s.id !== activeSessionId) return s;
-        const newTitle =
-          s.messages.length === 0 ? q.slice(0, 30) + (q.length > 30 ? "…" : "") : s.title;
+        const newTitle = s.messages.length === 0 ? q.slice(0, 32) + (q.length > 32 ? "…" : "") : s.title;
         return { ...s, title: newTitle, messages: [...s.messages, userMsg] };
-      }),
+      })
     );
 
     addQuery({
@@ -841,9 +873,7 @@ function AskTutorPage() {
     });
 
     setIsProcessing(true);
-
     let apiResp: ApiResponse | null = null;
-    const conversationIdToSend = activeSession.mongoId;
 
     try {
       const res = await fetch(`${API_BASE}/api/tutor/ask`, {
@@ -858,11 +888,10 @@ function AskTutorPage() {
           subjectId: selectedSubjectId || firstSubject?.id || undefined,
           subjectCode: selectedSubjectCode || firstSubject?.code || "CSUC301",
           question: q,
-          conversationId: conversationIdToSend,
+          conversationId: activeSession.mongoId,
           mode: selectedMode,
           response_language: selectedLanguage,
           learner_level: learnerLevel,
-          learner_profile: learnerProfile,
         }),
       });
 
@@ -877,18 +906,15 @@ function AskTutorPage() {
           createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         });
         refreshQueries().catch(() => {});
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        console.error("[Ask Tutor] API error:", res.status, errData);
       }
-    } catch (fetchErr) {
-      console.error("[Ask Tutor] Fetch failed:", fetchErr);
+    } catch (e) {
+      console.warn("[Ask Tutor] Request error:", e);
     }
 
     if (!apiResp) {
       apiResp = {
         answer:
-          "The AI Tutor service is currently unreachable. Please make sure the Node backend (port 5000) and the Python RAG service (port 8001) are both running.",
+          "The academic tutoring service is currently processing offline. Please ensure the course backend service is active.",
         worked_example: null,
         visual: null,
         chart: null,
@@ -919,7 +945,6 @@ function AskTutorPage() {
       learner_level: learnerLevel,
       tool_used: (apiResp as any)?.tool_used ?? null,
       understanding_check: (apiResp as any)?.understanding_check ?? null,
-      learning_intent: (apiResp as any)?.learning_intent ?? null,
     };
 
     setSessions((prev) =>
@@ -930,331 +955,257 @@ function AskTutorPage() {
           mongoId: apiResp?.conversationId || s.mongoId,
           messages: [...s.messages, aiMsg],
         };
-      }),
+      })
     );
     setIsProcessing(false);
   };
 
   return (
-    <div>
+    <div className="space-y-4">
       <PageHeader
-        title="AI Tutor — Adaptive & Visually Explaining"
-        subtitle="Multi-turn conversation memory, topic mastery adaptivity, worked examples, and interactive diagrams."
+        title="Academic AI Tutor"
+        subtitle="Syllabus-grounded explanations with verifiable citations, KaTeX math formulas, and interactive diagrams."
+        breadcrumb="Student Portal / AI Tutor"
         action={
           <button
             type="button"
-            onClick={() => setShowControls((v) => !v)}
-            className={cn(
-              "flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition-all",
-              showControls
-                ? "border-violet bg-violet/5 text-violet shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)]"
-                : "border-border bg-card text-muted-foreground hover:border-violet/40",
-            )}
+            onClick={() => setShowHistorySidebar((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
-            <Sliders className="h-4 w-4" />
-            Controls
+            <History className="h-4 w-4 text-slate-500" />
+            <span>Past Inquiries ({sessions.length})</span>
           </button>
         }
       />
 
+      {/* Course Enrollment Warning if 0 enrolled */}
       {enrolledSubjects.length === 0 && (
-        <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
-            <div>
-              <div className="text-xs font-bold text-foreground">0 Course Enrollments Active</div>
-              <p className="text-xs text-muted-foreground">
-                Enroll in subjects from your dashboard to ground the AI Tutor directly on your university syllabus and course documents.
-              </p>
-            </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0" />
+            <span className="text-amber-950 font-medium">
+              No course enrollments detected. Enroll in subjects to ground the tutor directly on your semester materials.
+            </span>
           </div>
           <Link
             to="/student"
-            className="rounded-xl bg-violet px-4 py-2 text-xs font-bold text-white hover:bg-violet-hover transition shadow-2xs shrink-0"
+            className="font-bold text-blue-700 hover:text-blue-900 underline"
           >
-            Go to Course Catalog →
+            Enroll in Courses →
           </Link>
         </div>
       )}
 
-      {showControls && (
-        <div className="mb-6 rounded-2xl border border-violet/20 bg-violet/5 p-5 shadow-sm space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Subject Context ({enrolledSubjects.length > 0 ? "Enrolled Only" : "All Subjects"})
-              </label>
-              <select
-                value={selectedSubjectId}
-                onChange={handleSubjectChange}
-                className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus:border-violet transition"
-              >
-                {enrolledSubjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.code}) ✓ Enrolled
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col justify-end">
-              <p className="text-xs text-muted-foreground rounded-xl border border-border bg-card px-3 py-2">
-                <span className="font-semibold text-violet">RAG Engine:</span> ChromaDB + MiniLM →
-                Gemini/Groq → MongoDB Conversation Memory & Structured Output
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid gap-6 lg:grid-cols-4">
-        {/* Sessions sidebar */}
-        <div className="lg:col-span-1 space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <History className="h-3.5 w-3.5" /> Conversations
-              <span className="ml-1 rounded-full bg-violet/10 px-1.5 py-0.5 text-violet font-bold">
-                {sessions.length}
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={createNewSession}
-              disabled={enrolledSubjects.length === 0}
-              className="flex items-center gap-1 rounded-lg bg-violet/10 px-2.5 py-1 text-xs font-semibold text-violet hover:bg-violet/20 transition disabled:opacity-40"
-            >
-              <Plus className="h-3.5 w-3.5" /> New
-            </button>
-          </div>
-          <div className="space-y-1.5 max-h-[540px] overflow-y-auto pr-1">
-            {sessions.map((s) => {
-              const active = s.id === activeSessionId;
-              return (
-                <motion.div
-                  key={s.id}
-                  onClick={() => handleSelectSession(s.id)}
-                  whileHover={{ x: 2 }}
-                  className={cn(
-                    "group flex cursor-pointer items-center justify-between rounded-xl px-3 py-2.5 transition text-xs",
-                    active
-                      ? "bg-violet text-white font-medium shadow-[0_0_14px_-4px_oklch(0.62_0.22_293_/_50%)]"
-                      : "bg-card text-foreground hover:bg-accent border border-border",
-                  )}
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="truncate font-semibold">{s.title || "Untitled chat"}</div>
-                    <div
-                      className={cn(
-                        "text-[11px] truncate mt-0.5",
-                        active ? "text-violet-200 opacity-80" : "text-muted-foreground",
-                      )}
-                    >
-                      {s.subject} · {s.messages.length} msgs
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => deleteSession(s.id, e)}
-                    className={cn(
-                      "opacity-0 group-hover:opacity-100 transition p-1 rounded",
-                      active
-                        ? "hover:bg-white/20 text-white"
-                        : "hover:text-danger text-muted-foreground",
-                    )}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Chat area */}
-        <div className="lg:col-span-3">
-          <Card>
+      {/* Top Persistent Context Controls Bar */}
+      <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        {/* Left: Active Course Scope */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <span className="font-bold text-slate-500 uppercase tracking-wider text-[10.5px]">Course Scope:</span>
+          <select
+            value={selectedSubjectId}
+            onChange={handleSubjectChange}
+            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-800 text-xs outline-none focus:border-blue-600 cursor-pointer"
+          >
             {enrolledSubjects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-center px-4 min-h-[460px]">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 shadow-md">
-                  <GraduationCap className="h-8 w-8" />
-                </div>
-                <h3 className="font-serif text-2xl font-bold text-foreground">
-                  AI Tutor Locked — 0 Subjects Enrolled
-                </h3>
-                <p className="mt-2 max-w-md text-xs text-muted-foreground leading-relaxed">
-                  The AI Tutor grounds its explanations, LaTeX derivations, worked examples, and interactive diagrams in your enrolled university curriculum. Please enroll in your semester subjects in the Course Catalog to start chatting.
-                </p>
-                <Link
-                  to="/student"
-                  className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-violet-hover transition"
-                >
-                  Browse Course Catalog & Enroll →
-                </Link>
-              </div>
+              <option value="">General Academic Context</option>
             ) : (
-              <div className="flex flex-col min-h-[520px]">
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3 mb-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet/10 text-violet">
-                      <BookOpen className="h-4 w-4" />
-                    </div>
-                    <select
-                      value={selectedSubjectId}
-                      onChange={handleSubjectChange}
-                      className="rounded-xl border border-border bg-card px-2.5 py-1.5 text-xs font-bold text-foreground outline-none focus:border-violet transition cursor-pointer max-w-[200px] truncate"
-                    >
-                      {enrolledSubjects.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code})
-                        </option>
-                      ))}
-                    </select>
+              enrolledSubjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.code})
+                </option>
+              ))
+            )}
+          </select>
 
-                  {/* Multilingual Selector */}
-                  <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1 text-xs">
-                    <Languages className="h-3.5 w-3.5 text-violet shrink-0" />
-                    <select
-                      value={selectedLanguage}
-                      onChange={(e) => setSelectedLanguage(e.target.value)}
-                      className="bg-transparent text-xs font-semibold text-foreground outline-none cursor-pointer"
-                      title="Select explanation language"
-                    >
-                      {LANGUAGES.map((lang) => (
-                        <option key={lang.code} value={lang.code}>
-                          {lang.flag} {lang.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  {/* Learner Level Selector */}
-                  <div className="flex items-center gap-1 rounded-xl border border-border bg-card p-0.5">
-                    {LEARNER_LEVELS.map((lvl) => (
-                      <button
-                        key={lvl.id}
-                        type="button"
-                        onClick={() => setLearnerLevel(lvl.id)}
-                        className={cn(
-                          "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold transition-all",
-                          learnerLevel === lvl.id
-                            ? "bg-violet text-white shadow-2xs"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                        title={lvl.hint}
-                      >
-                        <span>{lvl.icon}</span>
-                        <span className="hidden sm:inline">{lvl.label}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <span className="rounded-full bg-violet/10 px-2.5 py-1 text-violet font-semibold text-[11px] hidden md:inline">
-                    {selectedSubjectCode}
-                  </span>
-
-                  {learnerProfile && (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-400 font-semibold">
-                      <span>🎯 Mastery: {learnerProfile.estimated_mastery_level || "developing"}</span>
-                      <button
-                        type="button"
-                        onClick={handleResetPersonalization}
-                        title="Reset learning profile & personalization data"
-                        className="ml-1 text-[10px] text-muted-foreground hover:text-rose-500 underline cursor-pointer"
-                      >
-                        Reset
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex-1 space-y-5 overflow-y-auto pr-1 pb-4">
-                {activeSession.messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <motion.div
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet/10 text-violet shadow-[0_0_24px_-4px_oklch(0.62_0.22_293_/_35%)]"
-                    >
-                      <Sparkles className="h-8 w-8" />
-                    </motion.div>
-                    <div className="font-serif text-2xl font-bold text-foreground">
-                      Ask the AI Tutor
-                    </div>
-                    <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                      Ask questions in your preferred language and level. Explore LaTeX equations,
-                      rich code blocks, interactive flowcharts, and dynamic charts grounded in course material.
-                    </p>
-                  </div>
-                ) : (
-                  <AnimatePresence initial={false}>
-                    {activeSession.messages.map((msg, idx) => (
-                      <ChatMessageBubble
-                        key={msg.id}
-                        msg={msg}
-                        onSourceClick={setSelectedSource}
-                        onFollowUpClick={(fuText) => handleSend(fuText)}
-                        onRetry={() => {
-                          const userMsgs = activeSession.messages.slice(0, idx).filter((m) => m.role === "user");
-                          const lastUser = userMsgs[userMsgs.length - 1];
-                          if (lastUser) handleSend(lastUser.text);
-                        }}
-                        onProfileUpdate={() => {
-                          fetch("/api/adaptive/profile")
-                            .then((r) => r.json())
-                            .then((d) => setLearnerProfile(d?.learnerKnowledgeProfile || null))
-                            .catch(() => {});
-                        }}
-                      />
-                    ))}
-                  </AnimatePresence>
+          {/* Mode Selector */}
+          <div className="hidden sm:flex items-center gap-1 border-l border-slate-200 pl-2.5">
+            {EDUCATIONAL_MODES.slice(0, 3).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSelectedMode(m.id)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[11px] font-semibold transition",
+                  selectedMode === m.id
+                    ? "bg-blue-100 text-blue-800 font-bold"
+                    : "text-slate-500 hover:text-slate-800"
                 )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-                {isProcessing && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="flex justify-start"
-                  >
-                    <TypingIndicator />
-                  </motion.div>
-                )}
+        {/* Right: Language and Pedagogical Level */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Languages className="h-3.5 w-3.5 text-slate-400" />
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              className="bg-transparent text-xs font-medium text-slate-700 outline-none cursor-pointer"
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-                <div ref={messagesEndRef} />
-              </div>
+          <div className="flex items-center gap-1 border-l border-slate-200 pl-2.5">
+            <span className="text-[10.5px] font-semibold text-slate-400">Depth:</span>
+            <select
+              value={learnerLevel}
+              onChange={(e) => setLearnerLevel(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-blue-700 outline-none cursor-pointer"
+            >
+              {LEARNER_LEVELS.map((lvl) => (
+                <option key={lvl.id} value={lvl.id}>
+                  {lvl.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
-              {/* Educational Mode Selector */}
-              <div className="flex items-center gap-1.5 overflow-x-auto py-1.5 no-scrollbar">
-                {EDUCATIONAL_MODES.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setSelectedMode(m.id)}
+      {/* Main Workspace Layout */}
+      <div className="grid gap-4 lg:grid-cols-4 items-start">
+        {/* Past Sessions Sidebar (Collapsible) */}
+        {showHistorySidebar && (
+          <div className="lg:col-span-1 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <History className="h-3.5 w-3.5 text-slate-500" /> Inquiries
+              </span>
+              <button
+                type="button"
+                onClick={createNewSession}
+                className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition"
+              >
+                <Plus className="h-3 w-3" /> New
+              </button>
+            </div>
+
+            <div className="max-h-[500px] overflow-y-auto space-y-1 pr-0.5">
+              {sessions.map((s) => {
+                const active = s.id === activeSessionId;
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => handleSelectSession(s.id)}
                     className={cn(
-                      "flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium shrink-0 transition-all",
-                      selectedMode === m.id
-                        ? "bg-violet text-white shadow-sm"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      "group flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition",
+                      active
+                        ? "bg-blue-50 text-blue-800 font-semibold border border-blue-200"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     )}
                   >
-                    <span>{m.icon}</span>
-                    <span>{m.label}</span>
-                  </button>
-                ))}
-              </div>
+                    <div className="min-w-0 pr-1.5 truncate">
+                      <div className="truncate">{s.title || "Untitled inquiry"}</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        {s.subject} · {s.messages.length} {s.messages.length === 1 ? "turn" : "turns"}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => deleteSession(s.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 transition"
+                      title="Delete conversation"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
-              {/* Input bar */}
-              <div className="mt-1 flex items-center gap-2 rounded-2xl border border-border bg-background px-4 py-2.5 shadow-sm focus-within:border-violet/50 focus-within:shadow-[0_0_0_3px_oklch(0.62_0.22_293_/_12%)] transition-all">
+        {/* Conversation Stream & Composer */}
+        <div className={cn(showHistorySidebar ? "lg:col-span-3" : "lg:col-span-4")}>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs flex flex-col min-h-[560px]">
+            {/* Conversation Messages */}
+            <div className="flex-1 space-y-5 overflow-y-auto pr-1 pb-4">
+              {activeSession.messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center max-w-lg mx-auto">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-700 mb-3">
+                    <BookOpen className="h-6 w-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Syllabus-Grounded Academic Inquiry
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                    Ask academic questions regarding lecture slides, textbook algorithms, and exam topics. Every answer references verified curriculum passages.
+                  </p>
+
+                  {/* Starter inquiry chips */}
+                  <div className="mt-6 w-full space-y-2">
+                    <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-400 text-left">
+                      Suggested Academic Inquiries
+                    </div>
+                    {[
+                      `Explain the core mechanism of ${selectedSubjectName || "this subject"} with an example`,
+                      "What are the critical exam concepts and definitions for Unit 1?",
+                      "Provide a step-by-step derivation with mathematical formulas",
+                    ].map((prompt, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleSend(prompt)}
+                        className="w-full text-left text-xs p-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-blue-50/60 hover:border-blue-200 text-slate-700 transition"
+                      >
+                        → {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                activeSession.messages.map((msg) => (
+                  <ChatMessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    onSourceClick={(s) => setSelectedSource(s)}
+                    onFollowUpClick={(fu) => handleSend(fu)}
+                    onRetry={() => {
+                      const userMsgs = activeSession.messages.filter((m) => m.role === "user");
+                      const last = userMsgs[userMsgs.length - 1];
+                      if (last) handleSend(last.text);
+                    }}
+                  />
+                ))
+              )}
+
+              {/* Progressive Loading State */}
+              {isProcessing && (
+                <div className="flex items-center gap-3 rounded-lg border border-blue-100 bg-blue-50/50 p-3 max-w-md text-xs text-blue-900">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-600 text-white animate-spin">
+                    ⏳
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="font-bold">Verifying Curriculum Passages…</div>
+                    <div className="text-[11px] text-blue-700">Synthesizing grounded explanation from syllabus chunks.</div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input Composer */}
+            <div className="mt-3 pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 focus-within:border-blue-600 focus-within:ring-2 focus-within:ring-blue-100 transition">
                 <input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  placeholder={`Ask a question about ${selectedSubjectName || "your subject"} (${LANGUAGES.find((l) => l.code === selectedLanguage)?.name || "English"})…`}
+                  placeholder={`Ask a question in ${selectedSubjectName || "your subject"}…`}
                   disabled={isProcessing}
-                  className="flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                  className="flex-1 bg-transparent text-xs sm:text-sm text-slate-900 outline-none placeholder:text-slate-400"
                 />
+
                 <VoiceInputButton
                   onTranscript={(transcript) =>
                     setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
@@ -1262,338 +1213,31 @@ function AskTutorPage() {
                   language={selectedLanguage}
                   disabled={isProcessing}
                 />
-                <motion.button
+
+                <button
                   type="button"
                   onClick={() => handleSend()}
                   disabled={!input.trim() || isProcessing}
-                  whileTap={{ scale: 0.9 }}
-                  whileHover={{ boxShadow: "0 0 18px -3px oklch(0.62 0.22 293 / 55%)" }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#9d72f7] to-[#7c3aed] text-white disabled:opacity-40 transition-all shrink-0"
+                  className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-700 text-white disabled:opacity-40 hover:bg-blue-800 transition shrink-0"
+                  aria-label="Send academic query"
                 >
-                  <Send className="h-4 w-4" />
-                </motion.button>
+                  <Send className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
-          )}
-          </Card>
+          </div>
         </div>
       </div>
 
-      {/* Source detail modal */}
+      {/* Verified Source Evidence Side Shelf */}
       <AnimatePresence>
         {selectedSource && (
-          <SourceModal source={selectedSource} onClose={() => setSelectedSource(null)} />
+          <SourceEvidenceShelf
+            source={selectedSource}
+            onClose={() => setSelectedSource(null)}
+          />
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-// ── ChatMessageBubble ─────────────────────────────────────────────────────────
-function ChatMessageBubble({
-  msg,
-  onSourceClick,
-  onFollowUpClick,
-  onRetry,
-  onProfileUpdate,
-}: {
-  msg: ChatMessage;
-  onSourceClick: (s: SourceChip) => void;
-  onFollowUpClick?: (text: string) => void;
-  onRetry?: () => void;
-  onProfileUpdate?: () => void;
-}) {
-  const [rated, setRated] = useState<"up" | "down" | null>(null);
-  const [showCommentBox, setShowCommentBox] = useState(false);
-  const [commentText, setCommentText] = useState("");
-
-  const isUser = msg.role === "user" || (msg.role as string) === "student";
-  const isEscalated = msg.escalated === true;
-
-  if (isUser) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, x: 20, scale: 0.97 }}
-        animate={{ opacity: 1, x: 0, scale: 1 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="flex justify-end"
-      >
-        <div
-          className="max-w-xl rounded-2xl rounded-tr-sm chat-user-bubble px-4 py-3 text-sm text-white shadow-sm"
-          style={{ boxShadow: "0 4px 16px -4px oklch(0.62 0.22 293 / 40%)" }}
-        >
-          <div className="leading-relaxed">{msg.text}</div>
-          <div className="mt-1 text-[10px] text-violet-200 text-right opacity-75">
-            {msg.timestamp}
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -20, scale: 0.97 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      transition={{ duration: 0.2, ease: "easeOut" }}
-      className="flex gap-3 max-w-3xl"
-    >
-      <div
-        className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 shadow-sm mt-1",
-          isEscalated
-            ? "bg-amber-500/15 ring-amber-500/25 shadow-amber-500/20"
-            : "bg-violet/15 ring-violet/25 shadow-[0_0_10px_-2px_oklch(0.62_0.22_293_/_30%)]",
-        )}
-      >
-        {isEscalated ? (
-          <AlertTriangle className="h-4 w-4 text-amber-500" />
-        ) : (
-          <Sparkles className="h-4 w-4 text-violet" />
-        )}
-      </div>
-
-      <div className="flex-1">
-        <div
-          className={cn(
-            "rounded-2xl rounded-tl-sm border p-5 shadow-sm space-y-3",
-            isEscalated
-              ? "border-amber-500/20 bg-amber-500/5 chat-escalated-bubble"
-              : "border-violet/15 bg-card chat-ai-bubble",
-          )}
-          style={{
-            boxShadow: isEscalated
-              ? "0 2px 12px -4px rgba(245,158,11,0.15)"
-              : "0 2px 12px -4px rgba(0,0,0,0.15)",
-          }}
-        >
-          {/* Escalation badge */}
-          {isEscalated && (
-            <div className="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-              <span className="font-semibold text-amber-700 dark:text-amber-400">
-                Escalated to Faculty — Not enough approved material found.
-              </span>
-            </div>
-          )}
-
-          {/* Header row with confidence, grounded status, and mode */}
-          {!isEscalated && (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground font-medium">Grounded answer</span>
-                {msg.grounded && (
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                    <CheckCircle2 className="h-3 w-3" /> Verified Grounded
-                  </span>
-                )}
-                {msg.tool_used && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400">
-                    ⚙️ Tool: {msg.tool_used}
-                  </span>
-                )}
-                {msg.mode && (
-                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-violet/10 text-violet">
-                    {msg.mode.replace("_", " ")}
-                  </span>
-                )}
-              </div>
-              {msg.confidence !== undefined && (
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 font-bold text-[11px]",
-                    msg.confidence >= 0.75
-                      ? "bg-success/10 text-success"
-                      : msg.confidence >= 0.55
-                        ? "bg-violet/10 text-violet"
-                        : "bg-gold/10 text-gold",
-                  )}
-                >
-                  Confidence: {Math.round(msg.confidence * 100)}%
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Rich Markdown & LaTeX Mathematics & Code & Visual Presentation */}
-          <div className="text-sm">
-            <MarkdownRenderer
-              content={msg.text}
-              onCitationClick={(num) => {
-                if (msg.sources && msg.sources.length >= num && num > 0) {
-                  onSourceClick(msg.sources[num - 1]);
-                } else if (msg.sources && msg.sources.length > 0) {
-                  onSourceClick(msg.sources[0]);
-                }
-              }}
-            />
-          </div>
-
-          {/* Dedicated Chart visualization (if passed in structured field) */}
-          {!isEscalated && msg.chart && <ChartRenderer spec={msg.chart} />}
-
-          {/* Visual Diagram Block */}
-          {!isEscalated && msg.visual && <VisualRenderer visual={msg.visual} />}
-
-          {/* Worked Example Block */}
-          {!isEscalated && msg.worked_example && (
-            <div className="rounded-xl border border-violet/20 bg-violet/5 p-4 my-3 space-y-1.5 text-xs shadow-sm">
-              <div className="flex items-center gap-1.5 font-bold text-violet uppercase tracking-wider text-[11px]">
-                <Code2 className="h-3.5 w-3.5" /> Worked Example
-              </div>
-              <div className="text-foreground/90 font-mono text-[12px] leading-relaxed whitespace-pre-wrap pl-3 border-l-2 border-violet/40">
-                {msg.worked_example}
-              </div>
-            </div>
-          )}
-
-          {/* Formative Understanding Check */}
-          {!isEscalated && msg.understanding_check && (
-            <UnderstandingCheckCard
-              check={msg.understanding_check}
-              onEvaluated={() => {
-                if (onProfileUpdate) onProfileUpdate();
-              }}
-            />
-          )}
-
-          {/* Source citation chips */}
-          {!isEscalated && msg.sources && msg.sources.length > 0 && (
-            <div className="space-y-1.5 pt-1">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <BookOpen className="h-3 w-3 text-violet" /> Verified Sources ({msg.sources.length})
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {msg.sources.map((src, i) => (
-                  <SourceChipBadge key={i} source={src} onClick={onSourceClick} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Educational Quick Action Chips */}
-          {!isEscalated && (
-            <EducationalActions
-              onAction={(prompt) => onFollowUpClick && onFollowUpClick(prompt)}
-              onCopyAnswer={() => navigator.clipboard.writeText(msg.text)}
-              onRetry={onRetry}
-              isAiMessage={true}
-            />
-          )}
-
-          {/* Operational agent trace */}
-          {msg.agent_trace && msg.agent_trace.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1 pt-1">
-              <span className="text-[10px] font-mono text-muted-foreground">Trace:</span>
-              {msg.agent_trace.map((step, idx) => (
-                <span
-                  key={idx}
-                  className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/40"
-                >
-                  {typeof step === "string" ? step : (step as any)?.node ? `${(step as any).node}${(step as any)?.intent ? ` (${(step as any).intent})` : ""}` : JSON.stringify(step)}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Follow-up question pills */}
-          {!isEscalated && msg.follow_up && msg.follow_up.length > 0 && (
-            <div className="pt-2 border-t border-border/50 space-y-1.5">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Suggested Follow-Ups
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {msg.follow_up.map((fu, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => onFollowUpClick && onFollowUpClick(fu)}
-                    className="text-xs px-2.5 py-1 rounded-lg border border-violet/20 bg-violet/5 hover:bg-violet/15 text-violet font-medium transition text-left"
-                  >
-                    💬 {fu}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Provider badge */}
-          {msg.provider && (
-            <div className="text-[10px] text-muted-foreground">
-              Generated by <span className="font-semibold capitalize">{msg.provider}</span>
-            </div>
-          )}
-
-          {/* Feedback row */}
-          {!isEscalated && (
-            <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground font-medium">Helpful?</span>
-                <button
-                  type="button"
-                  onClick={() => setRated("up")}
-                  className={cn(
-                    "flex items-center gap-1 rounded-lg border px-2.5 py-1 transition",
-                    rated === "up"
-                      ? "border-success bg-success/10 text-success font-bold"
-                      : "border-border bg-card text-muted-foreground hover:border-success hover:text-success",
-                  )}
-                >
-                  <ThumbsUp className="h-3.5 w-3.5" /> Yes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRated("down");
-                    setShowCommentBox(true);
-                  }}
-                  className={cn(
-                    "flex items-center gap-1 rounded-lg border px-2.5 py-1 transition",
-                    rated === "down"
-                      ? "border-danger bg-danger/10 text-danger font-bold"
-                      : "border-border bg-card text-muted-foreground hover:border-danger hover:text-danger",
-                  )}
-                >
-                  <ThumbsDown className="h-3.5 w-3.5" /> No
-                </button>
-              </div>
-              {rated && (
-                <span className="text-[11px] text-success font-semibold flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Recorded
-                </span>
-              )}
-            </div>
-          )}
-
-          {showCommentBox && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setShowCommentBox(false);
-              }}
-              className="rounded-xl border border-danger/30 bg-danger/5 p-3 space-y-2 text-xs"
-            >
-              <div className="font-semibold text-foreground">What could be improved?</div>
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="e.g. Missing code example, outdated information…"
-                rows={2}
-                className="w-full rounded-lg border border-border bg-background p-2 text-xs text-foreground outline-none focus:border-violet transition"
-              />
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="rounded-lg bg-gradient-to-r from-violet to-[#7c3aed] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
-                >
-                  Submit Feedback
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-        <div className="mt-1 pl-2 text-[10px] text-muted-foreground">{msg.timestamp}</div>
-      </div>
-    </motion.div>
   );
 }

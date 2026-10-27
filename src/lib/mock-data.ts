@@ -96,17 +96,43 @@ export const initialMultiModalChunks: MultiModalChunk[] = [];
 
 // ─── Interactive Knowledge Graph Nodes & Edges ───────────────────────────────
 
+export interface ConceptEvidence {
+  documentId: string;
+  fileName: string;
+  page?: number | null;
+  excerpt?: string;
+  chunkId?: string;
+}
+
 export interface ConceptNode {
   id: string;
   label: string;
+  name?: string;
   subjectId: string;
-  subjectName: string;
+  subjectName?: string;
+  subjectCode?: string;
+  semester?: number;
   domain: string;
+  unit?: string;
+  milestone?: string;
+  milestoneOrder?: number;
   x: number;
   y: number;
-  mastery: "mastered" | "weak" | "unread";
+  mastery: "mastered" | "weak" | "in_progress" | "unread";
+  masteryScore?: number | null;
+  attemptsCount?: number;
+  isReviewed?: boolean;
   summary: string;
+  whyItMatters?: string;
   relatedDocNames: string[];
+  evidenceSources?: ConceptEvidence[];
+  prerequisites?: string[];
+  prerequisiteIds?: string[];
+  dependents?: string[];
+  dependentIds?: string[];
+  suggestedQuizId?: string | null;
+  suggestedQuizTitle?: string | null;
+  weight?: number;
 }
 
 export interface ConceptEdge {
@@ -114,6 +140,8 @@ export interface ConceptEdge {
   source: string;
   target: string;
   label: string;
+  isPrerequisite?: boolean;
+  status?: "confirmed" | "proposed";
 }
 
 export const conceptNodes: ConceptNode[] = [];

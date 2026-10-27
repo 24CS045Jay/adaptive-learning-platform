@@ -69,6 +69,25 @@ interface ParsedUserRow {
   status: "pending" | "loading" | "success" | "error";
   errorMsg?: string;
   generatedPassword?: string;
+  validationErrors?: {
+    name?: string;
+    email?: string;
+    id?: string;
+  };
+}
+
+function validateRow(r: Partial<ParsedUserRow>): { name?: string; email?: string; id?: string } {
+  const errs: { name?: string; email?: string; id?: string } = {};
+  if (!r.name || r.name.trim().length < 2) {
+    errs.name = "Full name required (min 2 chars)";
+  }
+  if (!r.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email.trim())) {
+    errs.email = "Valid institutional email required";
+  }
+  if (r.role === "Student" && (!r.studentId || r.studentId.trim().length < 2)) {
+    errs.id = "Student ID / Roll number required";
+  }
+  return errs;
 }
 
 function UserManagementPage() {
@@ -113,6 +132,7 @@ function UserManagementPage() {
   const [showPasteBox, setShowPasteBox] = useState(false);
   const [bulkGlobalLoading, setBulkGlobalLoading] = useState(false);
   const [bulkSummary, setBulkSummary] = useState<{ total: number; enrolled: number; failed: number } | null>(null);
+  const [showErrorsOnly, setShowErrorsOnly] = useState(false);
 
   // ─── Remove User State ───
   const [removeQuery, setRemoveQuery] = useState("");
@@ -216,14 +236,13 @@ function UserManagementPage() {
     lines.forEach((line, idx) => {
       // Look for an email in the line
       const emailMatch = line.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      if (!emailMatch) return;
-      const rowEmail = emailMatch[1].toLowerCase();
+      const rowEmail = emailMatch ? emailMatch[1].toLowerCase() : "";
 
       // Extract remaining parts
       const parts = line.replace(rowEmail, "").trim().split(/[\t,;|]+/);
       let rowName = parts[0]?.trim() || "";
       if (!rowName || rowName.length < 2) {
-        rowName = rowEmail.split("@")[0].replace(/[0-9._]/g, " ").trim();
+        rowName = rowEmail ? rowEmail.split("@")[0].replace(/[0-9._]/g, " ").trim() : "";
       }
 
       const rollMatch = line.match(/\b([0-9]{2}[a-zA-Z]{2,4}[0-9]{2,4})\b/i);
@@ -236,9 +255,9 @@ function UserManagementPage() {
       const isFac = line.toLowerCase().includes("faculty") || line.toLowerCase().includes("prof") || line.toLowerCase().includes("dr.");
       const roleVal: "Student" | "Faculty" = isFac ? "Faculty" : "Student";
 
-      parsed.push({
+      const rowItem: ParsedUserRow = {
         id: `paste_${idx}_${Date.now()}`,
-        name: rowName || "Student",
+        name: rowName,
         email: rowEmail,
         studentId: roleVal === "Student" ? studentIdVal : undefined,
         facultyId: roleVal === "Faculty" ? parts[1]?.trim() || undefined : undefined,
@@ -248,7 +267,9 @@ function UserManagementPage() {
         batch: `${rowStart}-${rowEnd}`,
         semester: 1,
         status: "pending",
-      });
+      };
+      rowItem.validationErrors = validateRow(rowItem);
+      parsed.push(rowItem);
     });
 
     if (parsed.length > 0) {
@@ -287,12 +308,12 @@ function UserManagementPage() {
           const rawEnd = parseInt(r["End Year"] || r["end_year"] || r["Graduation Year"] || String(rawStart + 4), 10) || (rawStart + 4);
           const rawSem = parseInt(r["Current Semester"] || r["Semester"] || r["semester"] || "1", 10) || 1;
 
-          return {
+          const rowData: ParsedUserRow = {
             id: `row_${idx}_${Date.now()}`,
             name: String(rawName).trim(),
             email: String(rawEmail).trim().toLowerCase(),
-            studentId: rawRole === "Student" ? String(rawStudentId).trim().toUpperCase() : undefined,
-            facultyId: rawRole === "Faculty" ? String(rawFacultyId).trim().toUpperCase() : undefined,
+            studentId: rawRole === "Student" ? String(rawStudentId || "").trim().toUpperCase() : undefined,
+            facultyId: rawRole === "Faculty" ? String(rawFacultyId || "").trim().toUpperCase() : undefined,
             role: rawRole,
             startYear: rawStart,
             endYear: rawEnd,
@@ -300,7 +321,9 @@ function UserManagementPage() {
             semester: rawSem,
             status: "pending" as const,
           };
-        }).filter((r) => r.name && r.email);
+          rowData.validationErrors = validateRow(rowData);
+          return rowData;
+        }).filter((r) => r.name || r.email || r.studentId || r.facultyId);
 
         setBulkRows(parsed);
       } catch (err: any) {
@@ -308,6 +331,55 @@ function UserManagementPage() {
       }
     };
     reader.readAsBinaryString(file);
+  };
+
+  // Inline Spreadsheet Cell Editing Handler
+  const handleUpdateBulkCell = (rowId: string, field: keyof ParsedUserRow, value: any) => {
+    setBulkRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== rowId) return r;
+        const updated = { ...r, [field]: value };
+        if (field === "startYear") {
+          const sYr = Number(value) || CURRENT_YEAR;
+          updated.startYear = sYr;
+          updated.endYear = sYr + 4;
+          updated.batch = `${sYr}-${sYr + 4}`;
+        }
+        if (field === "role") {
+          if (value === "Faculty") {
+            updated.facultyId = updated.facultyId || updated.studentId || "";
+            updated.studentId = undefined;
+          } else {
+            updated.studentId = updated.studentId || updated.facultyId || "";
+            updated.facultyId = undefined;
+          }
+        }
+        updated.validationErrors = validateRow(updated);
+        return updated;
+      })
+    );
+  };
+
+  // Remove Row from Bulk Staging
+  const handleDeleteBulkRow = (rowId: string) => {
+    setBulkRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  // Batch Correction: Apply Active Batch & Semester to All Rows
+  const handleApplyDefaultBatchToAll = () => {
+    setBulkRows((prev) =>
+      prev.map((r) => {
+        const updated = {
+          ...r,
+          startYear,
+          endYear,
+          batch: `${startYear}-${endYear}`,
+          semester: Number(semester) || 1,
+        };
+        updated.validationErrors = validateRow(updated);
+        return updated;
+      })
+    );
   };
 
   // Pre-fill a row into the Single Registration form for manual review/editing
@@ -332,6 +404,15 @@ function UserManagementPage() {
   const handleRegisterSingleBulkRow = async (rowId: string) => {
     const targetRow = bulkRows.find((r) => r.id === rowId);
     if (!targetRow || targetRow.status === "loading" || targetRow.status === "success") return;
+
+    // Validate before submitting
+    const errs = validateRow(targetRow);
+    if (Object.keys(errs).length > 0) {
+      setBulkRows((prev) =>
+        prev.map((r) => (r.id === rowId ? { ...r, validationErrors: errs } : r))
+      );
+      return;
+    }
 
     setBulkRows((prev) =>
       prev.map((r) => (r.id === rowId ? { ...r, status: "loading", errorMsg: undefined } : r))
@@ -367,9 +448,23 @@ function UserManagementPage() {
     if (res.ok) await refreshUsers();
   };
 
-  // Register all students from extracted list
+  // Register all valid students/faculty from extracted list
   const handleRegisterAllBulk = async () => {
     if (bulkRows.length === 0 || bulkGlobalLoading) return;
+
+    // Revalidate all rows
+    const revalidated = bulkRows.map((r) => ({ ...r, validationErrors: validateRow(r) }));
+    setBulkRows(revalidated);
+
+    const validRows = revalidated.filter(
+      (r) => Object.keys(r.validationErrors || {}).length === 0 && r.status !== "success"
+    );
+
+    if (validRows.length === 0) {
+      alert("No valid rows to register. Please resolve highlighted errors first.");
+      return;
+    }
+
     setBulkGlobalLoading(true);
 
     let enrolledCount = 0;
@@ -380,6 +475,10 @@ function UserManagementPage() {
       const row = bulkRows[i];
       if (row.status === "success") {
         enrolledCount++;
+        continue;
+      }
+
+      if (row.validationErrors && Object.keys(row.validationErrors).length > 0) {
         continue;
       }
 
@@ -557,14 +656,14 @@ function UserManagementPage() {
           </button>
         </div>
 
-        <div className="glass flex items-center gap-4 rounded-3xl border border-border px-5 py-3 shadow-[var(--card-shadow)]">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-violet/12 text-violet">
-            <UsersIcon className="h-6 w-6" />
+        <div className="flex items-center gap-4 rounded-xl border border-border bg-card px-5 py-3 shadow-2xs">
+          <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+            <UsersIcon className="h-5 w-5" />
           </span>
           <div className="leading-tight">
-            <div className="text-xs font-semibold text-muted-foreground">Total Users</div>
-            <div className="text-3xl font-extrabold">{users.length}</div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-xs font-semibold text-muted-foreground">Total Enrolled Accounts</div>
+            <div className="text-2xl font-extrabold text-foreground tracking-tight">{users.length}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
               {users.filter((u) => u.role === "Faculty").length} faculty · {users.filter((u) => u.role === "Admin").length} admin · {users.filter((u) => u.role === "Student").length} student
             </div>
           </div>
@@ -577,29 +676,27 @@ function UserManagementPage() {
       {activeTab === "single" && (
         <div className="grid gap-6 xl:grid-cols-[22rem_1fr]">
           {/* Left info panel */}
-          <aside className="relative hidden overflow-hidden rounded-3xl border border-border bg-card p-6 shadow-[var(--card-shadow)] xl:block">
-            <div aria-hidden className="pointer-events-none absolute -right-16 -top-10 h-56 w-56 rounded-full bg-violet/15 blur-3xl" />
-            <h3 className="relative text-xl font-extrabold">Add New User</h3>
-            <p className="relative mt-1 text-sm text-muted-foreground">Enroll a student or faculty member to the platform with proper role and department.</p>
-            <ul className="relative mt-6 space-y-5">
+          <aside className="relative hidden rounded-xl border border-border bg-card p-6 shadow-2xs xl:block">
+            <h3 className="text-base font-bold text-foreground">Account Provisioning</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Enroll students or faculty members with automated institutional credentials.</p>
+            <ul className="mt-5 space-y-4">
               {[
-                { i: Zap, t: "Quick Enrollment", d: "Add users in seconds", c: "text-amber-500 bg-amber-500/14" },
-                { i: UsersIcon, t: "Role Based Access", d: "Student, Faculty or Admin", c: "text-violet bg-violet/12" },
-                { i: Landmark, t: "Department Mapping", d: "Assign to specific department", c: "text-sky-500 bg-sky-500/12" },
-                { i: Mail, t: "Welcome Email", d: "Auto-generated credentials", c: "text-blue-500 bg-blue-500/12" },
+                { i: Zap, t: "Instant Provisioning", d: "Account active immediately upon submission", c: "text-amber-600 bg-amber-50 dark:bg-amber-950/40" },
+                { i: UsersIcon, t: "Role-Based Permissions", d: "Student, Faculty or Department Admin", c: "text-blue-600 bg-blue-50 dark:bg-blue-950/40" },
+                { i: Landmark, t: "Departmental Scoping", d: "Locked to verified academic branch", c: "text-slate-700 bg-slate-100 dark:bg-slate-800" },
+                { i: Mail, t: "Automated Welcome Dispatch", d: "Credentials emailed to institutional inbox", c: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40" },
               ].map((f) => (
-                <li key={f.t} className="flex items-center gap-4">
-                  <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full", f.c)}>
-                    <f.i className="h-5 w-5" />
+                <li key={f.t} className="flex items-start gap-3">
+                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm", f.c)}>
+                    <f.i className="h-4 w-4" />
                   </span>
-                  <div className="leading-tight">
-                    <div className="text-sm font-bold">{f.t}</div>
-                    <div className="text-xs text-muted-foreground">{f.d}</div>
+                  <div className="leading-tight pt-0.5">
+                    <div className="text-xs font-bold text-foreground">{f.t}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">{f.d}</div>
                   </div>
                 </li>
               ))}
             </ul>
-            <img src="/assets/ui/users-side.png" alt="" draggable={false} className="relative mx-auto mt-6 w-full max-w-[17rem] drop-shadow-[0_14px_20px_rgba(76,56,190,.25)]" />
           </aside>
 
           <div className="min-w-0">
@@ -623,16 +720,16 @@ function UserManagementPage() {
                     <div><span className="text-muted-foreground">Name:</span> {createdSuccess.name}</div>
                     <div><span className="text-muted-foreground">Email:</span> {createdSuccess.email}</div>
                     {createdSuccess.studentId && (
-                      <div><span className="text-muted-foreground">Student ID:</span> <strong className="text-violet">{createdSuccess.studentId}</strong></div>
+                      <div><span className="text-muted-foreground">Student ID:</span> <strong className="text-primary font-bold">{createdSuccess.studentId}</strong></div>
                     )}
                     {createdSuccess.facultyId && (
-                      <div><span className="text-muted-foreground">Faculty ID:</span> <strong className="text-violet">{createdSuccess.facultyId}</strong></div>
+                      <div><span className="text-muted-foreground">Faculty ID:</span> <strong className="text-primary font-bold">{createdSuccess.facultyId}</strong></div>
                     )}
                     <div><span className="text-muted-foreground">Role:</span> {createdSuccess.role} ({createdSuccess.department})</div>
                     <div className="pt-1 border-t border-border flex items-center justify-between">
                       <span>
                         <span className="text-muted-foreground">Auto-generated Password:</span>{" "}
-                        <strong className="text-violet">{createdSuccess.password}</strong>
+                        <strong className="text-primary font-bold">{createdSuccess.password}</strong>
                       </span>
                     </div>
                   </div>
@@ -667,13 +764,13 @@ function UserManagementPage() {
           <Card className="p-6">
             <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
               <div>
-                <h3 className="font-serif text-lg font-bold text-foreground">Enroll Student or Faculty</h3>
+                <h3 className="text-base font-bold text-foreground">Enroll Student or Faculty</h3>
                 <p className="text-xs text-muted-foreground">
-                  Enrolls a user to <strong className="text-foreground">{getDepartmentLabel(adminDeptCode)}</strong>, generates dummy password (<code className="text-violet font-semibold">{previewDummyPassword}</code>), and dispatches welcome email.
+                  Enrolls a user to <strong className="text-foreground">{getDepartmentLabel(adminDeptCode)}</strong>, generates dummy password (<code className="text-primary font-semibold">{previewDummyPassword}</code>), and dispatches welcome email.
                 </p>
               </div>
-              <div className="rounded-full bg-violet/10 p-2 text-violet">
-                <Sparkles className="h-5 w-5" />
+              <div className="rounded-lg bg-primary/10 p-2 text-primary">
+                <Sparkles className="h-4 w-4" />
               </div>
             </div>
 
@@ -695,7 +792,7 @@ function UserManagementPage() {
                   placeholder="e.g. Amit Thakkar"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
 
@@ -710,7 +807,7 @@ function UserManagementPage() {
                   placeholder="e.g. 24cs045@charusat.edu.in"
                   value={email}
                   onChange={(e) => handleEmailChange(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
 
@@ -726,8 +823,8 @@ function UserManagementPage() {
                       className={cn(
                         "flex items-center justify-center gap-2 rounded-xl border p-2.5 text-xs font-semibold transition",
                         role === r
-                          ? "border-violet bg-violet/10 text-violet"
-                          : "border-border bg-card text-muted-foreground hover:border-violet/40 hover:text-foreground",
+                          ? "border-primary bg-primary/10 text-primary font-bold"
+                          : "border-border bg-card text-muted-foreground hover:border-slate-400 hover:text-foreground",
                       )}
                     >
                       {r === "Student" && <GraduationCap className="h-4 w-4" />}
@@ -752,7 +849,7 @@ function UserManagementPage() {
                       placeholder="e.g. 24CS045"
                       value={studentId}
                       onChange={(e) => setStudentId(e.target.value.toUpperCase())}
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet font-mono"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary font-mono"
                     />
                     <IdCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
@@ -772,7 +869,7 @@ function UserManagementPage() {
                       placeholder="e.g. CSE-FAC-01 or EMP045"
                       value={facultyId}
                       onChange={(e) => setFacultyId(e.target.value.toUpperCase())}
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet font-mono"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary font-mono"
                     />
                     <IdCard className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                   </div>
@@ -786,7 +883,7 @@ function UserManagementPage() {
                 </label>
                 {!isSuperAdmin ? (
                   <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3.5 py-2.5 text-xs font-semibold text-foreground">
-                    <Building2 className="h-4 w-4 text-violet" />
+                    <Building2 className="h-4 w-4 text-primary" />
                     <span>{getDepartmentLabel(adminDeptCode)} ({adminDeptCode})</span>
                     <span className="ml-auto text-[10px] text-muted-foreground bg-background px-2 py-0.5 rounded-full border border-border font-medium">
                       Locked to your department
@@ -796,7 +893,7 @@ function UserManagementPage() {
                   <select
                     value={departmentCode}
                     onChange={(e) => setDepartmentCode(e.target.value)}
-                    className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                   >
                     {DEPARTMENTS.map((dept) => (
                       <option key={dept.code} value={dept.code}>
@@ -813,7 +910,7 @@ function UserManagementPage() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                        <Calendar className="h-3.5 w-3.5 text-violet" />
+                        <Calendar className="h-3.5 w-3.5 text-primary" />
                         <span>Starting Year & Ending Year</span>
                       </label>
                       <button
@@ -822,7 +919,7 @@ function UserManagementPage() {
                           setStartYear(CURRENT_YEAR);
                           setEndYear(CURRENT_YEAR + 4);
                         }}
-                        className="text-[10px] text-violet hover:underline font-medium"
+                        className="text-[10px] text-primary hover:underline font-medium"
                       >
                         Reset to Current ({CURRENT_YEAR})
                       </button>
@@ -833,7 +930,7 @@ function UserManagementPage() {
                         <select
                           value={startYear}
                           onChange={(e) => handleStartYearChange(Number(e.target.value))}
-                          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-violet"
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                         >
                           {DYNAMIC_YEARS.map((y) => (
                             <option key={`start_${y}`} value={y}>
@@ -849,7 +946,7 @@ function UserManagementPage() {
                         <select
                           value={endYear}
                           onChange={(e) => setEndYear(Number(e.target.value))}
-                          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-violet"
+                          className="w-full rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                         >
                           {DYNAMIC_YEARS.map((y) => (
                             <option key={`end_${y}`} value={y}>
@@ -861,7 +958,7 @@ function UserManagementPage() {
                     </div>
                     
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>Batch: <strong className="text-violet font-mono">{batchString}</strong></span>
+                      <span>Batch: <strong className="text-primary font-mono">{batchString}</strong></span>
                       <span>Duration: <strong>{endYear - startYear} Years</strong></span>
                     </div>
                   </div>
@@ -873,7 +970,7 @@ function UserManagementPage() {
                     <select
                       value={semester}
                       onChange={(e) => setSemester(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-violet"
+                      className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                     >
                       {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
                         <option key={s} value={String(s)}>
@@ -888,10 +985,10 @@ function UserManagementPage() {
               {/* Password Preview */}
               <div className="flex items-center justify-between rounded-xl border border-border bg-card p-3 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <KeyRound className="h-4 w-4 text-violet" />
+                  <KeyRound className="h-4 w-4 text-primary" />
                   <span>Auto-Generated Password:</span>
                 </div>
-                <span className="font-mono font-bold text-violet">{previewDummyPassword}</span>
+                <span className="font-mono font-bold text-primary">{previewDummyPassword}</span>
               </div>
 
               {/* Submit Button */}
@@ -899,7 +996,7 @@ function UserManagementPage() {
                 <button
                   type="submit"
                   disabled={addLoading}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet px-4 py-3 text-xs font-semibold text-white shadow-sm hover:bg-violet-hover transition active:scale-[0.99] disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover transition active:scale-[0.99] disabled:opacity-50"
                 >
                   {addLoading ? (
                     <>
@@ -937,17 +1034,17 @@ function UserManagementPage() {
                 <button
                   type="button"
                   onClick={() => setShowPasteBox(!showPasteBox)}
-                  className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition"
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition"
                 >
-                  <ClipboardPaste className="h-4 w-4 text-violet" />
-                  <span>{showPasteBox ? "Hide Paste Box" : "Paste from PDF / Text"}</span>
+                  <ClipboardPaste className="h-4 w-4 text-primary" />
+                  <span>{showPasteBox ? "Hide Paste Box" : "Paste Roster Text"}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
-                  className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs"
+                  className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground hover:bg-accent transition shadow-xs"
                 >
-                  <Download className="h-4 w-4 text-violet" />
+                  <Download className="h-4 w-4 text-primary" />
                   <span>Download Sample Template</span>
                 </button>
               </div>
@@ -958,28 +1055,28 @@ function UserManagementPage() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="mt-4 rounded-2xl border border-violet/30 bg-violet/5 p-4 space-y-3"
+                className="mt-4 rounded-xl border border-blue-200 bg-blue-50/40 dark:border-blue-900 dark:bg-blue-950/20 p-4 space-y-3"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-                    <FileText className="h-4 w-4 text-violet" />
+                    <FileText className="h-4 w-4 text-primary" />
                     <span>Paste Student / Faculty Roster Text (from PDF, Word, or Spreadsheet)</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground">One line per student</span>
+                  <span className="text-[11px] text-muted-foreground">One line per user</span>
                 </div>
                 <textarea
                   rows={4}
                   placeholder={`Example lines:\nAmit Thakkar\t24cs045@charusat.edu.in\t24CS045\nPriya Sharma\t24cs046@charusat.edu.in\t24CS046\nDr. Sanjay Garg\tsanjaygarg.cse@charusat.edu.in\tFaculty`}
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-violet"
+                  className="w-full rounded-xl border border-border bg-background p-3 font-mono text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                 />
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => parseRawTextRoster(pasteText)}
                     disabled={!pasteText.trim()}
-                    className="rounded-xl bg-violet px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-hover transition disabled:opacity-50"
+                    className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover transition disabled:opacity-50"
                   >
                     Extract & Load Staging List
                   </button>
@@ -989,9 +1086,9 @@ function UserManagementPage() {
 
             {/* Upload Dropzone */}
             <div className="mt-6">
-              <label className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-card p-8 text-center hover:border-violet transition cursor-pointer group">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet/10 text-violet group-hover:scale-110 transition">
-                  <FileUp className="h-6 w-6" />
+              <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-card p-8 text-center hover:border-primary transition cursor-pointer group">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 group-hover:scale-105 transition">
+                  <FileUp className="h-5 w-5" />
                 </div>
                 <div className="mt-3 font-semibold text-sm text-foreground">
                   {bulkFile ? bulkFile.name : "Click to browse or drag & drop Excel / CSV file"}
@@ -1023,132 +1120,294 @@ function UserManagementPage() {
               </div>
             )}
 
-            {/* Extracted Users Staging Table Preview */}
-            {bulkRows.length > 0 && (
-              <div className="mt-6 space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="text-xs font-semibold text-foreground flex items-center gap-2">
-                    <span>Extracted</span>
-                    <span className="rounded-full bg-violet/10 text-violet px-2.5 py-0.5 font-bold font-mono">
-                      {bulkRows.length} users
-                    </span>
-                    <span className="text-muted-foreground">ready for registration</span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setBulkRows([])}
-                      className="rounded-xl border border-border bg-card px-3 py-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
-                    >
-                      Clear List
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleRegisterAllBulk}
-                      disabled={bulkGlobalLoading}
-                      className="flex items-center gap-2 rounded-xl bg-violet px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-violet-hover transition active:scale-95 disabled:opacity-50"
-                    >
-                      {bulkGlobalLoading ? (
-                        <>
-                          <RefreshCw className="h-4 w-4 animate-spin" />
-                          <span>Registering All...</span>
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4" />
-                          <span>Register All ({bulkRows.length} Users)</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
+            {/* Extracted Users Staging Table Preview & Interactive Spreadsheet Editor */}
+            {bulkRows.length > 0 && (() => {
+              const validRowCount = bulkRows.filter(
+                (r) => (!r.validationErrors || Object.keys(r.validationErrors).length === 0) && r.status !== "error"
+              ).length;
+              const errorRowCount = bulkRows.filter(
+                (r) => (r.validationErrors && Object.keys(r.validationErrors).length > 0) || r.status === "error"
+              ).length;
+              const displayedRows = showErrorsOnly
+                ? bulkRows.filter((r) => (r.validationErrors && Object.keys(r.validationErrors).length > 0) || r.status === "error")
+                : bulkRows;
 
-                <div className="overflow-x-auto rounded-xl border border-border">
-                  <table className="w-full text-left text-xs">
-                    <thead className="border-b border-border bg-muted/40 font-semibold uppercase tracking-wider text-muted-foreground">
-                      <tr>
-                        <th className="py-2.5 px-3">#</th>
-                        <th className="py-2.5 px-3">Full Name</th>
-                        <th className="py-2.5 px-3">Email</th>
-                        <th className="py-2.5 px-3">Role</th>
-                        <th className="py-2.5 px-3">ID / Roll No</th>
-                        <th className="py-2.5 px-3">Batch & Sem</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {bulkRows.map((r, idx) => (
-                        <tr key={r.id} className="hover:bg-accent/30 transition">
-                          <td className="py-2.5 px-3 text-muted-foreground">{idx + 1}</td>
-                          <td className="py-2.5 px-3 font-semibold text-foreground">{r.name}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground">{r.email}</td>
-                          <td className="py-2.5 px-3">
-                            <span className={cn(
-                              "rounded-md px-2 py-0.5 text-[10px] font-semibold",
-                              r.role === "Faculty" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20" : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20"
-                            )}>
-                              {r.role}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-violet font-semibold">
-                            {r.studentId || r.facultyId || "-"}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-muted-foreground">
-                            {r.role === "Student" ? `${r.batch} (Sem ${r.semester})` : "-"}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            {r.status === "pending" && (
-                              <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                Ready
-                              </span>
-                            )}
-                            {r.status === "loading" && (
-                              <span className="flex items-center gap-1 text-violet font-medium text-[10px]">
-                                <RefreshCw className="h-3 w-3 animate-spin" /> Enrolling...
-                              </span>
-                            )}
-                            {r.status === "success" && (
-                              <span className="rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-semibold">
-                                ✓ Registered ({r.generatedPassword})
-                              </span>
-                            )}
-                            {r.status === "error" && (
-                              <span className="rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300 dark:border-rose-800 px-2 py-0.5 text-[10px] font-semibold" title={r.errorMsg}>
-                                ✕ {r.errorMsg || "Failed"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleLoadRowIntoForm(r)}
-                                title="Load details into Single Enrollment Form"
-                                className="rounded-lg border border-border bg-card p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition"
-                              >
-                                <Edit3 className="h-3.5 w-3.5" />
-                              </button>
-                              {r.status !== "success" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRegisterSingleBulkRow(r.id)}
-                                  disabled={r.status === "loading" || bulkGlobalLoading}
-                                  className="rounded-lg bg-violet/10 border border-violet/20 px-2.5 py-1 text-[11px] font-semibold text-violet hover:bg-violet hover:text-white transition disabled:opacity-50"
-                                >
-                                  Register
-                                </button>
-                              )}
-                            </div>
-                          </td>
+              return (
+                <div className="mt-6 space-y-4">
+                  {/* Summary Bar & Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-accent/20 p-3.5">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-semibold text-foreground">Staging Review:</span>
+                      <span className="rounded-md bg-muted px-2 py-0.5 font-bold font-mono text-muted-foreground border border-border">
+                        {bulkRows.length} Total
+                      </span>
+                      <span className="rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 px-2 py-0.5 font-bold font-mono">
+                        {validRowCount} Valid & Ready
+                      </span>
+                      {errorRowCount > 0 && (
+                        <span className="rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 px-2 py-0.5 font-bold font-mono">
+                          {errorRowCount} Require Attention
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      {errorRowCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowErrorsOnly(!showErrorsOnly)}
+                          className={cn(
+                            "rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition",
+                            showErrorsOnly
+                              ? "border-rose-400 bg-rose-50 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 font-bold"
+                              : "border-border bg-card text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {showErrorsOnly ? "Show All Rows" : `Show Errors Only (${errorRowCount})`}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleApplyDefaultBatchToAll}
+                        title={`Fill batch ${batchString} and Sem ${semester} for all rows`}
+                        className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition"
+                      >
+                        Apply Batch ({batchString}, Sem {semester}) to All
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setBulkRows([])}
+                        className="rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
+                      >
+                        Clear List
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRegisterAllBulk}
+                        disabled={bulkGlobalLoading || validRowCount === 0}
+                        className="flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary-hover transition active:scale-95 disabled:opacity-50"
+                      >
+                        {bulkGlobalLoading ? (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                            <span>Registering All...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-3.5 w-3.5" />
+                            <span>Register All Valid ({validRowCount})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Spreadsheet Grid with Inline Cell Correction */}
+                  <div className="overflow-x-auto rounded-xl border border-border bg-card">
+                    <table className="w-full text-left text-xs">
+                      <thead className="border-b border-border bg-muted/40 font-semibold uppercase tracking-wider text-muted-foreground">
+                        <tr>
+                          <th className="py-2.5 px-3 w-10">#</th>
+                          <th className="py-2.5 px-3 min-w-[160px]">Full Name</th>
+                          <th className="py-2.5 px-3 min-w-[210px]">Institutional Email</th>
+                          <th className="py-2.5 px-3 min-w-[100px]">Role</th>
+                          <th className="py-2.5 px-3 min-w-[130px]">ID / Roll No</th>
+                          <th className="py-2.5 px-3 min-w-[140px]">Batch & Sem</th>
+                          <th className="py-2.5 px-3 min-w-[120px]">Status</th>
+                          <th className="py-2.5 px-3 text-right min-w-[110px]">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {displayedRows.map((r, idx) => {
+                          const hasNameErr = Boolean(r.validationErrors?.name);
+                          const hasEmailErr = Boolean(r.validationErrors?.email);
+                          const hasIdErr = Boolean(r.validationErrors?.id);
+
+                          return (
+                            <tr
+                              key={r.id}
+                              className={cn(
+                                "transition",
+                                r.status === "error" || hasNameErr || hasEmailErr || hasIdErr
+                                  ? "bg-rose-50/20 dark:bg-rose-950/10"
+                                  : "hover:bg-accent/25"
+                              )}
+                            >
+                              <td className="py-2 px-3 text-muted-foreground font-mono">{idx + 1}</td>
+
+                              {/* Editable Full Name */}
+                              <td className="py-2 px-3">
+                                <input
+                                  type="text"
+                                  value={r.name}
+                                  placeholder="Full name"
+                                  onChange={(e) => handleUpdateBulkCell(r.id, "name", e.target.value)}
+                                  className={cn(
+                                    "w-full rounded px-2 py-1 text-xs border outline-none bg-background transition",
+                                    hasNameErr
+                                      ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-600"
+                                      : "border-border/60 focus:border-primary"
+                                  )}
+                                />
+                                {hasNameErr && (
+                                  <div className="text-[10px] text-rose-600 font-medium mt-0.5">
+                                    {r.validationErrors?.name}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Editable Institutional Email */}
+                              <td className="py-2 px-3">
+                                <input
+                                  type="email"
+                                  value={r.email}
+                                  placeholder="user@charusat.edu.in"
+                                  onChange={(e) => handleUpdateBulkCell(r.id, "email", e.target.value)}
+                                  className={cn(
+                                    "w-full rounded px-2 py-1 text-xs border outline-none bg-background transition",
+                                    hasEmailErr
+                                      ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-600"
+                                      : "border-border/60 focus:border-primary"
+                                  )}
+                                />
+                                {hasEmailErr && (
+                                  <div className="text-[10px] text-rose-600 font-medium mt-0.5">
+                                    {r.validationErrors?.email}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Editable Role */}
+                              <td className="py-2 px-3">
+                                <select
+                                  value={r.role}
+                                  onChange={(e) => handleUpdateBulkCell(r.id, "role", e.target.value as AccountRole)}
+                                  className="w-full rounded px-2 py-1 text-xs border border-border/60 bg-background outline-none focus:border-primary font-medium"
+                                >
+                                  <option value="Student">Student</option>
+                                  <option value="Faculty">Faculty</option>
+                                </select>
+                              </td>
+
+                              {/* Editable Student / Faculty ID */}
+                              <td className="py-2 px-3">
+                                <input
+                                  type="text"
+                                  value={r.role === "Student" ? (r.studentId || "") : (r.facultyId || "")}
+                                  placeholder={r.role === "Student" ? "24CS045" : "CSE-FAC-01"}
+                                  onChange={(e) =>
+                                    handleUpdateBulkCell(
+                                      r.id,
+                                      r.role === "Student" ? "studentId" : "facultyId",
+                                      e.target.value.toUpperCase()
+                                    )
+                                  }
+                                  className={cn(
+                                    "w-full rounded px-2 py-1 text-xs font-mono uppercase border outline-none bg-background transition",
+                                    hasIdErr
+                                      ? "border-rose-400 bg-rose-50/50 text-rose-900 focus:border-rose-600"
+                                      : "border-border/60 focus:border-primary"
+                                  )}
+                                />
+                                {hasIdErr && (
+                                  <div className="text-[10px] text-rose-600 font-medium mt-0.5">
+                                    {r.validationErrors?.id}
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Editable Batch & Semester */}
+                              <td className="py-2 px-3">
+                                {r.role === "Student" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="number"
+                                      value={r.startYear}
+                                      onChange={(e) => handleUpdateBulkCell(r.id, "startYear", e.target.value)}
+                                      className="w-16 rounded px-1.5 py-1 text-xs font-mono border border-border/60 bg-background outline-none focus:border-primary"
+                                    />
+                                    <span className="text-muted-foreground text-[10px]">Sem</span>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={8}
+                                      value={r.semester}
+                                      onChange={(e) => handleUpdateBulkCell(r.id, "semester", Number(e.target.value))}
+                                      className="w-10 rounded px-1 py-1 text-xs font-mono border border-border/60 bg-background outline-none focus:border-primary"
+                                    />
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs italic">N/A (Faculty)</span>
+                                )}
+                              </td>
+
+                              {/* Real-time Status Badge */}
+                              <td className="py-2 px-3">
+                                {r.status === "pending" && (
+                                  <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground border border-border">
+                                    Ready
+                                  </span>
+                                )}
+                                {r.status === "loading" && (
+                                  <span className="flex items-center gap-1 text-primary font-medium text-[10px]">
+                                    <RefreshCw className="h-3 w-3 animate-spin" /> Enrolling...
+                                  </span>
+                                )}
+                                {r.status === "success" && (
+                                  <span className="rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 text-[10px] font-semibold">
+                                    ✓ Registered ({r.generatedPassword})
+                                  </span>
+                                )}
+                                {r.status === "error" && (
+                                  <span className="rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300 dark:border-rose-800 px-2 py-0.5 text-[10px] font-semibold" title={r.errorMsg}>
+                                    ✕ {r.errorMsg || "Failed"}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Row Action Buttons */}
+                              <td className="py-2 px-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleLoadRowIntoForm(r)}
+                                    title="Load details into Single Form"
+                                    className="rounded-lg border border-border bg-card p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteBulkRow(r.id)}
+                                    title="Remove row from staging"
+                                    className="rounded-lg border border-border bg-card p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  {r.status !== "success" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRegisterSingleBulkRow(r.id)}
+                                      disabled={r.status === "loading" || bulkGlobalLoading || Boolean(r.validationErrors && Object.keys(r.validationErrors).length > 0)}
+                                      className="rounded-lg bg-primary/10 border border-primary/20 px-2 py-1 text-[11px] font-semibold text-primary hover:bg-primary hover:text-primary-foreground transition disabled:opacity-40"
+                                    >
+                                      Register
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </Card>
         </div>
       )}

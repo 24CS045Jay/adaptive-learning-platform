@@ -168,6 +168,11 @@ interface AppDataContextValue {
   multiModalChunks: MultiModalChunk[];
   conceptNodes: ConceptNode[];
   conceptEdges: ConceptEdge[];
+  recommendedNodeId: string | null;
+  recommendationReason: string;
+  refreshConceptGraph: (subjectId?: string) => Promise<boolean>;
+  markConceptReviewed: (conceptId: string, subjectId?: string) => Promise<boolean>;
+  generateConceptGraph: (subjectId: string) => Promise<boolean>;
   quizzes: any[];
   weakTopics: any[];
   bookmarks: any[];
@@ -381,6 +386,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [multiModalChunks, setMultiModalChunks] = useState<MultiModalChunk[]>([]);
   const [conceptNodes, setConceptNodes] = useState<ConceptNode[]>([]);
   const [conceptEdges, setConceptEdges] = useState<ConceptEdge[]>([]);
+  const [recommendedNodeId, setRecommendedNodeId] = useState<string | null>(null);
+  const [recommendationReason, setRecommendationReason] = useState<string>("");
   const [quizzes, setQuizzes] = useState<any[]>([]);
   const [liveAuditLogs, setLiveAuditLogs] = useState<AuditEntry[]>([]);
   const [bookmarks, setBookmarks] = useState<any[]>(() => {
@@ -578,21 +585,89 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     }
   }, [user?.token]);
 
-  const refreshConceptGraph = useCallback(async () => {
-    if (!user?.token) return false;
-    try {
-      const data = await fetchJson<{ nodes: ConceptNode[]; edges: ConceptEdge[] }>(
-        `/api/concept-graph`,
-        { headers: authHeaders(user.token) },
-      );
-      setConceptNodes(data.nodes || []);
-      setConceptEdges(data.edges || []);
-      return true;
-    } catch (error) {
-      console.warn("[AppData] refreshConceptGraph failed:", error);
-      return false;
-    }
-  }, [user?.token]);
+  const refreshConceptGraph = useCallback(
+    async (subjectId?: string) => {
+      if (!user?.token) return false;
+      try {
+        const url =
+          subjectId && subjectId !== "all"
+            ? `/api/concept-graph?subjectId=${encodeURIComponent(subjectId)}`
+            : `/api/concept-graph`;
+        const data = await fetchJson<{
+          nodes: ConceptNode[];
+          edges: ConceptEdge[];
+          recommendedNodeId?: string | null;
+          recommendationReason?: string;
+        }>(url, { headers: authHeaders(user.token) });
+        setConceptNodes(data.nodes || []);
+        setConceptEdges(data.edges || []);
+        if (data.recommendedNodeId !== undefined) {
+          setRecommendedNodeId(data.recommendedNodeId);
+        }
+        if (data.recommendationReason !== undefined) {
+          setRecommendationReason(data.recommendationReason);
+        }
+        return true;
+      } catch (error) {
+        console.warn("[AppData] refreshConceptGraph failed:", error);
+        return false;
+      }
+    },
+    [user?.token],
+  );
+
+  const markConceptReviewed = useCallback(
+    async (conceptId: string, subjectId?: string) => {
+      if (!user?.token) return false;
+      try {
+        await fetchJson(`/api/concept-graph/review`, {
+          method: "POST",
+          headers: {
+            ...authHeaders(user.token),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ conceptId, subjectId }),
+        });
+        setConceptNodes((prev) =>
+          prev.map((n) =>
+            n.id === conceptId
+              ? {
+                  ...n,
+                  isReviewed: true,
+                  mastery: n.mastery === "mastered" ? "mastered" : "in_progress",
+                }
+              : n,
+          ),
+        );
+        return true;
+      } catch (err) {
+        console.warn("[AppData] markConceptReviewed error:", err);
+        return false;
+      }
+    },
+    [user?.token],
+  );
+
+  const generateConceptGraph = useCallback(
+    async (subjectId: string) => {
+      if (!user?.token) return false;
+      try {
+        await fetchJson(`/api/concept-graph/generate`, {
+          method: "POST",
+          headers: {
+            ...authHeaders(user.token),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ subjectId }),
+        });
+        return await refreshConceptGraph(subjectId);
+      } catch (err) {
+        console.warn("[AppData] generateConceptGraph error:", err);
+        return false;
+      }
+    },
+    [user?.token, refreshConceptGraph],
+  );
 
   const refreshQuizzes = useCallback(async () => {
     if (!user?.token) return false;
@@ -1525,6 +1600,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         multiModalChunks,
         conceptNodes,
         conceptEdges,
+        recommendedNodeId,
+        recommendationReason,
+        refreshConceptGraph,
+        markConceptReviewed,
+        generateConceptGraph,
         quizzes,
         weakTopics: [],
         bookmarks,

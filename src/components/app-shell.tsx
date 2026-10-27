@@ -1,11 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, Outlet, useRouterState, useNavigate } from "@tanstack/react-router";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  GraduationCap, LogOut, Bell, Sun, Moon,
-  MessageSquare, Search, ChevronDown, TrendingUp, TrendingDown,
+  LogOut,
+  Bell,
+  Search,
+  ChevronDown,
+  TrendingUp,
+  TrendingDown,
   ArrowRight,
+  Menu,
+  X,
   type LucideIcon,
+  MessageCircle,
+  ListChecks,
+  CalendarClock,
+  Home,
 } from "lucide-react";
 import type { Role } from "@/lib/mock-data";
 import { currentUsers } from "@/lib/mock-data";
@@ -13,12 +23,18 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useAppData } from "@/lib/app-data-context";
 import { useCountUp } from "@/hooks/use-count-up";
-import { Logo, Mascot, Sparkle } from "@/components/brand";
+import { Logo } from "@/components/brand";
 
-export type NavItem = { to: string; label: string; icon: LucideIcon };
+export type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: string | number;
+  section?: string;
+};
 
 /* ─────────────────────────────────────────────────
-   APP SHELL — shared layout for all roles
+   APP SHELL — Trustworthy, Production-Quality Academic Layout
 ───────────────────────────────────────────────── */
 export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -26,14 +42,27 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
   const { user: authUser, logout } = useAuth();
   const { notifications, markNotificationsAsRead } = useAppData();
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
+  // Close mobile drawer on route navigation
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setShowNotifications(false);
+    setShowUserMenu(false);
+  }, [pathname]);
+
   const mockUser = currentUsers[role];
   const displayName = authUser?.name ?? mockUser.name;
   const displayEmail = authUser?.email ?? mockUser.email;
-  const initials = displayName.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2);
+  const initials = displayName
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -42,174 +71,296 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
     navigate({ to: "/login" });
   };
 
-  const activeNav = nav.find(
-    (item) => pathname === item.to || (item.to !== `/${role}` && pathname.startsWith(item.to))
-  );
-  const pageTitle = activeNav?.label ?? (role === "admin" ? "Overview" : role === "faculty" ? "Dashboard" : "Dashboard");
+  // Group nav items by section if defined, or group into logical default categories
+  const groupedNav = nav.reduce<Record<string, NavItem[]>>((acc, item) => {
+    const section = item.section || "General";
+    if (!acc[section]) acc[section] = [];
+    acc[section].push(item);
+    return acc;
+  }, {});
+
+  const roleBadgeLabel = role === "admin" ? "Institutional Admin" : role === "faculty" ? "Academic Faculty" : "Student Portal";
 
   return (
-    <div className="flex min-h-screen bg-background font-sans text-foreground">
-      {/* ── Sidebar ── */}
-      <aside className="sidebar-gradient fixed inset-y-0 left-0 z-20 flex w-[17.5rem] flex-col border-r border-border">
-        <div className="px-5 pb-4 pt-5">
-          <Logo size="sm" subtitle="Learn Smarter · Adapt Faster" />
-        </div>
+    <div className="flex min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+      {/* ── Mobile Drawer Backdrop ── */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMobileMenuOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs lg:hidden"
+            aria-hidden="true"
+          />
+        )}
+      </AnimatePresence>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 pb-4">
-          {nav.map((item) => {
-            const active = pathname === item.to || (item.to !== `/${role}` && pathname.startsWith(item.to));
-            const Icon = item.icon;
-            return (
-              <Link key={item.to} to={item.to} className={cn("nav-link", active && "is-active")}>
-                <Icon className="nav-ico h-[1.15rem] w-[1.15rem] shrink-0" />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="mx-4 mb-4 mt-auto border-t border-border pt-4">
-          <Link
-            to={`/${role}/profile`}
-            className="group flex items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-accent"
-          >
-            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet/25 to-violet/10 text-xs font-bold text-violet ring-2 ring-violet/30">
-              {initials}
-              <span className="online-dot absolute -bottom-0.5 -right-0.5" />
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-sm font-bold text-foreground">{displayName}</div>
-              <div className="truncate text-[11px] text-muted-foreground">{displayEmail}</div>
-            </div>
+      {/* ── Desktop & Mobile Sidebar ── */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out lg:translate-x-0 lg:z-30",
+          mobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        )}
+      >
+        {/* Brand Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <Link to="/" className="flex items-center gap-2">
+            <Logo size="sm" showSubtitle={false} />
           </Link>
           <button
             type="button"
-            onClick={handleLogout}
-            className="mt-1 inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-foreground transition hover:text-danger"
+            onClick={() => setMobileMenuOpen(false)}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+            aria-label="Close navigation"
           >
-            <LogOut className="h-4 w-4" /> Sign out
+            <X className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* Role Pill indicator */}
+        <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between text-xs">
+          <span className="font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Context</span>
+          <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700 border border-blue-100">
+            {roleBadgeLabel}
+          </span>
+        </div>
+
+        {/* Grouped Navigation Links */}
+        <nav className="flex-1 space-y-6 overflow-y-auto px-3.5 py-4">
+          {Object.entries(groupedNav).map(([sectionTitle, items]) => (
+            <div key={sectionTitle} className="space-y-1">
+              {sectionTitle !== "General" && (
+                <div className="px-3 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-slate-400">
+                  {sectionTitle}
+                </div>
+              )}
+              {items.map((item) => {
+                const active = pathname === item.to || (item.to !== `/${role}` && pathname.startsWith(item.to));
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "group flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-blue-50 text-blue-700 font-semibold shadow-2xs"
+                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    )}
+                  >
+                    <div className="flex items-center gap-3 truncate">
+                      <Icon
+                        className={cn(
+                          "h-[1.15rem] w-[1.15rem] shrink-0 transition-colors",
+                          active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"
+                        )}
+                      />
+                      <span className="truncate">{item.label}</span>
+                    </div>
+                    {item.badge !== undefined && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+
+        {/* Footer User Info & Sign out */}
+        <div className="border-t border-slate-200 bg-slate-50/50 p-3">
+          <div className="flex items-center justify-between gap-2 rounded-lg p-2">
+            <Link
+              to={`/${role}/profile`}
+              className="flex min-w-0 flex-1 items-center gap-2.5 transition hover:opacity-80"
+              title="View profile settings"
+            >
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-xs text-white">
+                {initials}
+              </div>
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate text-xs font-semibold text-slate-900">{displayName}</div>
+                <div className="truncate text-[11px] text-slate-500">{displayEmail}</div>
+              </div>
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/60 hover:text-red-600 transition"
+              title="Sign out of account"
+              aria-label="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* ── Main Workspace ── */}
-      <div className="ml-[17.5rem] flex min-w-0 flex-1 flex-col">
-        {/* ── Top Bar ── */}
-        <header className="sticky top-0 z-30 flex items-center gap-4 bg-background/70 px-8 py-4 backdrop-blur-xl">
-          <div className="group top-chip max-w-xl flex-1 gap-3 px-5 text-sm transition-all focus-within:border-violet/50 focus-within:shadow-[0_0_0_4px_oklch(0.62_0.22_293_/_14%)]">
-            <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-violet" />
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-72">
+        {/* ── Top Header Bar ── */}
+        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 sm:px-6 lg:px-8 backdrop-blur-xs">
+          {/* Mobile Hamburger & Logo */}
+          <div className="flex items-center gap-3 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
+              aria-label="Open navigation menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <Logo size="xs" showSubtitle={false} />
+          </div>
+
+          {/* Global Quick Search Input */}
+          <div className="hidden flex-1 max-w-lg items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100 sm:flex">
+            <Search className="h-4 w-4 text-slate-400" />
             <input
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder={`Quick search ${role === "admin" ? "students, subjects, documents" : role === "faculty" ? "subjects, queries, documents" : "subjects, notes, topics"}…`}
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              placeholder={`Search ${role === "admin" ? "students, subjects, system logs" : role === "faculty" ? "course documents, student queries" : "enrolled subjects, concepts, lecture notes"}…`}
+              className="min-w-0 flex-1 bg-transparent text-xs text-slate-800 outline-none placeholder:text-slate-400"
             />
-            <kbd className="hidden rounded-md border border-border bg-background/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:block">Ctrl + K</kbd>
+            <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-400 md:inline-block">
+              /
+            </kbd>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          {/* Right Header Utilities: Notifications & Profile Menu */}
+          <div className="ml-auto flex items-center gap-2.5">
+            {/* Notification Bell */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setShowNotifications((v) => !v); setShowUserMenu(false); }}
-                className="top-chip relative w-[2.6rem] justify-center text-muted-foreground transition hover:text-violet"
+                onClick={() => {
+                  setShowNotifications((v) => !v);
+                  setShowUserMenu(false);
+                }}
+                className={cn(
+                  "relative flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 hover:text-slate-900",
+                  showNotifications && "bg-slate-100 border-slate-300"
+                )}
+                aria-label="View notifications"
                 title="Notifications"
               >
-                <Bell className="h-[1.1rem] w-[1.1rem]" />
+                <Bell className="h-4 w-4" />
                 {unreadCount > 0 && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="absolute -right-0.5 -top-1 flex h-[1.1rem] min-w-[1.1rem] items-center justify-center rounded-full bg-violet px-1 text-[10px] font-bold text-white"
-                  >
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white ring-2 ring-white">
                     {unreadCount}
-                  </motion.span>
+                  </span>
                 )}
               </button>
+
               <AnimatePresence>
                 {showNotifications && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-80 rounded-3xl border border-border bg-card p-4 shadow-2xl z-50 space-y-3"
-                    style={{ boxShadow: "0 16px 48px -12px rgba(0,0,0,0.35), 0 0 0 1px var(--color-border)" }}
+                    className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white p-3 shadow-lg z-50 space-y-2.5"
                   >
-                    <div className="flex items-center justify-between border-b border-border pb-2">
-                      <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-foreground">
-                        <Bell className="h-3.5 w-3.5 text-violet" /> Notifications ({notifications.length})
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2 px-1">
+                      <div className="text-xs font-bold text-slate-800">
+                        Notifications ({notifications.length})
                       </div>
                       {unreadCount > 0 && (
-                        <button type="button" onClick={markNotificationsAsRead} className="text-[11px] font-medium text-violet hover:underline">
-                          Mark all read
+                        <button
+                          type="button"
+                          onClick={markNotificationsAsRead}
+                          className="text-[11px] font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          Mark all as read
                         </button>
                       )}
                     </div>
-                    <div className="max-h-64 space-y-2 overflow-y-auto">
+
+                    <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
                       {notifications.length === 0 ? (
-                        <div className="py-4 text-center text-xs text-muted-foreground">No notifications yet.</div>
+                        <div className="py-6 text-center text-xs text-slate-400">
+                          No notifications yet.
+                        </div>
                       ) : (
                         notifications.map((n) => (
-                          <div key={n.id} className={cn("rounded-xl border p-2.5 text-xs transition", n.read ? "border-border bg-muted/40 opacity-75" : "border-violet/20 bg-violet/5 font-medium")}>
-                            <div className="flex justify-between font-bold text-foreground">
-                              <span>{n.title}</span>
-                              <span className="text-[10px] font-normal text-muted-foreground">{n.timestamp}</span>
+                          <div
+                            key={n.id}
+                            className={cn(
+                              "rounded-lg border p-2.5 text-xs transition",
+                              n.read
+                                ? "border-slate-100 bg-slate-50/50 text-slate-500"
+                                : "border-blue-100 bg-blue-50/40 text-slate-800 font-medium"
+                            )}
+                          >
+                            <div className="flex justify-between font-semibold">
+                              <span className="truncate pr-2">{n.title}</span>
+                              <span className="text-[10px] text-slate-400 shrink-0 font-normal">
+                                {n.timestamp}
+                              </span>
                             </div>
-                            <p className="mt-1 text-muted-foreground leading-snug">{n.message}</p>
+                            <p className="mt-1 text-slate-600 text-[11px] leading-snug">{n.message}</p>
                           </div>
                         ))
                       )}
-                    </div>
-                    <div className="border-t border-border pt-2 text-center">
-                      <button type="button" onClick={() => setShowNotifications(false)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-                        Close
-                      </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
 
-
+            {/* Profile Menu Dropdown */}
             <div className="relative">
               <button
                 type="button"
-                onClick={() => { setShowUserMenu((v) => !v); setShowNotifications(false); }}
-                className="top-chip gap-2 py-0 pl-1.5 pr-3 transition hover:border-violet/40"
+                onClick={() => {
+                  setShowUserMenu((v) => !v);
+                  setShowNotifications(false);
+                }}
+                className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-violet/30 to-violet/10 text-[11px] font-bold text-violet ring-1 ring-violet/30">
+                <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-600 font-bold text-[10px] text-white">
                   {initials}
                 </div>
-                <span className="hidden text-sm font-semibold text-foreground sm:block">{displayName.split(" ")[0]}</span>
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="hidden sm:inline-block max-w-[100px] truncate">{displayName.split(" ")[0]}</span>
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
               </button>
+
               <AnimatePresence>
                 {showUserMenu && (
                   <motion.div
-                    initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                    initial={{ opacity: 0, y: 6, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    exit={{ opacity: 0, y: 4, scale: 0.98 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 mt-2 w-48 rounded-2xl border border-border bg-card py-1.5 shadow-xl z-50"
-                    style={{ boxShadow: "0 16px 48px -12px rgba(0,0,0,0.3), 0 0 0 1px var(--color-border)" }}
+                    className="absolute right-0 mt-2 w-48 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg z-50 text-xs"
                   >
-                    {[
-                      { label: "Profile", to: `/${role}/profile` },
-                    ].map((item) => (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        onClick={() => setShowUserMenu(false)}
-                        className="flex w-full items-center px-3 py-2 text-sm text-foreground transition hover:bg-accent"
-                      >
-                        {item.label}
-                      </Link>
-                    ))}
+                    <div className="border-b border-slate-100 px-3 py-2">
+                      <div className="font-semibold text-slate-900 truncate">{displayName}</div>
+                      <div className="text-[10.5px] text-slate-500 truncate">{displayEmail}</div>
+                    </div>
+                    <Link
+                      to={`/${role}/profile`}
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex w-full items-center px-3 py-2 text-slate-700 hover:bg-slate-50"
+                    >
+                      Account Profile
+                    </Link>
+                    <Link
+                      to="/change-password"
+                      onClick={() => setShowUserMenu(false)}
+                      className="flex w-full items-center px-3 py-2 text-slate-700 hover:bg-slate-50"
+                    >
+                      Change Password
+                    </Link>
+                    <div className="my-1 border-t border-slate-100" />
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger transition hover:bg-accent"
+                      className="flex w-full items-center gap-2 px-3 py-2 font-medium text-red-600 hover:bg-red-50"
                     >
                       <LogOut className="h-3.5 w-3.5" /> Sign out
                     </button>
@@ -220,101 +371,113 @@ export function AppShell({ role, nav }: { role: Role; nav: NavItem[] }) {
           </div>
         </header>
 
-        {/* ── Page Content with instant navigation ── */}
-        <main className="flex-1 px-8 pb-10 pt-2">
+        {/* ── Page Content ── */}
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 pb-20 lg:pb-10">
           <Outlet />
         </main>
+
+        {/* ── Mobile Bottom Navigation Bar (for Students on Mobile Devices) ── */}
+        {role === "student" && (
+          <nav className="fixed bottom-0 inset-x-0 z-30 flex h-16 items-center justify-around border-t border-slate-200 bg-white/95 backdrop-blur-md px-2 lg:hidden">
+            <Link
+              to="/student"
+              className={cn(
+                "flex flex-col items-center gap-1 text-[10px] font-semibold transition",
+                pathname === "/student" ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <Home className="h-4 w-4" />
+              <span>Dashboard</span>
+            </Link>
+            <Link
+              to="/student/ask"
+              className={cn(
+                "flex flex-col items-center gap-1 text-[10px] font-semibold transition",
+                pathname.startsWith("/student/ask") ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>Ask Tutor</span>
+            </Link>
+            <Link
+              to="/student/quizzes"
+              className={cn(
+                "flex flex-col items-center gap-1 text-[10px] font-semibold transition",
+                pathname.startsWith("/student/quizzes") ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <ListChecks className="h-4 w-4" />
+              <span>Quizzes</span>
+            </Link>
+            <Link
+              to="/student/planner"
+              className={cn(
+                "flex flex-col items-center gap-1 text-[10px] font-semibold transition",
+                pathname.startsWith("/student/planner") ? "text-blue-600 font-bold" : "text-slate-500 hover:text-slate-800"
+              )}
+            >
+              <CalendarClock className="h-4 w-4" />
+              <span>Planner</span>
+            </Link>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="flex flex-col items-center gap-1 text-[10px] font-semibold text-slate-500 hover:text-slate-800 transition"
+            >
+              <Menu className="h-4 w-4" />
+              <span>Menu</span>
+            </button>
+          </nav>
+        )}
       </div>
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   PAGE HEADER
+   ACADEMIC PAGE HEADER — Clean, Trustworthy & Distraction-Free
 ───────────────────────────────────────────────── */
-const HERO_ART = [
-  { src: "/assets/ui/users-hero.png", cls: "h-[10.5rem]" },
-  { src: "/assets/ui/dash-hero.png", cls: "h-[10rem]" },
-  { src: "/assets/ui/logs-hero.png", cls: "h-[9rem]" },
-];
-const HERO_NOTES = [
-  ["Learn", "Grow", "Shine"],
-  ["Manage", "Guide", "Empower"],
-  ["Ask", "Learn", "Grow"],
-  ["Plan", "Practice", "Succeed"],
-  ["Track", "Improve", "Achieve"],
-];
-function strHash(str: string) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  return h;
-}
-
 export function PageHeader({
   title,
   subtitle,
   action,
-  note,
-  art,
+  breadcrumb,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
-  /** Handwritten annotation lines shown beside the mascot */
-  note?: string[] | false;
-  art?: "boy" | "boy-books" | "peek" | false;
+  breadcrumb?: string;
+  note?: any;
+  art?: any;
 }) {
-  const h = strHash(title);
-  const pick = art === "boy" ? HERO_ART[1] : art === "boy-books" ? HERO_ART[0] : art === "peek" ? HERO_ART[2] : HERO_ART[h % HERO_ART.length];
-  const lines = note === false ? null : (note ?? HERO_NOTES[h % HERO_NOTES.length]);
-  const words = title.trim().split(" ");
-  const last = words.pop() as string;
-  const head = words.join(" ");
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className="hero-banner relative mb-8 flex min-h-[9.5rem] items-center gap-4 pb-2 pt-3 lg:pr-[17rem]"
-    >
-      {/* soft lavender blob behind the mascot */}
-      {art !== false && (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -top-6 right-0 hidden h-[13rem] w-[26rem] rounded-[4rem] bg-gradient-to-br from-violet/20 via-violet/10 to-transparent blur-2xl lg:block"
-        />
-      )}
-
-      <div className="relative z-10 min-w-0 flex-1">
-        <h1 className="text-[2.1rem] font-extrabold leading-tight tracking-tight text-foreground">
-          {head && <>{head} </>}
-          <span className="gradient-word">{last}</span>
+    <div className="mb-6 pb-4 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="min-w-0">
+        {breadcrumb && (
+          <div className="mb-1 text-xs font-semibold text-blue-700 tracking-wide">
+            {breadcrumb}
+          </div>
+        )}
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+          {title}
         </h1>
-        {subtitle && <p className="mt-2 max-w-2xl text-[0.95rem] text-muted-foreground">{subtitle}</p>}
-        {action && <div className="mt-4 flex flex-wrap items-center gap-3">{action}</div>}
+        {subtitle && (
+          <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-3xl leading-relaxed">
+            {subtitle}
+          </p>
+        )}
       </div>
-
-      {art !== false && (
-        <div className="pointer-events-none absolute bottom-0 right-4 hidden select-none lg:block">
-          <Sparkle className="-left-2 top-2 h-3 w-3 text-violet" delay={0.4} />
-          <Sparkle className="right-1 top-0 h-3.5 w-3.5 text-violet" delay={1.1} />
-          {lines && (
-            <div className="hand-note absolute -left-[7.4rem] top-0 z-10 hidden w-28 2xl:block">
-              {lines.map((l) => (
-                <div key={l}>{l}</div>
-              ))}
-            </div>
-          )}
-          <img src={pick.src} alt="" draggable={false} className={cn("relative z-0 w-auto object-contain drop-shadow-[0_14px_20px_rgba(76,56,190,.28)]", pick.cls)} />
+      {action && (
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {action}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   CARD — with variant support
+   CARD — Restrained Academic Surface
 ───────────────────────────────────────────────── */
 export function Card({
   title,
@@ -331,27 +494,20 @@ export function Card({
   variant?: "default" | "hero" | "glow" | "hero-gold";
   icon?: LucideIcon;
 }) {
-  const variantClasses = {
-    default: "rounded-3xl border border-border bg-card p-6",
-    hero: "card-hero rounded-3xl border p-6",
-    glow: "card-glow rounded-3xl border border-border bg-card p-6",
-    "hero-gold": "card-hero-gold rounded-3xl border p-6",
-  };
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      className={cn(variantClasses[variant], "transition-shadow duration-200 hover:shadow-[0_18px_44px_-18px_rgba(95,63,230,.35)]", className)}
+    <div
+      className={cn(
+        "rounded-xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xs transition-shadow duration-150 hover:shadow-xs",
+        className
+      )}
     >
       {(title || action) && (
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
           {title && (
-            <div className="flex items-center gap-3 text-lg font-extrabold text-foreground">
+            <div className="flex items-center gap-2.5 text-base font-bold text-slate-900">
               {Icon && (
-                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet/12 text-violet">
-                  <Icon className="h-5 w-5" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                  <Icon className="h-4 w-4" />
                 </span>
               )}
               {title}
@@ -361,12 +517,12 @@ export function Card({
         </div>
       )}
       {children}
-    </motion.div>
+    </div>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   STAT CARD — with count-up, trend, gradient number
+   STAT CARD — Clear, Tabular, High-Trust Metrics
 ───────────────────────────────────────────────── */
 type StatColor = "violet" | "gold" | "success" | "danger" | "indigo" | "amber" | "green" | "teal" | "navy" | "red";
 
@@ -380,165 +536,106 @@ interface StatCardProps {
   sparklineData?: number[];
 }
 
-const STAT_COLOR_MAP: Record<StatColor, { text: string; bg: string; glow: string; gradient: string }> = {
-  violet: { text: "text-violet",      bg: "bg-violet/10",       glow: "glow-violet",   gradient: "text-gradient-violet" },
-  gold:   { text: "text-gold",        bg: "bg-gold/10",         glow: "glow-gold",     gradient: "text-gradient-gold" },
-  success:{ text: "text-success",     bg: "bg-success/10",      glow: "glow-success",  gradient: "text-gradient-success" },
-  danger: { text: "text-danger",      bg: "bg-danger/10",       glow: "",              gradient: "" },
-  indigo: { text: "text-violet",      bg: "bg-violet/10",       glow: "glow-violet",   gradient: "text-gradient-violet" },
-  amber:  { text: "text-gold",        bg: "bg-gold/10",         glow: "glow-gold",     gradient: "text-gradient-gold" },
-  green:  { text: "text-success",     bg: "bg-success/10",      glow: "glow-success",  gradient: "text-gradient-success" },
-  teal:   { text: "text-teal-brand",  bg: "bg-teal-brand/10",   glow: "",              gradient: "" },
-  navy:   { text: "text-foreground",  bg: "bg-muted",           glow: "",              gradient: "" },
-  red:    { text: "text-danger",      bg: "bg-danger/10",       glow: "",              gradient: "" },
-};
-
-export function StatCard({ label, value, caption, color = "violet", icon: Icon, trend, sparklineData }: StatCardProps) {
-  const colors = STAT_COLOR_MAP[color] ?? STAT_COLOR_MAP.violet;
+export function StatCard({ label, value, caption, icon: Icon, trend }: StatCardProps) {
   const numericValue = typeof value === "number" ? value : parseInt(String(value).replace(/\D/g, ""), 10) || 0;
   const isNumeric = typeof value === "number" || /^\d+$/.test(String(value));
-  const { count, containerRef } = useCountUp(numericValue, 700);
+  const { count, containerRef } = useCountUp(numericValue, 600);
 
   return (
-    <motion.div
+    <div
       ref={containerRef as React.RefObject<HTMLDivElement>}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25 }}
-      whileHover={{ y: -3 }}
-      className="relative overflow-hidden rounded-3xl border border-border bg-card p-5 transition-shadow hover:shadow-[0_18px_44px_-18px_rgba(95,63,230,.4)]"
+      className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-slate-300"
     >
-      <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 h-16 opacity-60", colors.bg)} style={{ maskImage: "linear-gradient(to top, black, transparent)", WebkitMaskImage: "linear-gradient(to top, black, transparent)" }} />
-      <div className="relative flex items-start gap-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</span>
         {Icon && (
-          <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full", colors.bg)}>
-            <Icon className={cn("h-5 w-5", colors.text)} />
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="text-[13px] font-semibold text-muted-foreground">{label}</div>
-          <div className="mt-1 text-[2.1rem] font-extrabold leading-none tabular-nums text-foreground">
-            {isNumeric ? count.toLocaleString() : value}
-          </div>
-        </div>
-        {sparklineData && sparklineData.length > 0 && (
-          <div className="flex h-12 items-end gap-1">
-            {sparklineData.map((v, i) => {
-              const max = Math.max(...sparklineData);
-              const pct = max > 0 ? (v / max) * 100 : 0;
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ height: 0 }}
-                  animate={{ height: `${pct}%` }}
-                  transition={{ delay: 0.1 + i * 0.04, duration: 0.4, ease: "easeOut" }}
-                  className={cn("w-1.5 rounded-full", colors.bg, "!opacity-100 brightness-95")}
-                  style={{ minHeight: 4, background: "color-mix(in srgb, var(--color-violet) 35%, transparent)" }}
-                />
-              );
-            })}
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+            <Icon className="h-4 w-4" />
           </div>
         )}
       </div>
+
+      <div className="mt-2 text-2xl font-bold tabular-nums text-slate-900">
+        {isNumeric ? count.toLocaleString() : value}
+      </div>
+
       {(trend || caption) && (
-        <div className="relative mt-3 flex flex-wrap items-center gap-2">
+        <div className="mt-2.5 flex items-center gap-2 text-xs">
           {trend && (
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
-                trend.up ? "bg-success/12 text-success" : "bg-danger/12 text-danger",
+                "inline-flex items-center gap-1 font-semibold",
+                trend.up ? "text-emerald-700" : "text-rose-700"
               )}
             >
               {trend.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {trend.pct}% vs last week
+              {trend.pct}%
             </span>
           )}
-          {caption && <div className="text-xs text-muted-foreground">{caption}</div>}
+          {caption && <span className="text-slate-500 text-[11px]">{caption}</span>}
         </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   ACTION CARD — icon-in-glow-badge with color strip
+   ACTION CARD — Clean Interactive Tile
 ───────────────────────────────────────────────── */
 export function ActionCard({
   icon: Icon,
   title,
   description,
-  color = "violet",
   onClick,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
-  color?: "indigo" | "amber" | "green" | "teal" | "violet" | "gold";
+  color?: string;
   onClick?: () => void;
 }) {
-  const colorMap: Record<string, { bg: string; text: string; strip: string; border: string; glow: string }> = {
-    violet: { bg: "bg-violet/10", text: "text-violet", strip: "from-violet to-violet/60",   border: "hover:border-violet/30",   glow: "0 0 20px -3px oklch(0.62 0.22 293 / 40%)" },
-    indigo: { bg: "bg-violet/10", text: "text-violet", strip: "from-violet to-violet/60",   border: "hover:border-violet/30",   glow: "0 0 20px -3px oklch(0.62 0.22 293 / 40%)" },
-    gold:   { bg: "bg-gold/10",   text: "text-gold",   strip: "from-gold to-gold/60",       border: "hover:border-gold/30",     glow: "0 0 20px -3px oklch(0.82 0.18 84 / 40%)" },
-    amber:  { bg: "bg-gold/10",   text: "text-gold",   strip: "from-gold to-gold/60",       border: "hover:border-gold/30",     glow: "0 0 20px -3px oklch(0.82 0.18 84 / 40%)" },
-    green:  { bg: "bg-success/10",text: "text-success",strip: "from-success to-success/60", border: "hover:border-success/30",  glow: "0 0 20px -3px oklch(0.75 0.17 160 / 40%)" },
-    teal:   { bg: "bg-teal-brand/10", text: "text-teal-brand", strip: "from-teal-brand to-teal-brand/60", border: "hover:border-teal-brand/30", glow: "" },
-  };
-  const c = colorMap[color] ?? colorMap.violet;
-
   return (
-    <motion.button
+    <button
       type="button"
       onClick={onClick}
-      whileHover={{ y: -4 }}
-      whileTap={{ scale: 0.97 }}
-      className={cn(
-        "group relative flex w-full items-start gap-4 overflow-hidden rounded-3xl border border-border bg-card p-5 text-left shadow-[var(--card-shadow)] transition-all duration-200 hover:shadow-lg",
-        c.border
-      )}
+      className="group flex w-full items-start gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left shadow-2xs transition hover:border-blue-300 hover:bg-slate-50/50"
     >
-      {/* Color accent top strip */}
-      <div className={cn("absolute top-0 left-0 right-0 h-[2px] rounded-t-2xl bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-300", c.strip)} />
-
-      <motion.div
-        whileHover={{ boxShadow: c.glow }}
-        className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-all duration-200", c.bg)}
-      >
-        <Icon className={cn("h-5 w-5", c.text)} />
-      </motion.div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition">
+        <Icon className="h-5 w-5" />
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between">
-          <div className="font-semibold text-foreground">{title}</div>
-          <ArrowRight className={cn("h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100", c.text)} />
+          <div className="text-sm font-bold text-slate-900 group-hover:text-blue-700 transition">{title}</div>
+          <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
         </div>
-        <div className="mt-1 text-sm text-muted-foreground">{description}</div>
+        <div className="mt-0.5 text-xs text-slate-500 leading-relaxed">{description}</div>
       </div>
-    </motion.button>
+    </button>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   PILL — status badge
+   PILL — Semantic Status Badge
 ───────────────────────────────────────────────── */
 type PillTone = "indigo" | "amber" | "green" | "teal" | "navy" | "slate" | "red" | "violet" | "gold" | "success" | "danger";
 
 const PILL_STYLES: Record<PillTone, string> = {
-  violet:  "bg-violet/10 text-violet",
-  indigo:  "bg-violet/10 text-violet",
-  gold:    "bg-gold/10 text-gold dark:text-gold",
-  amber:   "bg-gold/10 text-gold dark:text-gold",
-  success: "bg-success/10 text-success",
-  green:   "bg-success/10 text-success",
-  danger:  "bg-danger/10 text-danger",
-  red:     "bg-danger/10 text-danger",
-  teal:    "bg-teal-brand/10 text-teal-brand",
-  navy:    "bg-foreground/10 text-foreground",
-  slate:   "bg-muted text-muted-foreground",
+  violet:  "bg-blue-50 text-blue-700 border-blue-200",
+  indigo:  "bg-blue-50 text-blue-700 border-blue-200",
+  gold:    "bg-amber-50 text-amber-800 border-amber-200",
+  amber:   "bg-amber-50 text-amber-800 border-amber-200",
+  success: "bg-emerald-50 text-emerald-800 border-emerald-200",
+  green:   "bg-emerald-50 text-emerald-800 border-emerald-200",
+  danger:  "bg-rose-50 text-rose-800 border-rose-200",
+  red:     "bg-rose-50 text-rose-800 border-rose-200",
+  teal:    "bg-sky-50 text-sky-800 border-sky-200",
+  navy:    "bg-slate-100 text-slate-800 border-slate-200",
+  slate:   "bg-slate-100 text-slate-700 border-slate-200",
 };
 
 export function Pill({ tone, children }: { tone: PillTone; children: React.ReactNode }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide", PILL_STYLES[tone])}>
+    <span className={cn("inline-flex items-center rounded-md border px-2.5 py-0.5 text-[11px] font-semibold tracking-wide", PILL_STYLES[tone])}>
       {children}
     </span>
   );
@@ -574,19 +671,19 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white px-4 py-12 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
         <Icon className="h-6 w-6" />
       </div>
-      <div className="mt-3 font-semibold text-foreground">{title}</div>
-      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
+      <div className="mt-3 text-sm font-bold text-slate-900">{title}</div>
+      <p className="mt-1 max-w-sm text-xs text-slate-500 leading-relaxed">{description}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   PRIMARY BUTTON — gradient fill + shimmer
+   PRIMARY BUTTON — University Academic Blue
 ───────────────────────────────────────────────── */
 export function PrimaryButton({
   children,
@@ -602,29 +699,27 @@ export function PrimaryButton({
   disabled?: boolean;
 }) {
   return (
-    <motion.button
+    <button
       type={type}
       onClick={onClick}
       disabled={disabled}
-      whileHover={{ boxShadow: "0 0 22px -4px oklch(0.62 0.22 293 / 55%)" }}
-      whileTap={{ scale: 0.95 }}
-      className="btn-shimmer btn-pill disabled:opacity-50"
+      className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white shadow-2xs transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {Icon && <Icon className="h-4 w-4" />}
       {children}
-    </motion.button>
+    </button>
   );
 }
 
 /* ─────────────────────────────────────────────────
-   SKELETON CARD — moving shimmer
+   SKELETON CARD
 ───────────────────────────────────────────────── */
 export function SkeletonCard({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="rounded-3xl border border-border bg-card p-6 space-y-3">
-      <div className="skeleton h-5 w-32" />
+    <div className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+      <div className="h-4 w-32 rounded bg-slate-200 animate-pulse" />
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="skeleton h-4" style={{ width: `${60 + (i * 13) % 35}%` }} />
+        <div key={i} className="h-3 rounded bg-slate-100 animate-pulse" style={{ width: `${60 + (i * 13) % 35}%` }} />
       ))}
     </div>
   );

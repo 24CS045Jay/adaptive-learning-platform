@@ -318,20 +318,20 @@ function StudentQuizzesPage() {
               </div>
             </div>
             <div className="rounded-xl bg-accent/40 p-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">XP Earned</div>
-              <div className="text-3xl font-bold text-violet mt-1">+{earnedXp + 50} XP</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Study XP</div>
+              <div className="text-3xl font-bold text-primary mt-1">+{earnedXp + 50}</div>
             </div>
           </div>
 
-          <div className="rounded-xl border border-violet/20 bg-indigo-brand/5 p-4 text-xs text-violet font-medium">
-            ⚡ 5-Day Study Streak maintained! You earned +50 bonus XP for completing this assessment.
+          <div className="rounded-xl border border-blue-200 bg-blue-50/40 dark:border-blue-900 dark:bg-blue-950/20 p-4 text-xs text-blue-800 dark:text-blue-300 font-medium">
+            Assessment completed successfully. Your score has been logged to calculate topic mastery.
           </div>
 
           <div className="flex justify-center gap-3">
             <button
               type="button"
               onClick={() => setActiveQuiz(null)}
-              className="rounded-xl bg-violet px-6 py-2.5 text-sm font-semibold text-white hover:bg-violet-hover shadow-sm"
+              className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover shadow-sm"
             >
               Back to All Quizzes
             </button>
@@ -353,18 +353,18 @@ function StudentQuizzesPage() {
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Question {currentQIndex + 1} of {activeQuiz.questions.length}
               </span>
-              <div className="font-serif text-lg font-bold text-foreground">{activeQuiz.title}</div>
+              <div className="text-base font-bold text-foreground">{activeQuiz.title}</div>
             </div>
 
             {/* Dynamic Adaptive Difficulty Pill */}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium">Adaptive Level:</span>
+              <span className="text-xs text-muted-foreground font-medium">Adaptive Tier:</span>
               <span className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold capitalize shadow-2xs",
-                adaptiveDifficulty === "easy" ? "bg-success/10 text-success" :
-                adaptiveDifficulty === "medium" ? "bg-gold/10 text-gold" : "bg-danger/10 text-danger"
+                "rounded-full px-3 py-1 text-xs font-bold capitalize shadow-2xs border",
+                adaptiveDifficulty === "easy" ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300" :
+                adaptiveDifficulty === "medium" ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300" : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
               )}>
-                {adaptiveDifficulty} Level 🔥
+                {adaptiveDifficulty} Level
               </span>
             </div>
           </div>
